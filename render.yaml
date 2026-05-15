@@ -44,8 +44,6 @@ services:
     plan: free
     envVars:
       # Points the frontend at the API service — auto-populated by Render
+      # Set this manually in the Render dashboard to https://<cap-portal-api-url>.onrender.com
       - key: API_BASE
-        fromService:
-          name: cap-portal-api
-          type: web
-          property: host
+        sync: false
