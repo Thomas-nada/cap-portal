@@ -1,0 +1,18 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "cap-frontend",
+      "runtimeExecutable": "python",
+      "runtimeArgs": ["dev-server.py", "8765"],
+      "port": 8765
+    },
+    {
+      "name": "norsk-portal",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "E:\\CAP-Local\\norsk-portal",
+      "port": 5174
+    }
+  ]
+}

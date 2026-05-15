@@ -1,0 +1,51 @@
+databases:
+  - name: cap-portal-db
+    plan: free
+    databaseName: cap_portal
+    user: cap_portal
+
+services:
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  - type: web
+    name: cap-portal-api
+    runtime: docker
+    dockerfilePath: ./backend/Dockerfile
+    dockerContext: ./backend
+    plan: free
+    envVars:
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cap-portal-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      # SMTP — fill in after deploy (notifications are optional)
+      - key: SMTP_HOST
+        sync: false
+      - key: SMTP_PORT
+        sync: false
+      - key: SMTP_USERNAME
+        sync: false
+      - key: SMTP_PASSWORD
+        sync: false
+      - key: SMTP_FROM
+        sync: false
+      - key: APP_URL
+        sync: false
+
+  # ── Frontend (nginx) ─────────────────────────────────────────────────────────
+  - type: web
+    name: cap-portal
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    plan: free
+    envVars:
+      # Points the frontend at the API service — auto-populated by Render
+      - key: API_BASE
+        fromService:
+          name: cap-portal-api
+          type: web
+          property: hostWithScheme

@@ -1,0 +1,87 @@
+<!DOCTYPE html>
+<html lang="en" class="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>CAP Portal — Cardano Constitutional Amendments</title>
+
+    <link rel="stylesheet" href="styles.css">
+
+    <script src="https://cdn.tailwindcss.com?plugins=typography"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    colors: { slate: { 950: '#020617' } },
+                    animation: { 'pulse-subtle': 'pulse 3s cubic-bezier(0.4, 0, 0.6, 1) infinite' },
+                    typography: {
+                        DEFAULT: {
+                            css: {
+                                'pre code': {
+                                    backgroundColor: 'transparent',
+                                    color: '#e2e8f0',
+                                    fontSize: '0.9rem',
+                                    borderWidth: '0',
+                                    padding: '0',
+                                },
+                            },
+                        },
+                    },
+                }
+            }
+        }
+    </script>
+
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+
+    <style>
+        .glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
+        .fade-in { animation: fadeIn 0.5s ease-out forwards; }
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+        .prose pre code {
+            background-color: transparent !important;
+            color: #e2e8f0 !important;
+            font-size: 0.9rem !important;
+            border: none !important;
+            padding: 0 !important;
+            line-height: 1.7 !important;
+        }
+        .loading-spinner {
+            border: 3px solid #f3f4f6;
+            border-top: 3px solid #3b82f6;
+            border-radius: 50%;
+            width: 40px;
+            height: 40px;
+            animation: spin 1s linear infinite;
+            margin: 20px auto;
+        }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body class="bg-slate-50 dark:bg-slate-950 transition-colors duration-300">
+    <div id="app">
+        <div style="min-height:100vh;display:flex;align-items:center;justify-content:center;flex-direction:column;">
+            <div class="loading-spinner"></div>
+            <p style="margin-top:20px;color:#64748b;font-weight:600;">Loading CAP Portal...</p>
+        </div>
+    </div>
+
+    <script type="module" src="js/app.js"></script>
+    <script>
+        window.fixPreCode = function() {
+            document.querySelectorAll('pre code').forEach(el => {
+                el.style.setProperty('background-color', 'transparent', 'important');
+                el.style.setProperty('color', '#e2e8f0', 'important');
+                el.style.setProperty('font-size', '0.9rem', 'important');
+                el.style.setProperty('border', 'none', 'important');
+                el.style.setProperty('padding', '0', 'important');
+                el.style.setProperty('line-height', '1.7', 'important');
+            });
+        };
+    </script>
+</body>
+</html>
