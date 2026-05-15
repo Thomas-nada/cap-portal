@@ -1,7 +1,10 @@
 import hashlib
 import json
+import logging
 import os
 import uuid
+
+logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -139,6 +142,13 @@ app.openapi = custom_openapi
 
 app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
+
+from fastapi.responses import JSONResponse as _JSONResponse
+
+@app.exception_handler(Exception)
+async def _unhandled_exception_handler(request: Request, exc: Exception) -> _JSONResponse:
+    logger.error("Unhandled exception: %s", exc, exc_info=True)
+    return _JSONResponse(status_code=500, content={"detail": "Internal server error"})
 
 app.add_middleware(
     CORSMiddleware,
@@ -285,7 +295,7 @@ def record_audit(db: Session, proposal_number: int, event_type: str,
 @limiter.limit("10/minute")
 def get_challenge(request: Request, db: Session = Depends(get_db)):
     # Clean up expired challenges (older than 10 minutes)
-    cutoff = datetime.utcnow() - timedelta(minutes=10)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
     db.query(AuthChallenge).filter(AuthChallenge.created_at < cutoff).delete()
     challenge = f"CAP-Portal-Auth-{uuid.uuid4()}"
     db.add(AuthChallenge(challenge=challenge))
@@ -310,7 +320,7 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
     if not record:
         raise HTTPException(status_code=400, detail="Invalid or expired challenge")
 
-    cutoff = datetime.utcnow() - timedelta(minutes=10)
+    cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
     if record.created_at < cutoff:
         db.delete(record)
         db.commit()
@@ -538,7 +548,7 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
         parts.append("Content updated")
         p.body = json.dumps(req.structured)
 
-    p.updated_at = datetime.utcnow()
+    p.updated_at = datetime.now(timezone.utc)
     record_audit(db, number, "proposal_edited", user, changes)
     if parts:
         create_version(db, p, user, ", ".join(parts))
@@ -669,7 +679,7 @@ def update_comment(comment_id: int, req: CommentCreate, user: dict = Depends(req
     if c.author_stake_address != user["sub"]:
         raise HTTPException(status_code=403, detail="Only the author can edit their comment")
     c.body = req.body
-    c.updated_at = datetime.utcnow()
+    c.updated_at = datetime.now(timezone.utc)
     db.commit()
     db.refresh(c)
     return comment_to_dict(c)
@@ -1024,7 +1034,7 @@ def approve_suggestion(number: int, suggestion_id: int,
         structured = json.loads(p.body) if p.body else {}
         structured[s.field] = s.suggested_value
         p.body = json.dumps(structured)
-    p.updated_at = datetime.utcnow()
+    p.updated_at = datetime.now(timezone.utc)
 
     s.status = "approved"
     s.resolved_at = datetime.now(timezone.utc)
