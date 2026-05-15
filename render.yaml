@@ -48,4 +48,4 @@ services:
         fromService:
           name: cap-portal-api
           type: web
-          property: hostWithScheme
+          property: host

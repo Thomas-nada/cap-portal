@@ -10,6 +10,11 @@ export const DEV_MODE = false;
 export const APP_ID = 'cap-portal-v2';
 EOF
 
+# Prepend https:// if API_BASE is a bare hostname (Render sets host without scheme)
+if echo "${API_BASE}" | grep -qvE '^https?://|^/'; then
+  API_BASE="https://${API_BASE}"
+fi
+
 # If API_BASE is a full URL (Render deployment), nginx doesn't need to proxy —
 # the browser calls the backend directly. Replace the proxy_pass target so the
 # /api/ location still resolves cleanly (points nowhere harmful).
