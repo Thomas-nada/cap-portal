@@ -2,6 +2,7 @@ import json
 import logging
 import os
 import threading
+import urllib.error
 import urllib.request
 from typing import Optional
 
@@ -46,6 +47,9 @@ def _send(to: str, subject: str, html: str):
             with urllib.request.urlopen(req, timeout=15) as resp:
                 body = resp.read().decode()
             logger.info("[email] Sent '%s' to %s — %s", subject, to, body)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            logger.error("[email] Failed to send '%s' to %s: %s — %s", subject, to, e, body)
         except Exception as e:
             logger.error("[email] Failed to send '%s' to %s: %s", subject, to, e)
 
