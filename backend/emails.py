@@ -1,3 +1,4 @@
+import logging
 import os
 import smtplib
 import threading
@@ -7,6 +8,7 @@ from typing import Optional
 
 from sqlalchemy.orm import Session
 
+logger = logging.getLogger(__name__)
 
 SMTP_HOST = os.environ.get("SMTP_HOST", "")
 SMTP_PORT = int(os.environ.get("SMTP_PORT", "587"))
@@ -17,11 +19,14 @@ APP_URL = os.environ.get("APP_URL", "http://localhost:5173")
 
 
 def _send(to: str, subject: str, html: str):
-    """Send email in a background thread. Silently swallows errors."""
+    """Send email in a background thread."""
     def _worker():
+        if not SMTP_HOST:
+            logger.warning("[email] SMTP_HOST not configured — skipping send to %s", to)
+            return
+        if not to:
+            return
         try:
-            if not SMTP_HOST or not to:
-                return
             msg = MIMEMultipart("alternative")
             msg["Subject"] = subject
             msg["From"] = f"CAP Portal <{SMTP_FROM}>"
@@ -31,8 +36,9 @@ def _send(to: str, subject: str, html: str):
                 server.starttls()
                 server.login(SMTP_USERNAME, SMTP_PASSWORD)
                 server.sendmail(SMTP_FROM, [to], msg.as_string())
+            logger.info("[email] Sent '%s' to %s", subject, to)
         except Exception as e:
-            print(f"[email] Failed to send to {to}: {e}")
+            logger.error("[email] Failed to send '%s' to %s: %s", subject, to, e)
 
     threading.Thread(target=_worker, daemon=True).start()
 

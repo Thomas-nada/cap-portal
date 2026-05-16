@@ -28,7 +28,8 @@ from sqlalchemy.orm import Session
 from auth import verify_cip8_signature, create_token, decode_token
 from database import engine, get_db, Base
 from emails import (notify_new_proposal, notify_new_comment, notify_new_suggestion,
-                    notify_suggestion_resolved, notify_lifecycle_change)
+                    notify_suggestion_resolved, notify_lifecycle_change, _send as _send_email,
+                    SMTP_HOST, SMTP_FROM, APP_URL as EMAIL_APP_URL)
 from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, ProposalSubscriber
 
 Base.metadata.create_all(bind=engine)
@@ -385,6 +386,26 @@ def get_me(user: dict = Depends(require_user), db: Session = Depends(get_db)):
         "is_editor": is_editor(user["sub"], db),
         "is_admin": is_admin(user["sub"], db),
     }
+
+
+@app.post("/auth/test-email", tags=["auth"], summary="Send a test email to the current user")
+def test_email(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    user_record = db.query(User).filter(User.stake_address == user["sub"]).first()
+    to = user_record.email if user_record else None
+    if not SMTP_HOST:
+        raise HTTPException(status_code=503, detail="SMTP is not configured on this server")
+    if not to:
+        raise HTTPException(status_code=400, detail="No email address on your profile — set one first")
+    try:
+        _send_email(to, "CAP Portal — test email", f"""
+        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;padding:32px">
+            <h2 style="margin:0 0 12px">Test email</h2>
+            <p style="color:#64748b">If you received this, email notifications are working correctly.</p>
+            <p style="color:#64748b;font-size:12px;margin-top:24px">Sent from <a href="{EMAIL_APP_URL}">{EMAIL_APP_URL}</a></p>
+        </div>""")
+        return {"status": "queued", "to": to, "from": SMTP_FROM}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 class SetNameRequest(BaseModel):
