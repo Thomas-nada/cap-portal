@@ -337,27 +337,28 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
     # Look up or create user record; stored name takes priority over request name
     user_record = db.query(User).filter(User.stake_address == req.stake_address).first()
     if user_record:
-        # If a new name was supplied and differs from stored, check uniqueness then update it
+        # If a new name was supplied and differs from stored, update only if not taken
         if req.display_name and req.display_name != user_record.display_name:
             clash = db.query(User).filter(
                 User.display_name == req.display_name,
                 User.stake_address != req.stake_address,
             ).first()
-            if clash:
-                raise HTTPException(status_code=409, detail="That username is already taken")
-            user_record.display_name = req.display_name
+            if not clash:
+                user_record.display_name = req.display_name
         display_name = user_record.display_name
     else:
+        # New user — use requested name only if it's not already taken
+        chosen_name = None
         if req.display_name:
             clash = db.query(User).filter(
                 User.display_name == req.display_name,
                 User.stake_address != req.stake_address,
             ).first()
-            if clash:
-                raise HTTPException(status_code=409, detail="That username is already taken")
-        user_record = User(stake_address=req.stake_address, display_name=req.display_name)
+            if not clash:
+                chosen_name = req.display_name
+        user_record = User(stake_address=req.stake_address, display_name=chosen_name)
         db.add(user_record)
-        display_name = req.display_name
+        display_name = chosen_name
 
     db.commit()
 
