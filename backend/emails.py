@@ -1,41 +1,51 @@
+import json
 import logging
 import os
-import smtplib
 import threading
-from email.mime.multipart import MIMEMultipart
-from email.mime.text import MIMEText
+import urllib.error
+import urllib.request
 from typing import Optional
 
 from sqlalchemy.orm import Session
 
 logger = logging.getLogger(__name__)
 
-SMTP_HOST = os.environ.get("SMTP_HOST", "")
-SMTP_PORT = int(os.environ.get("SMTP_PORT", "465"))
-SMTP_USERNAME = os.environ.get("SMTP_USERNAME", "")
-SMTP_PASSWORD = os.environ.get("SMTP_PASSWORD", "")
-SMTP_FROM = os.environ.get("SMTP_FROM", SMTP_USERNAME)
+RESEND_API_KEY = os.environ.get("RESEND_API_KEY", "")
+SMTP_FROM = os.environ.get("SMTP_FROM", "onboarding@resend.dev")
 APP_URL = os.environ.get("APP_URL", "http://localhost:5173")
+SMTP_HOST = os.environ.get("SMTP_HOST", "")
 
 
 def _send(to: str, subject: str, html: str):
-    """Send email via SMTP SSL in a background thread."""
+    """Send email via Resend HTTP API in a background thread."""
     def _worker():
-        if not SMTP_HOST:
-            logger.warning("[email] SMTP_HOST not configured — skipping send to %s", to)
+        if not RESEND_API_KEY:
+            logger.warning("[email] RESEND_API_KEY not configured — skipping send to %s", to)
             return
         if not to:
             return
         try:
-            msg = MIMEMultipart("alternative")
-            msg["Subject"] = subject
-            msg["From"] = f"CAP Portal <{SMTP_FROM}>"
-            msg["To"] = to
-            msg.attach(MIMEText(html, "html"))
-            with smtplib.SMTP_SSL(SMTP_HOST, SMTP_PORT) as server:
-                server.login(SMTP_USERNAME, SMTP_PASSWORD)
-                server.sendmail(SMTP_FROM, [to], msg.as_string())
-            logger.info("[email] Sent '%s' to %s", subject, to)
+            payload = json.dumps({
+                "from": f"CAP Portal <{SMTP_FROM}>",
+                "to": [to],
+                "subject": subject,
+                "html": html,
+            }).encode()
+            req = urllib.request.Request(
+                "https://api.resend.com/emails",
+                data=payload,
+                headers={
+                    "Authorization": f"Bearer {RESEND_API_KEY}",
+                    "Content-Type": "application/json",
+                },
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=15) as resp:
+                body = resp.read().decode()
+            logger.info("[email] Sent '%s' to %s — %s", subject, to, body)
+        except urllib.error.HTTPError as e:
+            body = e.read().decode()
+            logger.error("[email] Failed to send '%s' to %s: %s — %s", subject, to, e, body)
         except Exception as e:
             logger.error("[email] Failed to send '%s' to %s: %s", subject, to, e)
 
