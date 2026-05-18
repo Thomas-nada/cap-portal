@@ -1713,8 +1713,23 @@ window.openBugReportModal = () => {
                 class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium">
 
             <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
-            <textarea id="bug-description" rows="5" placeholder="What happened? What did you expect? Steps to reproduce…"
+            <textarea id="bug-description" rows="4" placeholder="What happened? What did you expect? Steps to reproduce…"
                 class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium resize-none"></textarea>
+
+            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+                Screenshot <span class="text-slate-400 font-normal normal-case tracking-normal">— optional</span>
+            </label>
+            <label class="flex flex-col items-center justify-center w-full h-24 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-red-300 cursor-pointer transition-colors mb-1" id="bug-screenshot-label">
+                <i data-lucide="image-plus" class="w-6 h-6 text-slate-400 mb-1"></i>
+                <span class="text-xs text-slate-400">Click to attach or paste an image</span>
+                <input id="bug-screenshot-input" type="file" accept="image/*" class="hidden" onchange="window._bugScreenshotPicked(this)">
+            </label>
+            <div id="bug-screenshot-preview" class="hidden mb-4 relative">
+                <img id="bug-screenshot-img" src="" class="w-full rounded-2xl border border-slate-200 dark:border-slate-700 max-h-40 object-contain">
+                <button onclick="window._bugScreenshotClear()" class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
+                    <i data-lucide="x" class="w-3 h-3"></i>
+                </button>
+            </div>
 
             <div id="bug-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
 
@@ -1729,9 +1744,37 @@ window.openBugReportModal = () => {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 };
 
+window._bugScreenshotPicked = (input) => {
+    const file = input.files?.[0];
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+        const img = document.getElementById('bug-screenshot-img');
+        const preview = document.getElementById('bug-screenshot-preview');
+        const label = document.getElementById('bug-screenshot-label');
+        if (img) img.src = e.target.result;
+        preview?.classList.remove('hidden');
+        label?.classList.add('hidden');
+        if (typeof lucide !== 'undefined') lucide.createIcons();
+    };
+    reader.readAsDataURL(file);
+};
+
+window._bugScreenshotClear = () => {
+    const input = document.getElementById('bug-screenshot-input');
+    const img = document.getElementById('bug-screenshot-img');
+    const preview = document.getElementById('bug-screenshot-preview');
+    const label = document.getElementById('bug-screenshot-label');
+    if (input) input.value = '';
+    if (img) img.src = '';
+    preview?.classList.add('hidden');
+    label?.classList.remove('hidden');
+};
+
 window._submitBugReport = async () => {
     const title = document.getElementById('bug-title')?.value?.trim();
     const description = document.getElementById('bug-description')?.value?.trim();
+    const screenshot = document.getElementById('bug-screenshot-img')?.src || null;
     const errEl = document.getElementById('bug-error');
 
     if (!title) {
@@ -1745,8 +1788,10 @@ window._submitBugReport = async () => {
         return;
     }
 
+    const screenshotData = screenshot?.startsWith('data:') ? screenshot : null;
+
     try {
-        await submitBugReport(title, description);
+        await submitBugReport(title, description, screenshotData);
         document.getElementById('bug-report-modal')?.remove();
     } catch (e) {
         errEl.textContent = e.message || 'Failed to submit. Please try again.';

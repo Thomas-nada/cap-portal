@@ -1203,6 +1203,7 @@ def seed_editor(body: dict, db: Session = Depends(get_db)):
 class BugReportCreate(BaseModel):
     title: str
     description: str
+    screenshot: Optional[str] = None  # base64 data URL
 
 class BugReportStatusUpdate(BaseModel):
     status: str  # open | in_progress | resolved
@@ -1217,6 +1218,7 @@ def submit_bug_report(body: BugReportCreate,
     report = BugReport(
         title=body.title.strip(),
         description=body.description.strip(),
+        screenshot=body.screenshot,
         reporter_stake_address=user["sub"],
         reporter_display_name=user.get("display_name"),
     )
@@ -1231,6 +1233,7 @@ def list_bug_reports(user: dict = Depends(require_admin),
                      db: Session = Depends(get_db)):
     reports = db.query(BugReport).order_by(BugReport.created_at.desc()).all()
     return [{"id": r.id, "title": r.title, "description": r.description,
+             "screenshot": r.screenshot,
              "reporter_stake_address": r.reporter_stake_address,
              "reporter_display_name": r.reporter_display_name,
              "status": r.status,

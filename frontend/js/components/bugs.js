@@ -50,7 +50,8 @@ export function renderBugs(state) {
                     <p class="text-xs text-slate-400 mt-0.5">Reported by ${escapeHtml(r.reporter_display_name || r.reporter_stake_address.slice(0,20) + '…')}</p>
                 </div>
             </div>
-            <p class="text-slate-600 dark:text-slate-400 text-sm whitespace-pre-wrap mb-6">${escapeHtml(r.description)}</p>
+            <p class="text-slate-600 dark:text-slate-400 text-sm whitespace-pre-wrap mb-4">${escapeHtml(r.description)}</p>
+            ${r.screenshot ? `<img src="${r.screenshot}" class="w-full max-h-64 object-contain rounded-2xl border border-slate-200 dark:border-slate-700 mb-4">` : ''}
             <div class="flex flex-wrap gap-2">
                 ${r.status !== 'open' ? `
                 <button onclick="window.updateBugStatus(${r.id}, 'open')"
