@@ -42,6 +42,7 @@ with engine.connect() as _conn:
         "ALTER TABLE proposal_versions ADD COLUMN content_hash TEXT",
         "ALTER TABLE users ADD COLUMN email TEXT",
         "ALTER TABLE users ADD COLUMN notification_prefs TEXT",
+        "ALTER TABLE bug_reports ADD COLUMN screenshot TEXT",
         """CREATE TABLE IF NOT EXISTS proposal_subscribers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             proposal_number INTEGER NOT NULL REFERENCES proposals(number),
