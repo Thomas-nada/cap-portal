@@ -55,7 +55,7 @@ with engine.connect() as _conn:
             _conn.execute(text(_stmt))
             _conn.commit()
         except Exception:
-            pass  # Column already exists
+            _conn.rollback()  # Reset aborted transaction so next migration can run
 
 limiter = Limiter(key_func=get_remote_address)
 
