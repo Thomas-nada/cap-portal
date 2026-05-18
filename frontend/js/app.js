@@ -99,7 +99,12 @@ export function updateUI(rerender = false) {
     root.innerHTML = nav + `
         <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             ${content}
-        </main>`;
+        </main>
+        ${state.user ? `
+        <button onclick="window.openBugReportModal()" title="Report a bug"
+            class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
+            <i data-lucide="bug" class="w-6 h-6"></i>
+        </button>` : ''}`;
 
     lucide.createIcons();
     if (window.fixPreCode) window.fixPreCode();
