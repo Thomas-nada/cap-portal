@@ -11,6 +11,7 @@ export function renderNav(state) {
         { id: 'constitution', label: 'Constitution', icon: 'book-open' },
         { id: 'learn',        label: 'Guides',       icon: 'book' },
         { id: 'editors',      label: 'Editors',      icon: 'shield' },
+        ...(state.user?.is_admin ? [{ id: 'bugs', label: 'Bugs', icon: 'bug' }] : []),
         ...(isLoggedIn ? [{ id: 'wizard', label: 'New CAP', icon: 'plus-square' }] : [])
     ];
 
@@ -67,6 +68,11 @@ export function renderNav(state) {
                 <button onclick="window.toggleTheme()" class="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-slate-100 dark:hover:bg-slate-800 transition-colors">
                     <i data-lucide="${theme === 'light' ? 'moon' : 'sun'}" class="w-5 h-5 text-slate-500"></i>
                 </button>
+                ${isLoggedIn ? `
+                <button onclick="window.openBugReportModal()" title="Report a bug"
+                    class="w-10 h-10 flex items-center justify-center rounded-2xl hover:bg-red-50 dark:hover:bg-red-900/20 transition-colors text-slate-400 hover:text-red-500">
+                    <i data-lucide="bug" class="w-4 h-4"></i>
+                </button>` : ''}
                 <div class="w-px h-6 bg-slate-200 dark:bg-slate-800 mx-1"></div>
                 ${sessionControls}
             </div>

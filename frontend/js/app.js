@@ -7,7 +7,8 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchVersions, fetchVersion,
          getMe, devSeedEditor, setDisplayName, updateProfile,
-         generateDraftConstitution, subscribeToProposal, checkSubscription, unsubscribeFromProposal } from './api.js';
+         generateDraftConstitution, subscribeToProposal, checkSubscription, unsubscribeFromProposal,
+         submitBugReport, fetchBugReports, updateBugStatus } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          showDisplayNameStep, devLogin, shortAddress,
@@ -26,6 +27,7 @@ import { renderEdit }         from './components/edit.js';
 import { renderConstitution } from './components/constitution.js';
 import { renderLearnHub as renderLearn } from './components/learn.js';
 import { renderEditors }      from './components/editors.js';
+import { renderBugs }         from './components/bugs.js';
 
 // ── Global state ──────────────────────────────────────────────────────────────
 
@@ -39,6 +41,7 @@ export const state = {
     auditEvents: [],
     editors: [],
     admins: [],
+    bugReports: [],
     suggestions: [],
     proposalVersions: [],
     constitutionVersions: [],        // [{name, filename, isCurrent, content}]
@@ -89,6 +92,7 @@ export function updateUI(rerender = false) {
         case 'constitution': content = renderConstitution(state); break;
         case 'learn':        content = renderLearn(state); break;
         case 'editors':      content = renderEditors(state); break;
+        case 'bugs':         content = renderBugs(state); break;
         default:             content = renderDashboard(state);
     }
 
@@ -110,7 +114,7 @@ window.setView = (view) => {
     const map = {
         dashboard: '#/home', list: '#/registry', kanban: '#/kanban',
         constitution: '#/constitution', create: '#/create',
-        wizard: '#/wizard', learn: '#/learn', editors: '#/editors',
+        wizard: '#/wizard', learn: '#/learn', editors: '#/editors', bugs: '#/bugs',
     };
     if (map[view]) window.location.hash = map[view];
     updateUI();
@@ -164,6 +168,9 @@ window.handleRouting = async () => {
     } else if (hash === '#/editors') {
         state.view = 'editors';
         loadEditors();
+    } else if (hash === '#/bugs') {
+        state.view = 'bugs';
+        loadBugReports();
     } else {
         state.view = 'dashboard';
         loadProposals();
@@ -180,6 +187,15 @@ async function loadEditors() {
     } catch (e) {
         state.editors = [];
         state.admins = [];
+    }
+    updateUI();
+}
+
+async function loadBugReports() {
+    try {
+        state.bugReports = await fetchBugReports();
+    } catch (e) {
+        state.bugReports = [];
     }
     updateUI();
 }
@@ -1661,3 +1677,83 @@ async function init() {
 }
 
 init();
+
+// ── Bug Reports ───────────────────────────────────────────────────────────────
+
+window.openBugReportModal = () => {
+    const existing = document.getElementById('bug-report-modal');
+    if (existing) existing.remove();
+
+    const div = document.createElement('div');
+    div.innerHTML = `
+    <div id="bug-report-modal"
+         onclick="if(event.target===this) document.getElementById('bug-report-modal').remove()"
+         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-md p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center">
+                        <i data-lucide="bug" class="w-5 h-5 text-red-500"></i>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-900 dark:text-white">Report a Bug</h2>
+                </div>
+                <button onclick="document.getElementById('bug-report-modal').remove()"
+                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+            <input id="bug-title" type="text" placeholder="Short summary of the issue" maxlength="120"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium">
+
+            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
+            <textarea id="bug-description" rows="5" placeholder="What happened? What did you expect? Steps to reproduce…"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium resize-none"></textarea>
+
+            <div id="bug-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
+
+            <button onclick="window._submitBugReport()"
+                class="w-full py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors">
+                Submit Report
+            </button>
+        </div>
+    </div>`;
+    document.body.appendChild(div.firstElementChild);
+    document.getElementById('bug-title')?.focus();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+};
+
+window._submitBugReport = async () => {
+    const title = document.getElementById('bug-title')?.value?.trim();
+    const description = document.getElementById('bug-description')?.value?.trim();
+    const errEl = document.getElementById('bug-error');
+
+    if (!title) {
+        errEl.textContent = 'Please enter a title.';
+        errEl.classList.remove('hidden');
+        return;
+    }
+    if (!description) {
+        errEl.textContent = 'Please describe the bug.';
+        errEl.classList.remove('hidden');
+        return;
+    }
+
+    try {
+        await submitBugReport(title, description);
+        document.getElementById('bug-report-modal')?.remove();
+    } catch (e) {
+        errEl.textContent = e.message || 'Failed to submit. Please try again.';
+        errEl.classList.remove('hidden');
+    }
+};
+
+window.updateBugStatus = async (id, status) => {
+    try {
+        await updateBugStatus(id, status);
+        await loadBugReports();
+    } catch (e) {
+        alert('Failed to update status: ' + e.message);
+    }
+};

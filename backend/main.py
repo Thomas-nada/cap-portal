@@ -30,7 +30,7 @@ from database import engine, get_db, Base
 from emails import (notify_new_proposal, notify_new_comment, notify_new_suggestion,
                     notify_suggestion_resolved, notify_lifecycle_change, _send as _send_email,
                     SMTP_HOST, SMTP_FROM, APP_URL as EMAIL_APP_URL)
-from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, ProposalSubscriber
+from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, ProposalSubscriber, BugReport
 
 Base.metadata.create_all(bind=engine)
 
@@ -1195,6 +1195,60 @@ def seed_editor(body: dict, db: Session = Depends(get_db)):
         db.add(Editor(stake_address=sa, display_name=dn))
         db.commit()
     return {"ok": True}
+
+
+# ── Bug Reports ───────────────────────────────────────────────────────────────
+
+class BugReportCreate(BaseModel):
+    title: str
+    description: str
+
+class BugReportStatusUpdate(BaseModel):
+    status: str  # open | in_progress | resolved
+
+@app.post("/bug-reports", tags=["bug-reports"], status_code=201,
+          summary="Submit a bug report")
+def submit_bug_report(body: BugReportCreate,
+                      user: dict = Depends(require_user),
+                      db: Session = Depends(get_db)):
+    if not body.title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
+    report = BugReport(
+        title=body.title.strip(),
+        description=body.description.strip(),
+        reporter_stake_address=user["sub"],
+        reporter_display_name=user.get("display_name"),
+    )
+    db.add(report)
+    db.commit()
+    db.refresh(report)
+    return {"id": report.id, "title": report.title, "status": report.status,
+            "created_at": report.created_at.isoformat()}
+
+@app.get("/bug-reports", tags=["bug-reports"], summary="List all bug reports (admin only)")
+def list_bug_reports(user: dict = Depends(require_admin),
+                     db: Session = Depends(get_db)):
+    reports = db.query(BugReport).order_by(BugReport.created_at.desc()).all()
+    return [{"id": r.id, "title": r.title, "description": r.description,
+             "reporter_stake_address": r.reporter_stake_address,
+             "reporter_display_name": r.reporter_display_name,
+             "status": r.status,
+             "created_at": r.created_at.isoformat(),
+             "updated_at": r.updated_at.isoformat()} for r in reports]
+
+@app.patch("/bug-reports/{report_id}/status", tags=["bug-reports"],
+           summary="Update bug report status (admin only)")
+def update_bug_report_status(report_id: int, body: BugReportStatusUpdate,
+                              user: dict = Depends(require_admin),
+                              db: Session = Depends(get_db)):
+    if body.status not in ("open", "in_progress", "resolved"):
+        raise HTTPException(status_code=400, detail="Invalid status")
+    report = db.query(BugReport).filter(BugReport.id == report_id).first()
+    if not report:
+        raise HTTPException(status_code=404, detail="Bug report not found")
+    report.status = body.status
+    db.commit()
+    return {"id": report.id, "status": report.status}
 
 
 if __name__ == '__main__':

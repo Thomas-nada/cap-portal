@@ -148,3 +148,16 @@ class User(Base):
     notification_prefs = Column(Text, nullable=True)  # JSON object of pref keys -> bool
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class BugReport(Base):
+    __tablename__ = "bug_reports"
+
+    id = Column(Integer, primary_key=True, index=True)
+    title = Column(String, nullable=False)
+    description = Column(Text, nullable=False)
+    reporter_stake_address = Column(String, nullable=False)
+    reporter_display_name = Column(String, nullable=True)
+    status = Column(String, nullable=False, default="open")  # open | in_progress | resolved
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)

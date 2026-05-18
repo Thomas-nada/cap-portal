@@ -190,3 +190,17 @@ export async function approveSuggestion(number, id) {
 export async function rejectSuggestion(number, id) {
     return req('POST', `/proposals/${number}/suggestions/${id}/reject`, {}, true);
 }
+
+// ── Bug Reports ───────────────────────────────────────────────────────────────
+
+export async function submitBugReport(title, description) {
+    return req('POST', '/bug-reports', { title, description }, true);
+}
+
+export async function fetchBugReports() {
+    return req('GET', '/bug-reports', null, true);
+}
+
+export async function updateBugStatus(id, status) {
+    return req('PATCH', `/bug-reports/${id}/status`, { status }, true);
+}
