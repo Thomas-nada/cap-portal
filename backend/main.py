@@ -43,6 +43,7 @@ with engine.connect() as _conn:
         "ALTER TABLE users ADD COLUMN email TEXT",
         "ALTER TABLE users ADD COLUMN notification_prefs TEXT",
         "ALTER TABLE bug_reports ADD COLUMN screenshot TEXT",
+        "ALTER TABLE bug_reports ADD COLUMN environment TEXT",
         """CREATE TABLE IF NOT EXISTS proposal_subscribers (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             proposal_number INTEGER NOT NULL REFERENCES proposals(number),
@@ -1205,6 +1206,7 @@ class BugReportCreate(BaseModel):
     title: str
     description: str
     screenshot: Optional[str] = None  # base64 data URL
+    environment: Optional[dict] = None  # auto-captured env info
 
 class BugReportStatusUpdate(BaseModel):
     status: str  # open | in_progress | resolved
@@ -1220,6 +1222,7 @@ def submit_bug_report(body: BugReportCreate,
         title=body.title.strip(),
         description=body.description.strip(),
         screenshot=body.screenshot,
+        environment=json.dumps(body.environment) if body.environment else None,
         reporter_stake_address=user["sub"],
         reporter_display_name=user.get("display_name"),
     )
@@ -1235,6 +1238,7 @@ def list_bug_reports(user: dict = Depends(require_admin),
     reports = db.query(BugReport).order_by(BugReport.created_at.desc()).all()
     return [{"id": r.id, "title": r.title, "description": r.description,
              "screenshot": r.screenshot,
+             "environment": json.loads(r.environment) if r.environment else None,
              "reporter_stake_address": r.reporter_stake_address,
              "reporter_display_name": r.reporter_display_name,
              "status": r.status,

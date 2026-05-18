@@ -1689,6 +1689,16 @@ window.openBugReportModal = () => {
     const existing = document.getElementById('bug-report-modal');
     if (existing) existing.remove();
 
+    // Capture environment at the moment the modal opens
+    window._bugEnv = {
+        page: window.location.hash || window.location.pathname,
+        viewport: `${window.innerWidth}×${window.innerHeight}`,
+        user_agent: navigator.userAgent,
+        logged_in: !!state.user,
+        username: state.user?.display_name || state.user?.stake_address || null,
+        timestamp: new Date().toISOString(),
+    };
+
     const div = document.createElement('div');
     div.innerHTML = `
     <div id="bug-report-modal"
@@ -1789,9 +1799,10 @@ window._submitBugReport = async () => {
     }
 
     const screenshotData = screenshot?.startsWith('data:') ? screenshot : null;
+    const environment = window._bugEnv || null;
 
     try {
-        await submitBugReport(title, description, screenshotData);
+        await submitBugReport(title, description, screenshotData, environment);
         document.getElementById('bug-report-modal')?.remove();
     } catch (e) {
         errEl.textContent = e.message || 'Failed to submit. Please try again.';

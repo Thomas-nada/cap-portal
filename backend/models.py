@@ -160,5 +160,6 @@ class BugReport(Base):
     reporter_display_name = Column(String, nullable=True)
     screenshot = Column(Text, nullable=True)  # base64 data URL
     status = Column(String, nullable=False, default="open")  # open | in_progress | resolved
+    environment = Column(Text, nullable=True)  # JSON: page, viewport, user_agent, etc.
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)

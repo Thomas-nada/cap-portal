@@ -51,6 +51,16 @@ export function renderBugs(state) {
                 </div>
             </div>
             <p class="text-slate-600 dark:text-slate-400 text-sm whitespace-pre-wrap mb-4">${escapeHtml(r.description)}</p>
+            ${r.environment ? `
+            <div class="bg-slate-50 dark:bg-slate-800/60 rounded-2xl px-5 py-4 mb-4 text-xs font-mono space-y-1">
+                <p class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 font-sans">Environment</p>
+                ${r.environment.page       ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Page</span><span class="text-slate-700 dark:text-slate-300 break-all">${escapeHtml(r.environment.page)}</span></div>` : ''}
+                ${r.environment.viewport   ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Viewport</span><span class="text-slate-700 dark:text-slate-300">${escapeHtml(r.environment.viewport)}</span></div>` : ''}
+                ${r.environment.user_agent ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">User-Agent</span><span class="text-slate-700 dark:text-slate-300 break-all">${escapeHtml(r.environment.user_agent)}</span></div>` : ''}
+                ${r.environment.logged_in !== undefined ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Logged in</span><span class="text-slate-700 dark:text-slate-300">${r.environment.logged_in ? 'Yes' : 'No'}</span></div>` : ''}
+                ${r.environment.username   ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">User</span><span class="text-slate-700 dark:text-slate-300">${escapeHtml(r.environment.username)}</span></div>` : ''}
+                ${r.environment.timestamp  ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Timestamp</span><span class="text-slate-700 dark:text-slate-300">${escapeHtml(r.environment.timestamp)}</span></div>` : ''}
+            </div>` : ''}
             ${r.screenshot ? `<img src="${r.screenshot}" class="w-full max-h-64 object-contain rounded-2xl border border-slate-200 dark:border-slate-700 mb-4">` : ''}
             <div class="flex flex-wrap gap-2">
                 ${r.status !== 'open' ? `
