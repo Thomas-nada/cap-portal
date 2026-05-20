@@ -1253,8 +1253,8 @@ function showWalletModal() {
             state.user = { stake_address: result.stake_address, display_name: result.display_name, email: result.email, notification_prefs: result.notification_prefs || {}, is_editor: result.is_editor, is_admin: result.is_admin };
             document.getElementById('wallet-modal-backdrop')?.remove();
 
-            // First-time user: no saved name yet — ask for one after signing
-            if (!savedName) {
+            // First-time user: no display name in the DB yet — ask for one after signing
+            if (!result.display_name) {
                 showSetNameModal();
             } else {
                 updateUI();
