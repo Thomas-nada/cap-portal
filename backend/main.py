@@ -487,6 +487,11 @@ def update_profile(req: UpdateProfileRequest, user: dict = Depends(require_user)
 
 # ── Proposals ─────────────────────────────────────────────────────────────────
 
+@app.get("/health", tags=["meta"], summary="Health check / keep-alive ping")
+def health_check():
+    return {"status": "ok"}
+
+
 @app.get("/proposals", tags=["proposals"], summary="List all proposals",
          description="Returns all proposals ordered by number descending. Each item includes title, type, lifecycle labels, author, and comment count. **Public.**")
 def list_proposals(state: Optional[str] = None, db: Session = Depends(get_db)):

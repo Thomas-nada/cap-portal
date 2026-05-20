@@ -14,7 +14,7 @@ import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          showDisplayNameStep, devLogin, shortAddress,
          getAvailableWallets } from './wallet.js';
 
-import { DEV_MODE } from './config.js';
+import { DEV_MODE, API_BASE } from './config.js';
 
 import { renderNav }          from './components/nav.js';
 import { renderDashboard }    from './components/dashboard.js';
@@ -71,6 +71,9 @@ export const state = {
 };
 
 window.state = state;
+
+// ── Keep-alive ping (prevents Render free tier spin-down) ─────────────────────
+setInterval(() => fetch(`${API_BASE}/health`).catch(() => {}), 10 * 60 * 1000);
 
 // ── Rendering ─────────────────────────────────────────────────────────────────
 
