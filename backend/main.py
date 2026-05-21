@@ -69,6 +69,54 @@ with engine.connect() as _conn:
         except Exception:
             _conn.rollback()  # Reset aborted transaction so next migration can run
 
+# ── Seed default guides (metadata only — content served from static files) ────
+_DEFAULT_GUIDES = [
+    # section, section_label, sort_order, slug, title
+    ("editor-guides",    "Editor Guides",       0, "editor-guide",                       "Complete Editor Guide"),
+    ("editor-guides",    "Editor Guides",       1, "editor-role",                        "Editor Role & Scope"),
+    ("getting-started",  "Getting Started",     0, "about-the-cap-process",              "How the CAP Process Was Built"),
+    ("getting-started",  "Getting Started",     1, "intro-to-caps-and-cis",              "Introduction to CAPs & CIS"),
+    ("getting-started",  "Getting Started",     2, "how-to-participate",                 "How to Participate"),
+    ("getting-started",  "Getting Started",     3, "deliberation-process",               "The Deliberation Process"),
+    ("writing-caps",     "Writing CAPs",        0, "cap-template-guide",                 "CAP Template Guide"),
+    ("writing-caps",     "Writing CAPs",        1, "examples-of-successful-caps",        "Examples of Successful CAPs"),
+    ("writing-caps",     "Writing CAPs",        2, "common-mistakes",                    "Common Mistakes to Avoid"),
+    ("using-the-portal", "Using the Portal",    0, "connecting-your-wallet",             "Connecting Your Cardano Wallet"),
+    ("using-the-portal", "Using the Portal",    1, "commenting-and-discussing",          "Commenting & Discussion"),
+    ("using-the-portal", "Using the Portal",    2, "labels-and-workflow",                "Labels & Workflow"),
+    ("constitution",     "Constitution",        0, "article-by-article-breakdown",       "Article-by-Article Breakdown"),
+    ("faq",              "FAQ",                 0, "faq-what-is-a-cap",                  "What is a CAP?"),
+    ("faq",              "FAQ",                 1, "faq-what-is-a-cis",                  "What is a CIS?"),
+    ("faq",              "FAQ",                 2, "faq-who-can-create-a-cap",           "Who can create a CAP?"),
+    ("faq",              "FAQ",                 3, "faq-how-long-is-deliberation",       "How long is deliberation?"),
+    ("faq",              "FAQ",                 4, "faq-what-are-the-categories",        "What CAP categories exist?"),
+    ("faq",              "FAQ",                 5, "faq-can-i-edit-my-cap",              "Can I edit my CAP?"),
+    ("faq",              "FAQ",                 6, "faq-can-a-cis-become-a-cap",         "Can a CIS become a CAP?"),
+    ("faq",              "FAQ",                 7, "faq-what-happens-after-30-days",     "What happens after deliberation?"),
+    ("faq",              "FAQ",                 8, "faq-how-are-caps-approved",          "How are CAPs approved?"),
+    ("faq",              "FAQ",                 9, "faq-what-is-a-governance-action",    "What is a governance action?"),
+    ("faq",              "FAQ",                10, "faq-what-is-the-constitutional-committee", "What is the Constitutional Committee?"),
+    ("faq",              "FAQ",                11, "faq-what-is-a-drep",                 "What is a DRep?"),
+    ("faq",              "FAQ",                12, "faq-what-are-guardrails",            "What are the Guardrails?"),
+    ("faq",              "FAQ",                13, "faq-what-is-a-cap-editor",           "What is a CAP Editor?"),
+    ("faq",              "FAQ",                14, "faq-do-i-need-a-wallet",             "Do I need a Cardano wallet?"),
+    ("faq",              "FAQ",                15, "faq-what-is-the-amendment-wizard",   "What is the Amendment Wizard?"),
+]
+
+with engine.connect() as _conn:
+    existing = _conn.execute(text("SELECT COUNT(*) FROM guides")).scalar()
+    if existing == 0:
+        for _sec, _sec_label, _order, _slug, _title in _DEFAULT_GUIDES:
+            try:
+                _conn.execute(text(
+                    "INSERT INTO guides (slug, title, content, section, section_label, sort_order) "
+                    "VALUES (:slug, :title, '', :section, :section_label, :order)"
+                ), {"slug": _slug, "title": _title, "section": _sec,
+                    "section_label": _sec_label, "order": _order})
+            except Exception:
+                pass
+        _conn.commit()
+
 limiter = Limiter(key_func=get_remote_address)
 
 from fastapi.security import HTTPBearer
