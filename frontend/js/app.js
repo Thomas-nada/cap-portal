@@ -1855,21 +1855,86 @@ window.updateBugStatus = async (id, status) => {
 
 // ── Guide Editor ──────────────────────────────────────────────────────────────
 
+const _guideToolbar = [
+    { label: 'H1',  title: 'Heading 1',      action: () => _guideWrap('# ',       ''    ) },
+    { label: 'H2',  title: 'Heading 2',      action: () => _guideWrap('## ',      ''    ) },
+    { label: 'H3',  title: 'Heading 3',      action: () => _guideWrap('### ',     ''    ) },
+    { label: '|',   title: null,             action: null },
+    { label: 'B',   title: 'Bold',           action: () => _guideWrap('**',       '**'  ) },
+    { label: 'I',   title: 'Italic',         action: () => _guideWrap('_',        '_'   ) },
+    { label: '|',   title: null,             action: null },
+    { label: '—',   title: 'Bullet list',    action: () => _guideWrap('- ',       ''    ) },
+    { label: '1.',  title: 'Numbered list',  action: () => _guideWrap('1. ',      ''    ) },
+    { label: '|',   title: null,             action: null },
+    { label: '<>',  title: 'Inline code',    action: () => _guideWrap('`',        '`'   ) },
+    { label: '```', title: 'Code block',     action: () => _guideWrap('```\n',    '\n```') },
+    { label: '|',   title: null,             action: null },
+    { label: '🔗',  title: 'Link',           action: () => _guideInsertLink()             },
+    { label: 'hr',  title: 'Divider',        action: () => _guideInsertAtLineStart('---\n') },
+];
+
+function _guideWrap(before, after) {
+    const ta = document.getElementById('guide-editor-content');
+    if (!ta) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const selected = ta.value.slice(start, end);
+    const replacement = before + (selected || 'text') + after;
+    ta.setRangeText(replacement, start, end, 'select');
+    ta.focus();
+    _guideUpdatePreview();
+}
+
+function _guideInsertAtLineStart(text) {
+    const ta = document.getElementById('guide-editor-content');
+    if (!ta) return;
+    const start = ta.selectionStart;
+    const lineStart = ta.value.lastIndexOf('\n', start - 1) + 1;
+    ta.setRangeText(text, lineStart, lineStart, 'start');
+    ta.focus();
+    _guideUpdatePreview();
+}
+
+function _guideInsertLink() {
+    const ta = document.getElementById('guide-editor-content');
+    if (!ta) return;
+    const start = ta.selectionStart, end = ta.selectionEnd;
+    const selected = ta.value.slice(start, end) || 'link text';
+    ta.setRangeText(`[${selected}](url)`, start, end, 'select');
+    ta.focus();
+    _guideUpdatePreview();
+}
+
+function _guideUpdatePreview() {
+    const ta = document.getElementById('guide-editor-content');
+    const preview = document.getElementById('guide-editor-preview');
+    if (!ta || !preview) return;
+    preview.innerHTML = typeof marked !== 'undefined'
+        ? marked.parse(ta.value)
+        : ta.value;
+}
+
 window.openGuideEditor = () => {
     const slug = state.activeGuide;
     const existing = document.getElementById('guide-editor-modal');
     if (existing) existing.remove();
 
-    // Derive a default title from the slug
     const defaultTitle = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
     const currentContent = state.guideRawContent || '';
+
+    const toolbarHtml = _guideToolbar.map(btn => {
+        if (btn.label === '|') return `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0"></span>`;
+        return `<button type="button" title="${btn.title}" onclick="window._guideTbAction('${btn.title}')"
+            class="px-2 py-1 rounded-lg text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 hover:text-amber-700 transition-colors shrink-0">${btn.label}</button>`;
+    }).join('');
 
     const div = document.createElement('div');
     div.innerHTML = `
     <div id="guide-editor-modal"
          class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-3xl flex flex-col" style="max-height:90vh">
-            <div class="flex items-center justify-between p-8 pb-4 shrink-0">
+        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl flex flex-col" style="width:min(96vw,1100px);max-height:92vh">
+
+            <!-- Header -->
+            <div class="flex items-center justify-between px-8 pt-8 pb-4 shrink-0">
                 <div class="flex items-center gap-3">
                     <div class="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center">
                         <i data-lucide="pencil" class="w-5 h-5 text-amber-600"></i>
@@ -1884,21 +1949,40 @@ window.openGuideEditor = () => {
                     <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
-            <div class="px-8 pb-4 shrink-0">
-                <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
-                <input id="guide-editor-title" type="text" value="${defaultTitle}" maxlength="120"
-                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-amber-400 font-medium">
+
+            <!-- Title -->
+            <div class="px-8 pb-3 shrink-0">
+                <input id="guide-editor-title" type="text" value="${defaultTitle.replace(/"/g, '&quot;')}" maxlength="120"
+                    placeholder="Guide title"
+                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-amber-400 font-bold text-lg">
             </div>
-            <div class="px-8 pb-4 shrink-0">
-                <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Content <span class="font-normal normal-case tracking-normal text-slate-400">— Markdown supported</span></label>
+
+            <!-- Toolbar -->
+            <div class="px-8 pb-2 shrink-0">
+                <div class="flex items-center flex-wrap gap-0.5 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
+                    ${toolbarHtml}
+                </div>
             </div>
-            <div class="px-8 flex-1 overflow-hidden">
-                <textarea id="guide-editor-content"
-                    class="w-full h-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm focus:outline-none focus:border-amber-400 resize-none"
-                    style="min-height:280px"
-                    placeholder="Write guide content in Markdown…">${currentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+
+            <!-- Split pane -->
+            <div class="px-8 flex-1 overflow-hidden grid grid-cols-2 gap-4 min-h-0 pb-2">
+                <div class="flex flex-col min-h-0">
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Write</p>
+                    <textarea id="guide-editor-content"
+                        oninput="window._guideUpdatePreview()"
+                        class="flex-1 w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-mono text-sm focus:outline-none focus:border-amber-400 resize-none"
+                        placeholder="Start writing…">${currentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+                </div>
+                <div class="flex flex-col min-h-0">
+                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Preview</p>
+                    <div id="guide-editor-preview"
+                        class="flex-1 overflow-y-auto px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 prose dark:prose-invert max-w-none text-sm">
+                    </div>
+                </div>
             </div>
-            <div class="p-8 pt-4 shrink-0">
+
+            <!-- Footer -->
+            <div class="px-8 py-5 shrink-0">
                 <div id="guide-editor-error" class="hidden text-red-500 text-sm font-bold mb-3"></div>
                 <div class="flex gap-3">
                     <button onclick="window._saveGuide()"
@@ -1914,8 +1998,16 @@ window.openGuideEditor = () => {
         </div>
     </div>`;
     document.body.appendChild(div.firstElementChild);
-    document.getElementById('guide-editor-title')?.focus();
     if (typeof lucide !== 'undefined') lucide.createIcons();
+    // Wire up toolbar actions
+    window._guideTbAction = (title) => {
+        const btn = _guideToolbar.find(b => b.title === title);
+        if (btn?.action) btn.action();
+    };
+    window._guideUpdatePreview = _guideUpdatePreview;
+    // Render initial preview
+    _guideUpdatePreview();
+    document.getElementById('guide-editor-title')?.focus();
 };
 
 window._saveGuide = async () => {
