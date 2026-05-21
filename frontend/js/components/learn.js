@@ -73,7 +73,14 @@ export function renderLearnHub(state) {
         sections.get(g.section).guides.push(g);
     }
 
-    const sectionCards = [...sections.entries()].map(([sectionKey, sec]) => {
+    // FAQ always last
+    const sectionEntries = [...sections.entries()].sort(([a], [b]) => {
+        if (a === 'faq') return 1;
+        if (b === 'faq') return -1;
+        return 0;
+    });
+
+    const sectionCards = sectionEntries.map(([sectionKey, sec]) => {
         const style = SECTION_STYLE[sectionKey] || DEFAULT_STYLE;
         const isFaq = sectionKey === 'faq';
 
