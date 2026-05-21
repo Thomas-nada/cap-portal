@@ -163,3 +163,14 @@ class BugReport(Base):
     environment = Column(Text, nullable=True)  # JSON: page, viewport, user_agent, etc.
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
+class Guide(Base):
+    __tablename__ = "guides"
+
+    slug = Column(String, primary_key=True)
+    title = Column(String, nullable=False)
+    content = Column(Text, nullable=False)  # markdown
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+    updated_by = Column(String, nullable=True)
+    updated_by_name = Column(String, nullable=True)

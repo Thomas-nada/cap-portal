@@ -30,7 +30,7 @@ from database import engine, get_db, Base
 from emails import (notify_new_proposal, notify_new_comment, notify_new_suggestion,
                     notify_suggestion_resolved, notify_lifecycle_change, _send as _send_email,
                     SMTP_HOST, SMTP_FROM, APP_URL as EMAIL_APP_URL)
-from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, ProposalSubscriber, BugReport
+from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, ProposalSubscriber, BugReport, Guide
 
 Base.metadata.create_all(bind=engine)
 
@@ -50,6 +50,14 @@ with engine.connect() as _conn:
             email TEXT NOT NULL,
             unsubscribe_token TEXT UNIQUE NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )""",
+        """CREATE TABLE IF NOT EXISTS guides (
+            slug TEXT PRIMARY KEY,
+            title TEXT NOT NULL,
+            content TEXT NOT NULL,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_by TEXT,
+            updated_by_name TEXT
         )""",
     ]:
         try:
@@ -193,6 +201,15 @@ def require_admin(authorization: Optional[str] = Header(None), db: Session = Dep
     admin = db.query(Admin).filter(Admin.stake_address == user["sub"]).first()
     if not admin:
         raise HTTPException(status_code=403, detail="Admin access required")
+    return user
+
+
+def require_editor_or_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
+    user = require_user(authorization)
+    is_editor = db.query(Editor).filter(Editor.stake_address == user["sub"]).first()
+    is_admin = db.query(Admin).filter(Admin.stake_address == user["sub"]).first()
+    if not is_editor and not is_admin:
+        raise HTTPException(status_code=403, detail="Editor or admin access required")
     return user
 
 
@@ -1203,6 +1220,50 @@ def seed_editor(body: dict, db: Session = Depends(get_db)):
         db.add(Editor(stake_address=sa, display_name=dn))
         db.commit()
     return {"ok": True}
+
+
+# ── Guides ────────────────────────────────────────────────────────────────────
+
+class GuideUpdate(BaseModel):
+    title: str
+    content: str  # markdown
+
+@app.get("/guides/{slug}", tags=["guides"], summary="Get a guide by slug")
+def get_guide(slug: str, db: Session = Depends(get_db)):
+    guide = db.query(Guide).filter(Guide.slug == slug).first()
+    if not guide:
+        raise HTTPException(status_code=404, detail="Guide not found")
+    return {
+        "slug": guide.slug,
+        "title": guide.title,
+        "content": guide.content,
+        "updated_at": guide.updated_at.isoformat(),
+        "updated_by_name": guide.updated_by_name,
+    }
+
+@app.put("/guides/{slug}", tags=["guides"], summary="Create or update a guide (editor/admin only)")
+def upsert_guide(slug: str, body: GuideUpdate,
+                 user: dict = Depends(require_editor_or_admin),
+                 db: Session = Depends(get_db)):
+    guide = db.query(Guide).filter(Guide.slug == slug).first()
+    if guide:
+        guide.title = body.title.strip()
+        guide.content = body.content
+        guide.updated_by = user["sub"]
+        guide.updated_by_name = user.get("display_name")
+        guide.updated_at = datetime.now(timezone.utc)
+    else:
+        guide = Guide(
+            slug=slug,
+            title=body.title.strip(),
+            content=body.content,
+            updated_by=user["sub"],
+            updated_by_name=user.get("display_name"),
+        )
+        db.add(guide)
+    db.commit()
+    db.refresh(guide)
+    return {"slug": guide.slug, "title": guide.title, "updated_at": guide.updated_at.isoformat()}
 
 
 # ── Bug Reports ───────────────────────────────────────────────────────────────

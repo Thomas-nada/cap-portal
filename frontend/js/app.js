@@ -8,7 +8,8 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchVersions, fetchVersion,
          getMe, devSeedEditor, setDisplayName, updateProfile,
          generateDraftConstitution, subscribeToProposal, checkSubscription, unsubscribeFromProposal,
-         submitBugReport, fetchBugReports, updateBugStatus } from './api.js';
+         submitBugReport, fetchBugReports, updateBugStatus,
+         fetchGuide, upsertGuide } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          showDisplayNameStep, devLogin, shortAddress,
@@ -65,7 +66,10 @@ export const state = {
     editingProposal: null,
     // Learn
     activeGuide: null,
-    guideContent: null,
+    guideHtml: null,
+    guideRawContent: null,
+    guideLastEditor: null,
+    guideLastUpdated: null,
     // Stats (derived)
     stats: { consultation: 0, ready: 0, done: 0 },
 };
@@ -171,7 +175,10 @@ window.handleRouting = async () => {
     } else if (hash === '#/learn') {
         state.view = 'learn';
         state.activeGuide = null;
-        state.guideContent = null;
+        state.guideHtml = null;
+        state.guideRawContent = null;
+        state.guideLastEditor = null;
+        state.guideLastUpdated = null;
         updateUI();
     } else if (hash === '#/editors') {
         state.view = 'editors';
@@ -1587,22 +1594,46 @@ function buildWizardMarkdown(w) {
 
 window.openGuide = async (slug) => {
     state.activeGuide = slug;
+    state.guideHtml = null;
     state.view = 'learn';
     window.location.hash = `#/learn/${slug}`;
     updateUI();
+
+    // Try API first (editor-saved version), fall back to static file
+    let markdown = null;
     try {
-        const res = await fetch(`docs/guides/${slug}.md`);
-        if (!res.ok) throw new Error('Guide not found');
-        state.guideContent = await res.text();
-    } catch (e) {
-        state.guideContent = null;
+        const data = await fetchGuide(slug);
+        markdown = data.content;
+        state.guideLastEditor = data.updated_by_name || null;
+        state.guideLastUpdated = data.updated_at || null;
+    } catch {
+        try {
+            const res = await fetch(`docs/guides/${slug}.md`);
+            if (res.ok) markdown = await res.text();
+        } catch {}
+        state.guideLastEditor = null;
+        state.guideLastUpdated = null;
+    }
+
+    if (markdown && typeof marked !== 'undefined') {
+        state.guideHtml = marked.parse(markdown);
+        state.guideRawContent = markdown;
+    } else if (markdown) {
+        state.guideHtml = `<pre>${markdown}</pre>`;
+        state.guideRawContent = markdown;
+    } else {
+        state.guideHtml = null;
+        state.guideRawContent = null;
     }
     updateUI();
 };
 
 window.closeGuide = () => {
     state.activeGuide = null;
-    state.guideContent = null;
+    state.guideHtml = null;
+    state.guideRawContent = null;
+    state.guideLastEditor = null;
+    state.guideLastUpdated = null;
     window.location.hash = '#/learn';
     updateUI();
 };
@@ -1819,5 +1850,104 @@ window.updateBugStatus = async (id, status) => {
         await loadBugReports();
     } catch (e) {
         alert('Failed to update status: ' + e.message);
+    }
+};
+
+// ── Guide Editor ──────────────────────────────────────────────────────────────
+
+window.openGuideEditor = () => {
+    const slug = state.activeGuide;
+    const existing = document.getElementById('guide-editor-modal');
+    if (existing) existing.remove();
+
+    // Derive a default title from the slug
+    const defaultTitle = slug.replace(/-/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+    const currentContent = state.guideRawContent || '';
+
+    const div = document.createElement('div');
+    div.innerHTML = `
+    <div id="guide-editor-modal"
+         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-3xl flex flex-col" style="max-height:90vh">
+            <div class="flex items-center justify-between p-8 pb-4 shrink-0">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center">
+                        <i data-lucide="pencil" class="w-5 h-5 text-amber-600"></i>
+                    </div>
+                    <div>
+                        <h2 class="text-xl font-black text-slate-900 dark:text-white">Edit Guide</h2>
+                        <p class="text-xs text-slate-400 font-mono">${slug}</p>
+                    </div>
+                </div>
+                <button onclick="document.getElementById('guide-editor-modal').remove()"
+                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+            <div class="px-8 pb-4 shrink-0">
+                <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+                <input id="guide-editor-title" type="text" value="${defaultTitle}" maxlength="120"
+                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-amber-400 font-medium">
+            </div>
+            <div class="px-8 pb-4 shrink-0">
+                <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Content <span class="font-normal normal-case tracking-normal text-slate-400">— Markdown supported</span></label>
+            </div>
+            <div class="px-8 flex-1 overflow-hidden">
+                <textarea id="guide-editor-content"
+                    class="w-full h-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white font-mono text-sm focus:outline-none focus:border-amber-400 resize-none"
+                    style="min-height:280px"
+                    placeholder="Write guide content in Markdown…">${currentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
+            </div>
+            <div class="p-8 pt-4 shrink-0">
+                <div id="guide-editor-error" class="hidden text-red-500 text-sm font-bold mb-3"></div>
+                <div class="flex gap-3">
+                    <button onclick="window._saveGuide()"
+                        class="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black transition-colors">
+                        Save Guide
+                    </button>
+                    <button onclick="document.getElementById('guide-editor-modal').remove()"
+                        class="px-6 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 font-black hover:border-slate-400 transition-colors">
+                        Cancel
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>`;
+    document.body.appendChild(div.firstElementChild);
+    document.getElementById('guide-editor-title')?.focus();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+};
+
+window._saveGuide = async () => {
+    const slug = state.activeGuide;
+    const title = document.getElementById('guide-editor-title')?.value?.trim();
+    const content = document.getElementById('guide-editor-content')?.value;
+    const errEl = document.getElementById('guide-editor-error');
+
+    if (!title) {
+        errEl.textContent = 'Please enter a title.';
+        errEl.classList.remove('hidden');
+        return;
+    }
+    if (!content?.trim()) {
+        errEl.textContent = 'Content cannot be empty.';
+        errEl.classList.remove('hidden');
+        return;
+    }
+
+    const btn = document.querySelector('#guide-editor-modal button[onclick="window._saveGuide()"]');
+    if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
+
+    try {
+        await upsertGuide(slug, title, content);
+        document.getElementById('guide-editor-modal').remove();
+        // Reload the guide
+        state.guideHtml = null;
+        updateUI();
+        window.openGuide(slug);
+    } catch (e) {
+        if (btn) { btn.textContent = 'Save Guide'; btn.disabled = false; }
+        errEl.textContent = e.message || 'Failed to save. Please try again.';
+        errEl.classList.remove('hidden');
     }
 };

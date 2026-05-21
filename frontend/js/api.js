@@ -204,3 +204,13 @@ export async function fetchBugReports() {
 export async function updateBugStatus(id, status) {
     return req('PATCH', `/bug-reports/${id}/status`, { status }, true);
 }
+
+// ── Guides ────────────────────────────────────────────────────────────────────
+
+export async function fetchGuide(slug) {
+    return req('GET', `/guides/${encodeURIComponent(slug)}`);
+}
+
+export async function upsertGuide(slug, title, content) {
+    return req('PUT', `/guides/${encodeURIComponent(slug)}`, { title, content }, true);
+}

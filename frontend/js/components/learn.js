@@ -2,16 +2,35 @@ import { API_BASE } from '../config.js';
 
 export function renderLearnHub(state) {
     if (state.activeGuide) {
+        const canEdit = state.user?.is_editor || state.user?.is_admin;
+        const lastEdit = state.guideLastEditor
+            ? `<span class="text-xs text-slate-400 mt-2 block">Last edited by ${state.guideLastEditor}</span>`
+            : '';
+
         return `
         <div class="max-w-6xl mx-auto pb-20 fade-in text-left">
-            <div class="mb-8">
+            <div class="flex items-center justify-between mb-8">
                 <button onclick="window.closeGuide()" class="group flex items-center gap-2 text-slate-400 hover:text-blue-600 transition-colors font-bold uppercase text-xs tracking-widest">
                     <i data-lucide="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition-transform"></i>
                     Back to Guides
                 </button>
+                ${canEdit ? `
+                <button onclick="window.openGuideEditor()"
+                    class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-800 text-amber-700 dark:text-amber-400 text-xs font-black uppercase tracking-widest hover:bg-amber-100 dark:hover:bg-amber-900/40 transition-colors">
+                    <i data-lucide="pencil" class="w-3 h-3"></i>
+                    Edit Guide
+                </button>` : ''}
             </div>
             <article id="guide-content" class="bg-white dark:bg-slate-900 p-10 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm prose dark:prose-invert max-w-none">
-                ${state.loading?.guide ? '<p class="text-slate-400">Loading…</p>' : (state.guideHtml || '<p class="text-slate-400">No content available.</p>')}
+                ${state.loading?.guide
+                    ? '<p class="text-slate-400">Loading…</p>'
+                    : state.guideHtml
+                        ? state.guideHtml + lastEdit
+                        : `<div class="text-center py-12">
+                            <p class="text-slate-400 mb-4">No content yet for this guide.</p>
+                            ${canEdit ? `<button onclick="window.openGuideEditor()" class="px-6 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black transition-colors">Write this guide</button>` : ''}
+                           </div>`
+                }
             </article>
         </div>`;
     }
