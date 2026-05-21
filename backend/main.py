@@ -59,6 +59,9 @@ with engine.connect() as _conn:
             updated_by TEXT,
             updated_by_name TEXT
         )""",
+        "ALTER TABLE guides ADD COLUMN section TEXT DEFAULT 'general'",
+        "ALTER TABLE guides ADD COLUMN section_label TEXT",
+        "ALTER TABLE guides ADD COLUMN sort_order INTEGER DEFAULT 0",
     ]:
         try:
             _conn.execute(text(_stmt))
@@ -1227,6 +1230,16 @@ def seed_editor(body: dict, db: Session = Depends(get_db)):
 class GuideUpdate(BaseModel):
     title: str
     content: str  # markdown
+    section: str = 'general'
+    section_label: Optional[str] = None
+    sort_order: int = 0
+
+@app.get("/guides", tags=["guides"], summary="List all guides")
+def list_guides(db: Session = Depends(get_db)):
+    guides = db.query(Guide).order_by(Guide.section, Guide.sort_order, Guide.slug).all()
+    return [{"slug": g.slug, "title": g.title, "section": g.section,
+             "section_label": g.section_label or g.section.replace('-', ' ').title(),
+             "sort_order": g.sort_order} for g in guides]
 
 @app.get("/guides/{slug}", tags=["guides"], summary="Get a guide by slug")
 def get_guide(slug: str, db: Session = Depends(get_db)):
@@ -1252,6 +1265,9 @@ def upsert_guide(slug: str, body: GuideUpdate,
         guide.updated_by = user["sub"]
         guide.updated_by_name = user.get("display_name")
         guide.updated_at = datetime.now(timezone.utc)
+        guide.section = body.section
+        guide.section_label = body.section_label
+        guide.sort_order = body.sort_order
     else:
         guide = Guide(
             slug=slug,
@@ -1259,11 +1275,23 @@ def upsert_guide(slug: str, body: GuideUpdate,
             content=body.content,
             updated_by=user["sub"],
             updated_by_name=user.get("display_name"),
+            section=body.section,
+            section_label=body.section_label,
+            sort_order=body.sort_order,
         )
         db.add(guide)
     db.commit()
     db.refresh(guide)
     return {"slug": guide.slug, "title": guide.title, "updated_at": guide.updated_at.isoformat()}
+
+@app.delete("/guides/{slug}", tags=["guides"], summary="Delete a guide (editor/admin only)", status_code=204)
+def delete_guide(slug: str, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
+    guide = db.query(Guide).filter(Guide.slug == slug).first()
+    if not guide:
+        raise HTTPException(status_code=404, detail="Guide not found")
+    db.delete(guide)
+    db.commit()
+    return None
 
 
 # ── Bug Reports ───────────────────────────────────────────────────────────────

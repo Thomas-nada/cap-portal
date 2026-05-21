@@ -174,3 +174,6 @@ class Guide(Base):
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
     updated_by = Column(String, nullable=True)
     updated_by_name = Column(String, nullable=True)
+    section = Column(String, nullable=False, default='general')
+    section_label = Column(String, nullable=True)   # display name, e.g. "Getting Started"
+    sort_order = Column(Integer, nullable=False, default=0)

@@ -9,7 +9,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          getMe, devSeedEditor, setDisplayName, updateProfile,
          generateDraftConstitution, subscribeToProposal, checkSubscription, unsubscribeFromProposal,
          submitBugReport, fetchBugReports, updateBugStatus,
-         fetchGuide, upsertGuide } from './api.js';
+         fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          showDisplayNameStep, devLogin, shortAddress,
@@ -70,6 +70,8 @@ export const state = {
     guideRawContent: null,
     guideLastEditor: null,
     guideLastUpdated: null,
+    guides: [],
+    guidesLoaded: false,
     // Stats (derived)
     stats: { consultation: 0, ready: 0, done: 0 },
 };
@@ -170,8 +172,13 @@ window.handleRouting = async () => {
     } else if (hash.startsWith('#/learn/')) {
         const slug = hash.replace('#/learn/', '');
         state.view = 'learn';
-        if (slug) window.openGuide(slug);
-        else updateUI();
+        if (slug) {
+            if (!state.guidesLoaded) loadGuides().then(() => window.openGuide(slug));
+            else window.openGuide(slug);
+        } else {
+            if (!state.guidesLoaded) loadGuides();
+            else updateUI();
+        }
     } else if (hash === '#/learn') {
         state.view = 'learn';
         state.activeGuide = null;
@@ -179,7 +186,8 @@ window.handleRouting = async () => {
         state.guideRawContent = null;
         state.guideLastEditor = null;
         state.guideLastUpdated = null;
-        updateUI();
+        if (!state.guidesLoaded) loadGuides();
+        else updateUI();
     } else if (hash === '#/editors') {
         state.view = 'editors';
         loadEditors();
@@ -211,6 +219,17 @@ async function loadBugReports() {
         state.bugReports = await fetchBugReports();
     } catch (e) {
         state.bugReports = [];
+    }
+    updateUI();
+}
+
+async function loadGuides() {
+    try {
+        state.guides = await fetchGuides();
+        state.guidesLoaded = true;
+    } catch {
+        state.guides = [];
+        state.guidesLoaded = true;
     }
     updateUI();
 }
@@ -1638,6 +1657,127 @@ window.closeGuide = () => {
     updateUI();
 };
 
+window.openNewGuideModal = () => {
+    const existing = document.getElementById('new-guide-modal');
+    if (existing) existing.remove();
+
+    // Collect existing sections from state.guides
+    const sections = [...new Map(
+        state.guides.map(g => [g.section, g.section_label || g.section])
+    ).entries()].map(([value, label]) => ({ value, label }));
+
+    const sectionOptions = sections.map(s =>
+        `<option value="${s.value}">${s.label}</option>`
+    ).join('');
+
+    const div = document.createElement('div');
+    div.innerHTML = `
+    <div id="new-guide-modal"
+         onclick="if(event.target===this) document.getElementById('new-guide-modal').remove()"
+         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-md p-8">
+            <div class="flex items-center justify-between mb-6">
+                <div class="flex items-center gap-3">
+                    <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center">
+                        <i data-lucide="plus" class="w-5 h-5 text-blue-600"></i>
+                    </div>
+                    <h2 class="text-xl font-black text-slate-900 dark:text-white">New Guide</h2>
+                </div>
+                <button onclick="document.getElementById('new-guide-modal').remove()"
+                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
+                    <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
+            </div>
+
+            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+            <input id="ng-title" type="text" placeholder="Guide title" maxlength="120"
+                oninput="window._ngSlugFromTitle()"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 mb-4 font-medium">
+
+            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Slug <span class="font-normal normal-case tracking-normal text-slate-400">— URL identifier</span></label>
+            <input id="ng-slug" type="text" placeholder="my-guide-slug" maxlength="80"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 mb-4 font-mono text-sm">
+
+            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Section</label>
+            <select id="ng-section" onchange="window._ngToggleNewSection()"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 mb-3 font-medium">
+                ${sectionOptions}
+                <option value="__new__">+ New section…</option>
+            </select>
+            <div id="ng-new-section-wrap" class="hidden mb-4">
+                <input id="ng-new-section-label" type="text" placeholder="Section name (e.g. Getting Started)"
+                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 font-medium">
+            </div>
+
+            <div id="ng-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
+
+            <button onclick="window._createNewGuide()"
+                class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
+                Create &amp; Edit
+            </button>
+        </div>
+    </div>`;
+    document.body.appendChild(div.firstElementChild);
+    document.getElementById('ng-title')?.focus();
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+};
+
+window._ngSlugFromTitle = () => {
+    const title = document.getElementById('ng-title')?.value || '';
+    const slug = title.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '');
+    const el = document.getElementById('ng-slug');
+    if (el) el.value = slug;
+};
+
+window._ngToggleNewSection = () => {
+    const sel = document.getElementById('ng-section');
+    const wrap = document.getElementById('ng-new-section-wrap');
+    if (sel && wrap) wrap.classList.toggle('hidden', sel.value !== '__new__');
+};
+
+window._createNewGuide = async () => {
+    const title = document.getElementById('ng-title')?.value?.trim();
+    const slug = document.getElementById('ng-slug')?.value?.trim();
+    const sectionSel = document.getElementById('ng-section')?.value;
+    const isNewSection = sectionSel === '__new__';
+    const newSectionLabel = document.getElementById('ng-new-section-label')?.value?.trim();
+    const errEl = document.getElementById('ng-error');
+
+    if (!title) { errEl.textContent = 'Please enter a title.'; errEl.classList.remove('hidden'); return; }
+    if (!slug) { errEl.textContent = 'Please enter a slug.'; errEl.classList.remove('hidden'); return; }
+    if (!/^[a-z0-9-]+$/.test(slug)) { errEl.textContent = 'Slug can only contain lowercase letters, numbers, and hyphens.'; errEl.classList.remove('hidden'); return; }
+    if (isNewSection && !newSectionLabel) { errEl.textContent = 'Please enter a name for the new section.'; errEl.classList.remove('hidden'); return; }
+
+    const section = isNewSection
+        ? newSectionLabel.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '')
+        : sectionSel;
+    const section_label = isNewSection ? newSectionLabel : null;
+
+    try {
+        await upsertGuide(slug, title, '', section, section_label, 0);
+        document.getElementById('new-guide-modal').remove();
+        state.guidesLoaded = false;
+        window.openGuide(slug);
+    } catch (e) {
+        errEl.textContent = e.message || 'Failed to create guide.';
+        errEl.classList.remove('hidden');
+    }
+};
+
+window.deleteGuide = async (slug) => {
+    if (!confirm('Delete this guide? This cannot be undone.')) return;
+    try {
+        await deleteGuide(slug);
+        state.guidesLoaded = false;
+        state.activeGuide = null;
+        state.guideHtml = null;
+        window.location.hash = '#/learn';
+        await loadGuides();
+    } catch (e) {
+        alert(e.message || 'Failed to delete guide.');
+    }
+};
+
 // ── Theme ─────────────────────────────────────────────────────────────────────
 
 window.toggleTheme = () => {
@@ -2031,10 +2171,12 @@ window._saveGuide = async () => {
     if (btn) { btn.textContent = 'Saving…'; btn.disabled = true; }
 
     try {
-        await upsertGuide(slug, title, content);
+        const guideInfo = state.guides.find(g => g.slug === slug);
+        await upsertGuide(slug, title, content, guideInfo?.section || 'general', guideInfo?.section_label || null, guideInfo?.sort_order || 0);
         document.getElementById('guide-editor-modal').remove();
-        // Reload the guide
+        // Reload the guide and refresh guide list
         state.guideHtml = null;
+        state.guidesLoaded = false;
         updateUI();
         window.openGuide(slug);
     } catch (e) {

@@ -207,10 +207,18 @@ export async function updateBugStatus(id, status) {
 
 // ── Guides ────────────────────────────────────────────────────────────────────
 
+export async function fetchGuides() {
+    return req('GET', '/guides');
+}
+
 export async function fetchGuide(slug) {
     return req('GET', `/guides/${encodeURIComponent(slug)}`);
 }
 
-export async function upsertGuide(slug, title, content) {
-    return req('PUT', `/guides/${encodeURIComponent(slug)}`, { title, content }, true);
+export async function upsertGuide(slug, title, content, section = 'general', section_label = null, sort_order = 0) {
+    return req('PUT', `/guides/${encodeURIComponent(slug)}`, { title, content, section, section_label, sort_order }, true);
+}
+
+export async function deleteGuide(slug) {
+    return req('DELETE', `/guides/${encodeURIComponent(slug)}`, null, true);
 }
