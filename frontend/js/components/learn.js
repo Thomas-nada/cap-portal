@@ -75,7 +75,9 @@ export function renderLearnHub(state) {
 
     const sectionCards = [...sections.entries()].map(([sectionKey, sec]) => {
         const style = SECTION_STYLE[sectionKey] || DEFAULT_STYLE;
-        const guideButtons = sec.guides.map(g => `
+        const isFaq = sectionKey === 'faq';
+
+        const guideButton = (g) => `
             <div class="flex items-center gap-2 group/guide">
                 <button onclick="window.openGuide('${g.slug}')"
                     class="flex-1 p-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white text-sm font-bold text-left hover:-translate-y-0.5 transition-all">
@@ -86,7 +88,28 @@ export function renderLearnHub(state) {
                     class="opacity-0 group-hover/guide:opacity-100 w-8 h-8 rounded-xl bg-red-50 dark:bg-red-900/20 text-red-400 hover:text-red-600 hover:bg-red-100 flex items-center justify-center transition-all shrink-0">
                     <i data-lucide="x" class="w-3 h-3"></i>
                 </button>` : ''}
-            </div>`).join('');
+            </div>`;
+
+        const guideButtons = sec.guides.map(guideButton).join('');
+
+        if (isFaq) {
+            return `
+            <div class="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm p-10 md:col-span-2">
+                <div class="w-12 h-12 ${style.color} rounded-2xl flex items-center justify-center mb-6 text-white">
+                    <i data-lucide="${style.icon}" class="w-6 h-6"></i>
+                </div>
+                <h2 class="text-2xl font-black italic tracking-tighter text-slate-900 dark:text-white uppercase mb-2">${sec.label}</h2>
+                <p class="text-slate-500 mb-8">Common questions about the governance process</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    ${guideButtons}
+                    ${canEdit ? `
+                    <button onclick="window.openNewGuideModal()"
+                        class="p-4 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 text-slate-400 text-sm font-bold text-left hover:border-blue-300 hover:text-blue-500 transition-all">
+                        + Add FAQ
+                    </button>` : ''}
+                </div>
+            </div>`;
+        }
 
         return `
         <div class="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm p-10">
