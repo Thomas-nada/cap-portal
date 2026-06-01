@@ -48,7 +48,13 @@ export function renderWizard(state) {
 
         ${renderStep(step, wizard, state)}
 
-        <div class="flex items-center justify-between mt-12">
+        ${state.wizardError ? `
+        <div class="mt-8 flex items-center gap-3 px-6 py-4 rounded-2xl bg-amber-50 dark:bg-amber-900/15 border border-amber-200 dark:border-amber-800/40 text-amber-700 dark:text-amber-300">
+            <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0"></i>
+            <span class="text-sm font-bold">${escapeHtml(state.wizardError)}</span>
+        </div>` : ''}
+
+        <div class="flex items-center justify-between ${state.wizardError ? 'mt-6' : 'mt-12'}">
             ${step > 1 ? `
             <button onclick="window.wizardPrevStep()"
                 class="px-8 py-4 rounded-2xl bg-slate-200 dark:bg-slate-800 text-slate-900 dark:text-white font-black text-sm uppercase tracking-widest hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-2">
@@ -363,6 +369,48 @@ function renderStep6(wizard) {
             </button>
         </div>
     </div>`;
+}
+
+// Validates the current wizard step before advancing. Returns an error message
+// string to block "Next", or null when the step is complete. CIS-aware: CIS
+// proposals skip the CAP-only Select (2) and Propose (3) screens.
+export function validateStep(step, wizard) {
+    const isCIS = wizard.type === 'CIS';
+    // Map the linear step counter to the screen actually shown (mirrors renderStep).
+    let screen;
+    if (step === 1) screen = 'type';
+    else if (step === 2) screen = isCIS ? 'explain' : 'select';
+    else if (step === 3) screen = isCIS ? 'explain' : 'propose';
+    else if (step === 4) screen = 'explain';
+    else screen = 'other';
+
+    switch (screen) {
+        case 'type':
+            if (!(wizard.title || '').trim()) return 'Enter a title to continue.';
+            if (!wizard.category) return 'Choose a category to continue.';
+            return null;
+        case 'select':
+            if (!(wizard.selectedText && wizard.selectedText.length))
+                return 'Select at least one passage from the constitution before continuing.';
+            return null;
+        case 'propose': {
+            const sels = wizard.selectedText || [];
+            const revs = wizard.revisions || {};
+            if (sels.some((_, idx) => !(revs[idx] || '').trim()))
+                return 'Write proposed text for every selection before continuing.';
+            return null;
+        }
+        case 'explain':
+            if (!(wizard.abstract || '').trim()) return 'Add a summary before continuing.';
+            if (!(wizard.motivation || '').trim())
+                return isCIS ? 'Describe the problem before continuing.'
+                             : 'Explain why this change is needed before continuing.';
+            if (!isCIS && !(wizard.analysis || '').trim())
+                return 'Complete the Analysis & Test section before continuing.';
+            return null;
+        default:
+            return null;
+    }
 }
 
 export function buildMarkdown(wizard) {

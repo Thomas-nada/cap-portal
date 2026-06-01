@@ -23,7 +23,7 @@ import { renderDashboard }    from './components/dashboard.js';
 import { renderRegistry }     from './components/registry.js';
 import { renderKanban }       from './components/kanban.js';
 import { renderDetail }       from './components/detail.js';
-import { renderWizard }       from './components/wizard.js';
+import { renderWizard, validateStep } from './components/wizard.js';
 import { renderCreate }       from './components/create.js';
 import { renderEdit }         from './components/edit.js';
 import { renderConstitution } from './components/constitution.js';
@@ -62,6 +62,7 @@ export const state = {
     // Wizard
     wizardData: {},
     wizardStep: 1,
+    wizardError: null,
     // Create / Edit
     draftProposal: {},
     editingProposal: null,
@@ -1488,13 +1489,20 @@ window._saveProfile = async () => {
 
 window.updateWizard = (data) => {
     state.wizardData = { ...state.wizardData, ...data };
+    state.wizardError = null;  // clear any blocking warning once the user changes input
 };
-window.wizardNext     = () => { state.wizardStep++; updateUI(); };
-window.wizardBack     = () => { state.wizardStep = Math.max(0, state.wizardStep - 1); updateUI(); };
+window.wizardNext     = () => {
+    const err = validateStep(state.wizardStep, state.wizardData || {});
+    if (err) { state.wizardError = err; updateUI(); return; }
+    state.wizardError = null;
+    state.wizardStep++;
+    updateUI();
+};
+window.wizardBack     = () => { state.wizardError = null; state.wizardStep = Math.max(0, state.wizardStep - 1); updateUI(); };
 window.wizardNextStep = () => window.wizardNext();
 window.wizardPrevStep = () => window.wizardBack();
 window.wizardSubmit   = () => window.submitWizard();
-window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; updateUI(); };
+window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; updateUI(); };
 
 window.previewWizard = () => {
     const w = state.wizardData || {};
