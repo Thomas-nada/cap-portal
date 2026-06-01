@@ -1519,6 +1519,12 @@ window.wizardNextStep = () => window.wizardNext();
 window.wizardPrevStep = () => window.wizardBack();
 window.wizardSubmit   = () => window.submitWizard();
 window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; updateUI(); };
+// Confirmed reset for the "Start Over" button — guards against a misclick
+// discarding a draft the user has spent several steps building.
+window.wizardStartOver = () => {
+    if (!confirm('Start over? This discards everything you\'ve entered in the wizard.')) return;
+    window.wizardReset();
+};
 
 window.previewWizard = () => {
     const w = state.wizardData || {};

@@ -363,7 +363,7 @@ function renderStep6(wizard) {
         <h2 class="text-4xl font-black italic tracking-tighter text-slate-900 dark:text-white uppercase mb-4">Ready to Submit!</h2>
         <p class="text-slate-500 text-lg mb-8 max-w-2xl mx-auto">Your ${wizard.type} is ready. Click submit to create the proposal.</p>
         <div class="flex items-center justify-center gap-4">
-            <button onclick="window.wizardReset()"
+            <button onclick="window.wizardStartOver()"
                 class="px-8 py-4 rounded-2xl border-2 border-slate-200 dark:border-slate-800 text-slate-900 dark:text-white font-black uppercase text-sm tracking-widest hover:-translate-y-1 active:scale-95 transition-all">
                 Start Over
             </button>
