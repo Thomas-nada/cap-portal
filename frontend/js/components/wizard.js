@@ -24,7 +24,7 @@ export function renderWizard(state) {
         <div class="bg-white dark:bg-slate-900 rounded-[3rem] border border-slate-100 dark:border-slate-800 shadow-sm p-8 mb-12">
             <div class="flex items-center justify-between mb-6">
                 ${[1,2,3,4,5,6].map(i => {
-                    const skipped = wizard.type === 'CIS' && (i === 2 || i === 3);
+                    const skipped = isStepSkipped(i, wizard);
                     const connMuted = wizard.type === 'CIS' && (i === 1 || i === 2 || i === 3);
                     return `
                     <div class="flex flex-col items-center gap-2 flex-1">
@@ -369,6 +369,13 @@ function renderStep6(wizard) {
             </button>
         </div>
     </div>`;
+}
+
+// The CAP-only Select (2) and Propose (3) screens are skipped for CIS proposals,
+// which identify a problem without proposing specific text. Single source of truth
+// for both the progress bar and Next/Back navigation.
+export function isStepSkipped(step, wizard) {
+    return wizard.type === 'CIS' && (step === 2 || step === 3);
 }
 
 // Validates the current wizard step before advancing. Returns an error message

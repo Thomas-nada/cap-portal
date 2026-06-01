@@ -23,7 +23,7 @@ import { renderDashboard }    from './components/dashboard.js';
 import { renderRegistry }     from './components/registry.js';
 import { renderKanban }       from './components/kanban.js';
 import { renderDetail }       from './components/detail.js';
-import { renderWizard, validateStep } from './components/wizard.js';
+import { renderWizard, validateStep, isStepSkipped } from './components/wizard.js';
 import { renderCreate }       from './components/create.js';
 import { renderEdit }         from './components/edit.js';
 import { renderConstitution } from './components/constitution.js';
@@ -1491,14 +1491,30 @@ window.updateWizard = (data) => {
     state.wizardData = { ...state.wizardData, ...data };
     state.wizardError = null;  // clear any blocking warning once the user changes input
 };
+// Step counter runs 1-6, but CIS proposals skip the CAP-only Select/Propose
+// screens (2 & 3), so navigation jumps over them in both directions.
+const nextWizardStep = (step, wizard) => {
+    let s = step + 1;
+    while (s < 6 && isStepSkipped(s, wizard)) s++;
+    return Math.min(s, 6);
+};
+const prevWizardStep = (step, wizard) => {
+    let s = step - 1;
+    while (s > 1 && isStepSkipped(s, wizard)) s--;
+    return Math.max(s, 1);
+};
 window.wizardNext     = () => {
     const err = validateStep(state.wizardStep, state.wizardData || {});
     if (err) { state.wizardError = err; updateUI(); return; }
     state.wizardError = null;
-    state.wizardStep++;
+    state.wizardStep = nextWizardStep(state.wizardStep, state.wizardData || {});
     updateUI();
 };
-window.wizardBack     = () => { state.wizardError = null; state.wizardStep = Math.max(0, state.wizardStep - 1); updateUI(); };
+window.wizardBack     = () => {
+    state.wizardError = null;
+    state.wizardStep = prevWizardStep(state.wizardStep, state.wizardData || {});
+    updateUI();
+};
 window.wizardNextStep = () => window.wizardNext();
 window.wizardPrevStep = () => window.wizardBack();
 window.wizardSubmit   = () => window.submitWizard();
