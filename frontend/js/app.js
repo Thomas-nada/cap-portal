@@ -1,5 +1,6 @@
 import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          createProposal, updateProposal, addLabel, removeLabel,
+         withdrawProposal, cancelWithdrawal,
          createComment, updateComment,
          fetchConstitutionVersions, fetchConstitutionContent,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
@@ -970,16 +971,20 @@ window.authorSignalReady = () => {
     window.authorToggleReady(p.number, !active);
 };
 
+async function applyWithdrawResult(number, updated) {
+    state.currentProposal = updated;
+    state.auditEvents = await fetchAudit(number);
+    state.proposals = state.proposals.map(pr => pr.number === number ? updated : pr);
+    updateUI();
+}
+
 window.authorWithdraw = async () => {
     const p = state.currentProposal;
     if (!p || !state.user) return;
     if (!confirm('Withdraw this proposal? This action is permanent.')) return;
     try {
-        const updated = await addLabel(p.number, 'withdrawn');
-        state.currentProposal = updated;
-        state.auditEvents = await fetchAudit(p.number);
-        state.proposals = state.proposals.map(pr => pr.number === p.number ? updated : pr);
-        updateUI();
+        const updated = await withdrawProposal(p.number);
+        await applyWithdrawResult(p.number, updated);
     } catch (e) {
         state.error = e.message;
         updateUI();
@@ -989,13 +994,30 @@ window.authorWithdraw = async () => {
 window.editorWithdraw = async () => {
     const p = state.currentProposal;
     if (!p || !state.user?.is_editor) return;
-    if (!confirm('Withdraw this proposal as editor? This action is permanent.')) return;
+    const myStake = state.user.stake_address;
+    const pending = p.withdrawal_requested_by;
+    // No pending request → this call opens one. A pending request by a different
+    // editor → this call confirms and finalises it (two-person rule).
+    const msg = pending && pending !== myStake
+        ? 'Confirm withdrawal of this proposal? This permanently closes it.'
+        : 'Request withdrawal of this proposal? A second, different editor must confirm before it takes effect.';
+    if (!confirm(msg)) return;
     try {
-        const updated = await addLabel(p.number, 'withdrawn');
-        state.currentProposal = updated;
-        state.auditEvents = await fetchAudit(p.number);
-        state.proposals = state.proposals.map(pr => pr.number === p.number ? updated : pr);
+        const updated = await withdrawProposal(p.number);
+        await applyWithdrawResult(p.number, updated);
+    } catch (e) {
+        state.error = e.message;
         updateUI();
+    }
+};
+
+window.editorCancelWithdraw = async () => {
+    const p = state.currentProposal;
+    if (!p || !state.user?.is_editor) return;
+    if (!confirm('Cancel the pending withdrawal request?')) return;
+    try {
+        const updated = await cancelWithdrawal(p.number);
+        await applyWithdrawResult(p.number, updated);
     } catch (e) {
         state.error = e.message;
         updateUI();

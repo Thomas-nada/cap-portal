@@ -62,6 +62,8 @@ with engine.connect() as _conn:
         "ALTER TABLE guides ADD COLUMN section TEXT DEFAULT 'general'",
         "ALTER TABLE guides ADD COLUMN section_label TEXT",
         "ALTER TABLE guides ADD COLUMN sort_order INTEGER DEFAULT 0",
+        "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by TEXT",
+        "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by_name TEXT",
     ]:
         try:
             _conn.execute(text(_stmt))
@@ -297,6 +299,8 @@ def proposal_to_dict(p: Proposal) -> dict:
         "author_display_name": p.author_display_name,
         "labels": [{"name": l.name} for l in p.labels],
         "comments": len(p.comments),
+        "withdrawal_requested_by": p.withdrawal_requested_by,
+        "withdrawal_requested_by_name": p.withdrawal_requested_by_name,
         "created_at": p.created_at.isoformat() if p.created_at else None,
         "updated_at": p.updated_at.isoformat() if p.updated_at else None,
     }
@@ -679,6 +683,11 @@ def add_label(number: int, body: dict, user: dict = Depends(require_user),
     if not p:
         raise HTTPException(status_code=404, detail="Proposal not found")
 
+    # Withdrawal is guarded by a two-person rule and must go through the dedicated
+    # endpoint, never the generic label route.
+    if name == "withdrawn":
+        raise HTTPException(status_code=400, detail="Use POST /proposals/{number}/withdraw to withdraw a proposal")
+
     # Editors can set any label; authors can only set author-ready
     editor = is_editor(user["sub"], db)
     if not editor and name not in AUTHOR_LABELS and name not in {"author-ready"}:
@@ -723,6 +732,103 @@ def remove_label(number: int, name: str, user: dict = Depends(require_user),
 
     db.query(Label).filter(Label.proposal_number == number, Label.name == name).delete()
     record_audit(db, number, "label_removed", user, {"label": name})
+    db.commit()
+    db.refresh(p)
+    return proposal_to_dict(p)
+
+
+# ── Withdrawal ──────────────────────────────────────────────────────────────────
+
+def _apply_withdrawn(db: Session, p: Proposal):
+    """Finalise a withdrawal: clear lifecycle/author-ready labels, mark withdrawn,
+    close the proposal, and clear any pending withdrawal request."""
+    to_remove = LIFECYCLE_LABELS | {"author-ready"}
+    for lbl in list(p.labels):  # p.labels is already loaded; delete via ORM to keep session in sync
+        if lbl.name in to_remove:
+            db.delete(lbl)
+    db.add(Label(proposal_number=p.number, name="withdrawn"))
+    p.state = "closed"
+    p.withdrawal_requested_by = None
+    p.withdrawal_requested_by_name = None
+
+
+@app.post("/proposals/{number}/withdraw", tags=["proposals"], summary="Withdraw a proposal",
+          description="Withdraw (permanently close) a proposal. The author may withdraw their own "
+                      "proposal directly. An editor withdrawing someone else's proposal is subject to a "
+                      "two-person rule: the first editor's call records a pending withdrawal request, and a "
+                      "second, different editor must call this endpoint again to finalise it. The same editor "
+                      "cannot confirm their own request. **Requires authentication.**")
+def withdraw_proposal(number: int, user: dict = Depends(require_user),
+                      db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+
+    if any(l.name == "withdrawn" for l in p.labels):
+        raise HTTPException(status_code=409, detail="Proposal is already withdrawn")
+
+    is_author = p.author_stake_address == user["sub"]
+    editor = is_editor(user["sub"], db)
+    if not is_author and not editor:
+        raise HTTPException(status_code=403, detail="Only the author or an editor can withdraw this proposal")
+
+    # The author can withdraw their own proposal directly.
+    if is_author:
+        _apply_withdrawn(db, p)
+        record_audit(db, number, "withdrawn", user, {"by": "author"})
+        db.commit()
+        db.refresh(p)
+        notify_lifecycle_change(p.number, p.title, p.author_stake_address, "withdrawn", db)
+        return proposal_to_dict(p)
+
+    # Editor withdrawing someone else's proposal — two-person rule.
+    requester = p.withdrawal_requested_by
+    if not requester:
+        # First editor records a pending request.
+        p.withdrawal_requested_by = user["sub"]
+        p.withdrawal_requested_by_name = user.get("display_name")
+        record_audit(db, number, "withdrawal_requested", user)
+        db.commit()
+        db.refresh(p)
+        return proposal_to_dict(p)
+
+    if requester == user["sub"]:
+        # An editor cannot confirm their own request.
+        raise HTTPException(status_code=409,
+                            detail="A second, different editor must confirm this withdrawal")
+
+    # A different editor confirms — finalise.
+    record_audit(db, number, "withdrawn", user, {
+        "by": "editor",
+        "requested_by": requester,
+        "requested_by_name": p.withdrawal_requested_by_name,
+    })
+    _apply_withdrawn(db, p)
+    db.commit()
+    db.refresh(p)
+    notify_lifecycle_change(p.number, p.title, p.author_stake_address, "withdrawn", db)
+    return proposal_to_dict(p)
+
+
+@app.post("/proposals/{number}/withdraw/cancel", tags=["proposals"],
+          summary="Cancel a pending withdrawal request",
+          description="Cancel a pending editor-initiated withdrawal request (two-person rule). "
+                      "Any editor or the proposal author may cancel. **Requires authentication.**")
+def cancel_withdrawal(number: int, user: dict = Depends(require_user),
+                      db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if not p.withdrawal_requested_by:
+        raise HTTPException(status_code=409, detail="No pending withdrawal request")
+
+    is_author = p.author_stake_address == user["sub"]
+    if not is_author and not is_editor(user["sub"], db):
+        raise HTTPException(status_code=403, detail="Only the author or an editor can cancel a withdrawal request")
+
+    record_audit(db, number, "withdrawal_cancelled", user, {"requested_by": p.withdrawal_requested_by})
+    p.withdrawal_requested_by = None
+    p.withdrawal_requested_by_name = None
     db.commit()
     db.refresh(p)
     return proposal_to_dict(p)

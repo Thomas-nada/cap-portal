@@ -277,6 +277,102 @@ def test_add_label_blocked_for_regular_user(client, db):
     assert r.status_code == 403
 
 
+# ── Withdrawal ──────────────────────────────────────────────────────────────────
+
+EDITOR2_ADDR = "stake1editor200000000000000000000000000000000000000000000"
+
+
+def _labels(proposal):
+    return [l["name"] for l in proposal["labels"]]
+
+
+def test_withdrawn_label_rejected_on_generic_endpoint(client, db):
+    """The withdrawn label must not be settable through the generic label route."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/labels", json={"name": "withdrawn"}, headers=auth(EDITOR_ADDR))
+    assert r.status_code == 400
+    assert "withdraw" in r.json()["detail"].lower()
+
+
+def test_author_can_withdraw_own_proposal_directly(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/withdraw", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    data = r.json()
+    assert "withdrawn" in _labels(data)
+    assert data["state"] == "closed"
+
+
+def test_single_editor_cannot_withdraw_unilaterally(client, db):
+    """First editor's call only records a pending request — proposal stays open."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/withdraw", headers=auth(EDITOR_ADDR))
+    assert r.status_code == 200
+    data = r.json()
+    assert "withdrawn" not in _labels(data)
+    assert data["state"] == "open"
+    assert data["withdrawal_requested_by"] == EDITOR_ADDR
+
+
+def test_editor_cannot_confirm_own_withdrawal_request(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/withdraw", headers=auth(EDITOR_ADDR))
+    r = client.post("/proposals/1/withdraw", headers=auth(EDITOR_ADDR))
+    assert r.status_code == 409
+    assert "withdrawn" not in _labels(client.get("/proposals/1").json())
+
+
+def test_second_editor_confirms_withdrawal(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_editor(db, EDITOR2_ADDR, "Bob")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/withdraw", headers=auth(EDITOR_ADDR))
+    r = client.post("/proposals/1/withdraw", headers=auth(EDITOR2_ADDR, "Bob"))
+    assert r.status_code == 200
+    data = r.json()
+    assert "withdrawn" in _labels(data)
+    assert data["state"] == "closed"
+    assert data["withdrawal_requested_by"] is None
+
+
+def test_non_editor_non_author_cannot_withdraw(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_user(db, EDITOR2_ADDR, "Stranger")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/withdraw", headers=auth(EDITOR2_ADDR, "Stranger"))
+    assert r.status_code == 403
+
+
+def test_cancel_pending_withdrawal(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_editor(db, EDITOR2_ADDR, "Bob")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/withdraw", headers=auth(EDITOR_ADDR))
+    r = client.post("/proposals/1/withdraw/cancel", headers=auth(EDITOR2_ADDR, "Bob"))
+    assert r.status_code == 200
+    assert r.json()["withdrawal_requested_by"] is None
+    # After cancelling, a single editor still cannot withdraw unilaterally.
+    r2 = client.post("/proposals/1/withdraw", headers=auth(EDITOR_ADDR))
+    assert "withdrawn" not in _labels(r2.json())
+
+
+def test_withdraw_already_withdrawn_conflicts(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/withdraw", headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/withdraw", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 409
+
+
 # ── Comments ──────────────────────────────────────────────────────────────────
 
 def test_create_comment(client, db):

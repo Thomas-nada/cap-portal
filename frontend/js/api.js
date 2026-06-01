@@ -83,6 +83,16 @@ export async function removeLabel(number, name) {
     return req('DELETE', `/proposals/${number}/labels/${encodeURIComponent(name)}`, null, true);
 }
 
+// ── Withdrawal ────────────────────────────────────────────────────────────────
+
+export async function withdrawProposal(number) {
+    return req('POST', `/proposals/${number}/withdraw`, {}, true);
+}
+
+export async function cancelWithdrawal(number) {
+    return req('POST', `/proposals/${number}/withdraw/cancel`, {}, true);
+}
+
 // ── Comments ──────────────────────────────────────────────────────────────────
 
 export async function fetchComments(number) {

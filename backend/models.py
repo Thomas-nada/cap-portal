@@ -20,6 +20,10 @@ class Proposal(Base):
     author_stake_address = Column(String, nullable=False)
     author_display_name = Column(String, nullable=True)
     structured_data = Column(Text, nullable=True)  # JSON: structured fields alongside markdown body
+    # Two-person rule for editor-initiated withdrawal: set when one editor requests
+    # withdrawal of someone else's proposal; a second, different editor must confirm.
+    withdrawal_requested_by = Column(String, nullable=True)
+    withdrawal_requested_by_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 

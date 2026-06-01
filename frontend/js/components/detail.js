@@ -559,6 +559,7 @@ function renderAuthorControls(p, state) {
             </div>
             ` : ''}
 
+            ${stage !== 'withdrawn' ? `
             <button onclick="window.authorWithdraw()" class="w-full flex items-center justify-between p-5 rounded-2xl bg-slate-50 dark:bg-slate-950 hover:bg-slate-100 dark:hover:bg-slate-800 transition-all group border border-slate-100 dark:border-slate-800">
                 <div class="flex items-center gap-3">
                     <i data-lucide="x-circle" class="w-4 h-4 text-slate-400 group-hover:text-slate-900 transition-colors"></i>
@@ -568,7 +569,7 @@ function renderAuthorControls(p, state) {
                     </div>
                 </div>
                 <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
-            </button>
+            </button>` : ''}
         </div>
 
         <p class="text-[9px] text-slate-400 leading-relaxed">
@@ -677,16 +678,70 @@ function renderEditorControls(p, state) {
             </div>
         </div>
 
-        <!-- Withdraw override -->
-        <div class="pt-4 border-t border-slate-100 dark:border-slate-800">
+        <!-- Withdraw override (two-person rule for editors) -->
+        ${renderEditorWithdraw(p, state, labels)}
+        </div>` : ''}
+    </div>`;
+}
+
+function renderEditorWithdraw(p, state, labels) {
+    if (labels.includes('withdrawn')) return '';
+
+    const myStake = state.user?.stake_address;
+    const isAuthor = myStake && myStake === p.author_stake_address;
+    // The author withdraws via their own panel (direct, no second editor needed).
+    if (isAuthor) return '';
+
+    const pendingBy = p.withdrawal_requested_by;
+    const pendingByName = p.withdrawal_requested_by_name;
+    const pendingByMe = pendingBy && pendingBy === myStake;
+
+    const cancelBtn = `
+        <button onclick="window.editorCancelWithdraw()"
+            class="w-full flex items-center justify-center gap-2 px-4 py-2.5 rounded-2xl border border-slate-200 dark:border-slate-700 text-slate-500 text-[10px] font-black uppercase tracking-wider hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+            <i data-lucide="rotate-ccw" class="w-3.5 h-3.5"></i>
+            Cancel withdrawal request
+        </button>`;
+
+    let inner;
+    if (!pendingBy) {
+        // No request yet — this editor opens one.
+        inner = `
             <button onclick="window.editorWithdraw()"
                 class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800/40 text-red-600 text-[10px] font-black uppercase tracking-wider hover:bg-red-100 dark:hover:bg-red-900/30 transition-all">
                 <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
-                Withdraw Proposal
+                Request Withdrawal
             </button>
-        </div>
-        </div>` : ''}
-    </div>`;
+            <p class="text-[9px] text-slate-400 text-center mt-2">A second, different editor must confirm before this takes effect.</p>`;
+    } else if (pendingByMe) {
+        // This editor already requested — they cannot self-confirm.
+        inner = `
+            <div class="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-2">
+                <i data-lucide="clock" class="w-3.5 h-3.5 flex-shrink-0 mt-px"></i>
+                <span>You requested withdrawal. Awaiting confirmation from another editor — you cannot confirm your own request.</span>
+            </div>
+            ${cancelBtn}`;
+    } else {
+        // A different editor requested — this editor can confirm.
+        const who = escapeHtml(pendingByName || shortAddress(pendingBy));
+        inner = `
+            <div class="flex items-start gap-2.5 px-4 py-3 rounded-2xl bg-amber-50 dark:bg-amber-900/10 border border-amber-200 dark:border-amber-900/30 text-[10px] font-bold text-amber-700 dark:text-amber-400 mb-2">
+                <i data-lucide="clock" class="w-3.5 h-3.5 flex-shrink-0 mt-px"></i>
+                <span>Withdrawal requested by ${who}. Confirm to finalise.</span>
+            </div>
+            <button onclick="window.editorWithdraw()"
+                class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-2xl bg-red-600 border border-red-600 text-white text-[10px] font-black uppercase tracking-wider hover:bg-red-700 transition-all mb-2">
+                <i data-lucide="x-circle" class="w-3.5 h-3.5"></i>
+                Confirm Withdrawal
+            </button>
+            ${cancelBtn}`;
+    }
+
+    return `
+        <div class="pt-4 border-t border-slate-100 dark:border-slate-800">
+            <p class="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Withdraw Proposal</p>
+            ${inner}
+        </div>`;
 }
 
 const FIELD_LABELS = {
@@ -802,6 +857,33 @@ function getAuditDetails(ev, state) {
             return {
                 icon: 'x-circle', color: 'text-red-400',
                 message: `Suggestion rejected — ${fieldLabel || data.field || ''}`,
+                detail: '',
+            };
+
+        case 'withdrawn': {
+            const detail = data.by === 'author'
+                ? 'Withdrawn by the author'
+                : data.requested_by_name
+                    ? `Confirmed by a second editor (requested by ${data.requested_by_name})`
+                    : 'Confirmed by a second editor';
+            return {
+                icon: 'x-circle', color: 'text-red-500',
+                message: 'Proposal withdrawn',
+                detail,
+            };
+        }
+
+        case 'withdrawal_requested':
+            return {
+                icon: 'clock', color: 'text-amber-500',
+                message: 'Withdrawal requested',
+                detail: 'Awaiting confirmation from a second editor.',
+            };
+
+        case 'withdrawal_cancelled':
+            return {
+                icon: 'rotate-ccw', color: 'text-slate-400',
+                message: 'Withdrawal request cancelled',
                 detail: '',
             };
 
