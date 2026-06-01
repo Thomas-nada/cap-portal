@@ -87,7 +87,8 @@ export function renderRegistry(state) {
 function renderRow(p) {
     const stage = getStage(p);
     const stageBg = STAGE_BG[stage] || 'bg-slate-100 text-slate-600';
-    const nonLifecycleLabels = (p.labels || []).filter(l => !LIFECYCLE.includes(l.name.toLowerCase()));
+    // Exclude lifecycle labels and the label that duplicates the document-type badge (CAP/CIS).
+    const nonLifecycleLabels = (p.labels || []).filter(l => !LIFECYCLE.includes(l.name.toLowerCase()) && l.name !== p.type);
 
     return `
     <div onclick="window.openProposal(${p.number})"

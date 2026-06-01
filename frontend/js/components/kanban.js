@@ -57,7 +57,8 @@ export function renderKanban(state) {
 }
 
 function renderCard(p) {
-    const nonLifecycle = (p.labels || []).filter(l => !LIFECYCLE.includes(l.name.toLowerCase()));
+    // Exclude lifecycle labels and the label that duplicates the document-type badge (CAP/CIS).
+    const nonLifecycle = (p.labels || []).filter(l => !LIFECYCLE.includes(l.name.toLowerCase()) && l.name !== p.type);
     return `
     <div onclick="window.openProposal(${p.number})"
         class="bg-white dark:bg-slate-900 rounded-[1.5rem] border border-slate-100 dark:border-slate-800 p-5 cursor-pointer hover:border-blue-200 dark:hover:border-blue-900 hover:shadow-md transition-all group">

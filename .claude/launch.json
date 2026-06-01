@@ -5,6 +5,7 @@
       "name": "cap-frontend",
       "runtimeExecutable": "python",
       "runtimeArgs": ["dev-server.py", "8765"],
+      "cwd": "E:\\CAP-Local\\frontend",
       "port": 8765
     },
     {
