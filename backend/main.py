@@ -6,20 +6,13 @@ import uuid
 
 logger = logging.getLogger(__name__)
 from dotenv import load_dotenv
+import config as _config
 load_dotenv()
-
-# If a JSON config file is provided (e.g. via Keeper Secrets sidecar),
-# load it into os.environ. Values already set in the environment take precedence.
-_config_file = os.environ.get("CONFIG_FILE")
-if _config_file and os.path.isfile(_config_file):
-    with open(_config_file) as _f:
-        for _k, _v in json.load(_f).items():
-            os.environ.setdefault(_k, str(_v))
 
 if os.environ.get("ENVIRONMENT") == "production":
     for _var in ("DATABASE_URL", "JWT_SECRET"):
-        if not os.environ.get(_var):
-            raise RuntimeError(f"Required environment variable '{_var}' is not set")
+        if not _config.get(_var):
+            raise RuntimeError(f"Required config value '{_var}' is not set")
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional

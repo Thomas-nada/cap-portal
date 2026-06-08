@@ -5,10 +5,10 @@ from jose import jwt, JWTError
 from datetime import datetime, timedelta, timezone
 import os
 import logging
+import config
 
 logger = logging.getLogger(__name__)
 
-SECRET_KEY = os.environ.get("JWT_SECRET", "dev-secret-change-in-production")
 ALGORITHM = "HS256"
 TOKEN_EXPIRE_HOURS = 24
 
@@ -76,17 +76,19 @@ def verify_cip8_signature(signature_hex: str, key_hex: str, challenge: str) -> b
 
 
 def create_token(stake_address: str, display_name: str | None) -> str:
+    secret = config.get("JWT_SECRET", "dev-secret-change-in-production")
     expire = datetime.now(timezone.utc) + timedelta(hours=TOKEN_EXPIRE_HOURS)
     payload = {
         "sub": stake_address,
         "display_name": display_name,
         "exp": expire,
     }
-    return jwt.encode(payload, SECRET_KEY, algorithm=ALGORITHM)
+    return jwt.encode(payload, secret, algorithm=ALGORITHM)
 
 
 def decode_token(token: str) -> dict | None:
+    secret = config.get("JWT_SECRET", "dev-secret-change-in-production")
     try:
-        return jwt.decode(token, SECRET_KEY, algorithms=[ALGORITHM])
+        return jwt.decode(token, secret, algorithms=[ALGORITHM])
     except JWTError:
         return None
