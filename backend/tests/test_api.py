@@ -136,21 +136,10 @@ def test_get_me_authenticated(client, db):
 def test_update_profile(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     r = client.patch("/auth/profile",
-                     json={"display_name": "Alice Updated", "email": "alice@example.com"},
+                     json={"display_name": "Alice Updated"},
                      headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 200
     assert r.json()["display_name"] == "Alice Updated"
-    assert r.json()["email"] == "alice@example.com"
-
-
-def test_update_profile_saves_notification_prefs(client, db):
-    seed_user(db, AUTHOR_ADDR, "Alice")
-    prefs = {"comment_on_my_proposal": True, "comment_in_thread": False}
-    r = client.patch("/auth/profile",
-                     json={"display_name": "Alice", "notification_prefs": prefs},
-                     headers=auth(AUTHOR_ADDR, "Alice"))
-    assert r.status_code == 200
-    assert r.json()["notification_prefs"]["comment_in_thread"] is False
 
 
 def test_update_profile_duplicate_name(client, db):
@@ -485,35 +474,6 @@ def test_hash_chain_integrity(client, db):
     v2 = next(v for v in versions if v["version"] == 2)
     assert v1["previous_hash"] == "genesis"
     assert v2["previous_hash"] == v1["content_hash"]
-
-
-# ── Subscriptions ─────────────────────────────────────────────────────────────
-
-def test_subscribe_to_proposal(client, db):
-    seed_user(db, AUTHOR_ADDR, "Alice")
-    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
-    r = client.post("/proposals/1/subscribe", json={"email": "watcher@example.com"})
-    assert r.status_code == 201
-
-
-def test_subscribe_idempotent(client, db):
-    seed_user(db, AUTHOR_ADDR, "Alice")
-    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
-    client.post("/proposals/1/subscribe", json={"email": "watcher@example.com"})
-    r = client.post("/proposals/1/subscribe", json={"email": "watcher@example.com"})
-    assert r.status_code == 201
-    assert "Already subscribed" in r.json().get("message", "")
-
-
-def test_check_and_unsubscribe(client, db):
-    seed_user(db, AUTHOR_ADDR, "Alice")
-    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
-    client.post("/proposals/1/subscribe", json={"email": "watcher@example.com"})
-    r = client.get("/proposals/1/subscribe?email=watcher@example.com")
-    assert r.json()["subscribed"] is True
-    client.request("DELETE", "/proposals/1/subscribe", json={"email": "watcher@example.com"})
-    r = client.get("/proposals/1/subscribe?email=watcher@example.com")
-    assert r.json()["subscribed"] is False
 
 
 # ── Editors / Admins ──────────────────────────────────────────────────────────

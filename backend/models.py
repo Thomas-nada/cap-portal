@@ -126,16 +126,6 @@ class Suggestion(Base):
     proposal = relationship("Proposal", back_populates="suggestions")
 
 
-class ProposalSubscriber(Base):
-    __tablename__ = "proposal_subscribers"
-
-    id = Column(Integer, primary_key=True, index=True)
-    proposal_number = Column(Integer, ForeignKey("proposals.number"), nullable=False)
-    email = Column(String, nullable=False)
-    unsubscribe_token = Column(String, unique=True, nullable=False)
-    created_at = Column(DateTime(timezone=True), default=now)
-
-
 class AuthChallenge(Base):
     __tablename__ = "auth_challenges"
 
@@ -148,8 +138,6 @@ class User(Base):
 
     stake_address = Column(String, primary_key=True)
     display_name = Column(String, nullable=True)
-    email = Column(String, nullable=True)
-    notification_prefs = Column(Text, nullable=True)  # JSON object of pref keys -> bool
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 

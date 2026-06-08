@@ -27,10 +27,7 @@ from sqlalchemy.orm import Session
 
 from auth import verify_cip8_signature, create_token, decode_token
 from database import engine, get_db, Base
-from emails import (notify_new_proposal, notify_new_comment, notify_new_suggestion,
-                    notify_suggestion_resolved, notify_lifecycle_change, _send as _send_email,
-                    SMTP_HOST, SMTP_FROM, APP_URL as EMAIL_APP_URL)
-from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, ProposalSubscriber, BugReport, Guide
+from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, BugReport, Guide
 
 Base.metadata.create_all(bind=engine)
 
@@ -40,17 +37,8 @@ with engine.connect() as _conn:
         "ALTER TABLE proposals ADD COLUMN structured_data TEXT",
         "ALTER TABLE proposal_versions ADD COLUMN previous_hash TEXT",
         "ALTER TABLE proposal_versions ADD COLUMN content_hash TEXT",
-        "ALTER TABLE users ADD COLUMN email TEXT",
-        "ALTER TABLE users ADD COLUMN notification_prefs TEXT",
         "ALTER TABLE bug_reports ADD COLUMN screenshot TEXT",
         "ALTER TABLE bug_reports ADD COLUMN environment TEXT",
-        """CREATE TABLE IF NOT EXISTS proposal_subscribers (
-            id INTEGER PRIMARY KEY AUTOINCREMENT,
-            proposal_number INTEGER NOT NULL REFERENCES proposals(number),
-            email TEXT NOT NULL,
-            unsubscribe_token TEXT UNIQUE NOT NULL,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
-        )""",
         """CREATE TABLE IF NOT EXISTS guides (
             slug TEXT PRIMARY KEY,
             title TEXT NOT NULL,
@@ -449,38 +437,14 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
 
 
 @app.get("/auth/me", tags=["auth"], summary="Get current user profile",
-         description="Returns the authenticated user's stake address, display name, email, notification preferences, and roles.")
+         description="Returns the authenticated user's stake address, display name, and roles.")
 def get_me(user: dict = Depends(require_user), db: Session = Depends(get_db)):
-    user_record = db.query(User).filter(User.stake_address == user["sub"]).first()
-    prefs = json.loads(user_record.notification_prefs) if user_record and user_record.notification_prefs else {}
     return {
         "stake_address": user["sub"],
         "display_name": user.get("display_name"),
-        "email": user_record.email if user_record else None,
-        "notification_prefs": prefs,
         "is_editor": is_editor(user["sub"], db),
         "is_admin": is_admin(user["sub"], db),
     }
-
-
-@app.post("/auth/test-email", tags=["auth"], summary="Send a test email to the current user")
-def test_email(user: dict = Depends(require_user), db: Session = Depends(get_db)):
-    user_record = db.query(User).filter(User.stake_address == user["sub"]).first()
-    to = user_record.email if user_record else None
-    if not SMTP_HOST:
-        raise HTTPException(status_code=503, detail="SMTP is not configured on this server")
-    if not to:
-        raise HTTPException(status_code=400, detail="No email address on your profile — set one first")
-    try:
-        _send_email(to, "CAP Portal — test email", f"""
-        <div style="font-family:sans-serif;max-width:600px;margin:0 auto;color:#1e293b;padding:32px">
-            <h2 style="margin:0 0 12px">Test email</h2>
-            <p style="color:#64748b">If you received this, email notifications are working correctly.</p>
-            <p style="color:#64748b;font-size:12px;margin-top:24px">Sent from <a href="{EMAIL_APP_URL}">{EMAIL_APP_URL}</a></p>
-        </div>""")
-        return {"status": "queued", "to": to, "from": SMTP_FROM}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 class SetNameRequest(BaseModel):
@@ -512,11 +476,9 @@ def set_display_name(req: SetNameRequest, user: dict = Depends(require_user), db
 
 class UpdateProfileRequest(BaseModel):
     display_name: str
-    email: Optional[str] = None
-    notification_prefs: Optional[dict] = None
 
 
-@app.patch("/auth/profile", tags=["auth"], summary="Update display name, email and notification preferences")
+@app.patch("/auth/profile", tags=["auth"], summary="Update display name")
 def update_profile(req: UpdateProfileRequest, user: dict = Depends(require_user), db: Session = Depends(get_db)):
     name = req.display_name.strip()[:40] or None
     stake = user["sub"]
@@ -526,17 +488,11 @@ def update_profile(req: UpdateProfileRequest, user: dict = Depends(require_user)
         if clash:
             raise HTTPException(status_code=409, detail="That username is already taken")
 
-    email = req.email.strip().lower() if req.email else None
-
-    prefs_json = json.dumps(req.notification_prefs) if req.notification_prefs is not None else None
     user_record = db.query(User).filter(User.stake_address == stake).first()
     if user_record:
         user_record.display_name = name
-        user_record.email = email
-        if prefs_json is not None:
-            user_record.notification_prefs = prefs_json
     else:
-        db.add(User(stake_address=stake, display_name=name, email=email, notification_prefs=prefs_json))
+        db.add(User(stake_address=stake, display_name=name))
 
     # Propagate name to all authored content
     db.query(Proposal).filter(Proposal.author_stake_address == stake).update({"author_display_name": name})
@@ -545,13 +501,10 @@ def update_profile(req: UpdateProfileRequest, user: dict = Depends(require_user)
 
     db.commit()
     token = create_token(stake, name)
-    prefs = json.loads(user_record.notification_prefs) if user_record and user_record.notification_prefs else {}
     return {
         "token": token,
         "stake_address": stake,
         "display_name": name,
-        "email": email,
-        "notification_prefs": prefs,
         "is_editor": is_editor(stake, db),
         "is_admin": is_admin(stake, db),
     }
@@ -613,7 +566,6 @@ def create_proposal(request: Request, req: ProposalCreate, user: dict = Depends(
     record_audit(db, p.number, "proposal_created", user, {"title": req.title, "type": req.type})
     create_version(db, p, user, "Initial submission")
     db.commit()
-    notify_new_proposal(p.number, p.title, user.get("display_name") or user["sub"], db)
     return proposal_to_dict(p)
 
 
@@ -713,8 +665,6 @@ def add_label(number: int, body: dict, user: dict = Depends(require_user),
     record_audit(db, number, "label_added", user, {"label": name})
     db.commit()
     db.refresh(p)
-    if name in LIFECYCLE_LABELS:
-        notify_lifecycle_change(p.number, p.title, p.author_stake_address, name, db)
     return proposal_to_dict(p)
 
 
@@ -778,7 +728,6 @@ def withdraw_proposal(number: int, user: dict = Depends(require_user),
         record_audit(db, number, "withdrawn", user, {"by": "author"})
         db.commit()
         db.refresh(p)
-        notify_lifecycle_change(p.number, p.title, p.author_stake_address, "withdrawn", db)
         return proposal_to_dict(p)
 
     # Editor withdrawing someone else's proposal — two-person rule.
@@ -806,7 +755,6 @@ def withdraw_proposal(number: int, user: dict = Depends(require_user),
     _apply_withdrawn(db, p)
     db.commit()
     db.refresh(p)
-    notify_lifecycle_change(p.number, p.title, p.author_stake_address, "withdrawn", db)
     return proposal_to_dict(p)
 
 
@@ -867,8 +815,6 @@ def create_comment(request: Request, number: int, req: CommentCreate, user: dict
     record_audit(db, number, "comment_added", user)
     db.commit()
     db.refresh(c)
-    notify_new_comment(p.number, p.title, p.author_stake_address,
-                       user["sub"], user.get("display_name") or user["sub"], req.body, db)
     return comment_to_dict(c)
 
 
@@ -1209,8 +1155,6 @@ def create_suggestion(request: Request, number: int, req: SuggestionCreate,
     record_audit(db, number, "suggestion_created", user, {"field": req.field})
     db.commit()
     db.refresh(s)
-    notify_new_suggestion(p.number, p.title, p.author_stake_address,
-                          user.get("display_name") or user["sub"], req.field, db)
     return suggestion_to_dict(s)
 
 
@@ -1248,7 +1192,6 @@ def approve_suggestion(number: int, suggestion_id: int,
     record_audit(db, number, "suggestion_approved", user, {"field": s.field, "suggestion_id": s.id})
     create_version(db, p, user, summary)
     db.commit()
-    notify_suggestion_resolved(p.number, p.title, s.editor_stake_address, s.field, "approved", db)
     return suggestion_to_dict(s)
 
 
@@ -1274,91 +1217,7 @@ def reject_suggestion(number: int, suggestion_id: int,
 
     record_audit(db, number, "suggestion_rejected", user, {"field": s.field, "suggestion_id": s.id})
     db.commit()
-    notify_suggestion_resolved(p.number, p.title, s.editor_stake_address, s.field, "rejected", db)
     return suggestion_to_dict(s)
-
-
-# ── Subscriptions ─────────────────────────────────────────────────────────────
-
-class SubscribeRequest(BaseModel):
-    email: str
-
-@app.post("/proposals/{number}/subscribe", status_code=201, tags=["subscriptions"], summary="Follow a proposal",
-          description="Subscribe any email address to receive notifications when comments are posted or the lifecycle stage changes. No authentication required — anyone can follow. An unsubscribe link is included in every notification email.")
-def subscribe(number: int, req: SubscribeRequest, db: Session = Depends(get_db)):
-    p = db.query(Proposal).filter(Proposal.number == number).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-
-    email = req.email.strip().lower()
-    if not email or "@" not in email:
-        raise HTTPException(status_code=400, detail="Valid email required")
-
-    existing = db.query(ProposalSubscriber).filter(
-        ProposalSubscriber.proposal_number == number,
-        ProposalSubscriber.email == email
-    ).first()
-    if existing:
-        return {"message": "Already subscribed"}
-
-    token = str(uuid.uuid4())
-    db.add(ProposalSubscriber(proposal_number=number, email=email, unsubscribe_token=token))
-    db.commit()
-
-    from emails import APP_URL, _send, _base
-    _send(email, f"You're following: {p.title}", _base(f"""
-    <h2 style="margin:0 0 8px;font-size:20px">You're now following a proposal</h2>
-    <p style="color:#64748b;margin:0 0 20px">
-        You'll receive updates when there are new comments or status changes on
-        <strong>{p.title}</strong>.
-    </p>
-    <a href="{APP_URL}#proposal/{number}"
-       style="background:#1e40af;color:white;padding:12px 24px;border-radius:8px;text-decoration:none;font-weight:700;font-size:14px">
-        View Proposal
-    </a>
-    <hr style="border:none;border-top:1px solid #e2e8f0;margin:24px 0">
-    <p style="font-size:12px;color:#94a3b8">
-        <a href="{APP_URL}/unsubscribe?token={token}" style="color:#94a3b8">Unsubscribe</a>
-    </p>"""))
-
-    return {"message": "Subscribed successfully"}
-
-
-@app.get("/proposals/{number}/subscribe", tags=["subscriptions"], summary="Check subscription status",
-         description="Returns `{subscribed: true/false}` for the given email address.")
-def check_subscription(number: int, email: str, db: Session = Depends(get_db)):
-    email = email.strip().lower()
-    sub = db.query(ProposalSubscriber).filter(
-        ProposalSubscriber.proposal_number == number,
-        ProposalSubscriber.email == email
-    ).first()
-    return {"subscribed": sub is not None}
-
-
-@app.delete("/proposals/{number}/subscribe", status_code=200, tags=["subscriptions"], summary="Unfollow a proposal",
-            description="Removes the subscription for the given email address.")
-def unsubscribe_by_email(number: int, req: SubscribeRequest, db: Session = Depends(get_db)):
-    email = req.email.strip().lower()
-    sub = db.query(ProposalSubscriber).filter(
-        ProposalSubscriber.proposal_number == number,
-        ProposalSubscriber.email == email
-    ).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="Subscription not found")
-    db.delete(sub)
-    db.commit()
-    return {"message": "Unsubscribed successfully"}
-
-
-@app.get("/unsubscribe", tags=["subscriptions"], summary="One-click unsubscribe via token",
-         description="Used by the unsubscribe link in notification emails. Accepts the token from the email and removes the subscription.")
-def unsubscribe(token: str, db: Session = Depends(get_db)):
-    sub = db.query(ProposalSubscriber).filter(ProposalSubscriber.unsubscribe_token == token).first()
-    if not sub:
-        raise HTTPException(status_code=404, detail="Subscription not found")
-    db.delete(sub)
-    db.commit()
-    return {"message": "Unsubscribed successfully"}
 
 
 # ── Seed endpoint (dev only) ───────────────────────────────────────────────────
