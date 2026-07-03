@@ -35,15 +35,6 @@ services:
       - key: APP_URL
         sync: false
 
-  # ── Frontend (static) ────────────────────────────────────────────────────────
-  - type: static
-    name: cap-portal
-    staticPublishPath: ./frontend
-    headers:
-      - path: /*
-        name: Cache-Control
-        value: no-cache, no-store, must-revalidate
-    routes:
-      - type: rewrite
-        source: /*
-        destination: /index.html
+  # Frontend: create as a Static Site manually in the Render dashboard
+  # Publish directory: frontend
+  # Rewrite rule: /* -> /index.html
