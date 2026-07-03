@@ -8,9 +8,10 @@ services:
   # ── Backend API ──────────────────────────────────────────────────────────────
   - type: web
     name: cap-portal-api
-    runtime: docker
-    dockerfilePath: ./backend/Dockerfile
-    dockerContext: ./backend
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
     plan: free
     envVars:
       - key: DATABASE_URL
@@ -21,7 +22,6 @@ services:
         generateValue: true
       - key: ENVIRONMENT
         value: production
-      # SMTP — fill in after deploy (notifications are optional)
       - key: SMTP_HOST
         sync: false
       - key: SMTP_PORT
@@ -35,15 +35,15 @@ services:
       - key: APP_URL
         sync: false
 
-  # ── Frontend (nginx) ─────────────────────────────────────────────────────────
-  - type: web
+  # ── Frontend (static) ────────────────────────────────────────────────────────
+  - type: static
     name: cap-portal
-    runtime: docker
-    dockerfilePath: ./frontend/Dockerfile
-    dockerContext: ./frontend
-    plan: free
-    envVars:
-      # Points the frontend at the API service — auto-populated by Render
-      # Set this manually in the Render dashboard to https://<cap-portal-api-url>.onrender.com
-      - key: API_BASE
-        sync: false
+    staticPublishPath: ./frontend
+    headers:
+      - path: /*
+        name: Cache-Control
+        value: no-cache, no-store, must-revalidate
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html

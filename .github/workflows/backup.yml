@@ -1,0 +1,27 @@
+name: Database Backup
+
+on:
+  schedule:
+    - cron: '0 * * * *'  # every hour
+  workflow_dispatch:      # allow manual trigger
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump Postgres database
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
+        run: |
+          sudo apt-get install -y postgresql-client
+          TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+          FILENAME="cap_portal_${TIMESTAMP}.sql.gz"
+          pg_dump "$DATABASE_URL" | gzip > "$FILENAME"
+          echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+
+      - name: Upload backup as artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: db-backup-${{ env.FILENAME }}
+          path: ${{ env.FILENAME }}
+          retention-days: 400

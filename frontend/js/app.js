@@ -1323,8 +1323,16 @@ function showWalletModal() {
     document.body.appendChild(div.firstElementChild);
     lucide.createIcons();
 
-    window._walletModalPickWallet = (walletId) => {
-        window._walletModalSelect(walletId);
+    window._walletModalPickWallet = async (walletId) => {
+        if (!localStorage.getItem('cap_alpha_agreed')) {
+            document.getElementById('wallet-modal-backdrop')?.remove();
+            await showAlphaAgreement();
+            // Re-open wallet modal and proceed straight to this wallet
+            showWalletModal();
+            window._walletModalSelect(walletId);
+        } else {
+            window._walletModalSelect(walletId);
+        }
     };
 
     window._walletModalBack = () => {
@@ -1887,6 +1895,56 @@ window.setRegistrySearch = (q) => { state.registrySearch = q; updateUI(); };
 window.kanbanToggleTagPanel = () => { state.kanbanTagPanelOpen = !state.kanbanTagPanelOpen; updateUI(); };
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
+
+function showAlphaAgreement() {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.id = 'alpha-agreement';
+        overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:1rem;';
+        overlay.innerHTML = `
+            <div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;padding:2.5rem;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+                <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;">
+                    <span style="background:#ff5722;color:white;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
+                    <h2 style="margin:0;font-size:1.25rem;font-weight:700;color:#0f172a;font-family:'Poppins',sans-serif;">User Agreement</h2>
+                </div>
+                <p style="margin:0 0 1rem;font-size:0.875rem;font-weight:600;color:#334155;font-family:'Poppins',sans-serif;">Alpha Release Acknowledgement</p>
+                <p style="margin:0 0 1rem;font-size:0.8125rem;color:#475569;font-family:'Poppins',sans-serif;">This tool is an <strong>alpha release</strong> and is made available for testing and feedback purposes only.</p>
+                <p style="margin:0 0 0.5rem;font-size:0.8125rem;color:#475569;font-family:'Poppins',sans-serif;">By continuing, you acknowledge and agree that:</p>
+                <ul style="margin:0 0 1.25rem;padding-left:1.25rem;font-size:0.8125rem;color:#475569;font-family:'Poppins',sans-serif;line-height:1.7;">
+                    <li>This is an early version of the software and may contain bugs, errors, security vulnerabilities, or incomplete features.</li>
+                    <li>The tool may be unavailable, unstable, or experience unexpected interruptions or data loss.</li>
+                    <li>We do not guarantee the accuracy, reliability, performance, or availability of the tool.</li>
+                    <li>You use this tool at your own risk and should not rely on it for critical or business-critical activities.</li>
+                    <li>You should not upload or store confidential, sensitive, or irreplaceable information in the tool.</li>
+                    <li>Features and functionality may change or be removed at any time without notice.</li>
+                    <li>We may collect usage data and feedback to improve the product, in accordance with our Privacy Policy.</li>
+                </ul>
+                <label style="display:flex;align-items:flex-start;gap:0.625rem;cursor:pointer;margin-bottom:1.5rem;">
+                    <input type="checkbox" id="alpha-checkbox" style="margin-top:2px;accent-color:#0228aa;width:16px;height:16px;flex-shrink:0;">
+                    <span style="font-size:0.8125rem;color:#334155;font-family:'Poppins',sans-serif;font-weight:500;">I have read and understand that this is an alpha release, and I accept the above terms.</span>
+                </label>
+                <button id="alpha-agree-btn" disabled
+                    style="width:100%;padding:0.875rem;border-radius:0.75rem;border:none;background:#cbd5e1;color:#94a3b8;font-weight:700;font-size:0.9375rem;font-family:'Poppins',sans-serif;cursor:not-allowed;transition:all .2s;">
+                    I Agree
+                </button>
+            </div>`;
+        document.body.appendChild(overlay);
+
+        const checkbox = overlay.querySelector('#alpha-checkbox');
+        const btn = overlay.querySelector('#alpha-agree-btn');
+        checkbox.addEventListener('change', () => {
+            btn.disabled = !checkbox.checked;
+            btn.style.background = checkbox.checked ? '#0228aa' : '#cbd5e1';
+            btn.style.color = checkbox.checked ? 'white' : '#94a3b8';
+            btn.style.cursor = checkbox.checked ? 'pointer' : 'not-allowed';
+        });
+        btn.addEventListener('click', () => {
+            localStorage.setItem('cap_alpha_agreed', '1');
+            overlay.remove();
+            resolve();
+        });
+    });
+}
 
 async function init() {
     state.loading.init = true;
