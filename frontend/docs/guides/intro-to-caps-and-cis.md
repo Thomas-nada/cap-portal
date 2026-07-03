@@ -10,7 +10,7 @@ A **Constitutional Amendment Proposal (CAP)** is a formal governance document th
 
 A CAP is:
 - **Specific** — it proposes exact changes to exact constitutional text
-- **Structured** — it follows a defined format with abstract, motivation, specification, and rationale
+- **Structured** — it follows a defined format with a Summary, a Why (motivation), an Analysis & Test, and an Impact section
 - **Process-bound** — it must go through a mandatory deliberation period before it can be ratified
 - **Community-owned** — the author retains full ownership; editors facilitate but do not control
 

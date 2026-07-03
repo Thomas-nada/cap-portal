@@ -53,6 +53,9 @@ with engine.connect() as _conn:
         "ALTER TABLE guides ADD COLUMN sort_order INTEGER DEFAULT 0",
         "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by TEXT",
         "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by_name TEXT",
+        "ALTER TABLE comments ADD COLUMN flagged BOOLEAN NOT NULL DEFAULT FALSE",
+        "ALTER TABLE comments ADD COLUMN flagged_by TEXT",
+        "ALTER TABLE comments ADD COLUMN flagged_by_name TEXT",
     ]:
         try:
             _conn.execute(text(_stmt))
@@ -69,12 +72,14 @@ _DEFAULT_GUIDES = [
     ("getting-started",  "Getting Started",     1, "intro-to-caps-and-cis",              "Introduction to CAPs & CIS"),
     ("getting-started",  "Getting Started",     2, "how-to-participate",                 "How to Participate"),
     ("getting-started",  "Getting Started",     3, "deliberation-process",               "The Deliberation Process"),
-    ("writing-caps",     "Writing CAPs",        0, "cap-template-guide",                 "CAP Template Guide"),
-    ("writing-caps",     "Writing CAPs",        1, "examples-of-successful-caps",        "Examples of Successful CAPs"),
-    ("writing-caps",     "Writing CAPs",        2, "common-mistakes",                    "Common Mistakes to Avoid"),
+    ("writing-caps",     "Writing CAPs",        0, "creating-a-cap",                     "Creating a CAP or CIS: Quick Checklist"),
+    ("writing-caps",     "Writing CAPs",        1, "cap-template-guide",                 "CAP Template Guide"),
+    ("writing-caps",     "Writing CAPs",        3, "common-mistakes",                    "Common Mistakes to Avoid"),
     ("using-the-portal", "Using the Portal",    0, "connecting-your-wallet",             "Connecting Your Cardano Wallet"),
-    ("using-the-portal", "Using the Portal",    1, "commenting-and-discussing",          "Commenting & Discussion"),
-    ("using-the-portal", "Using the Portal",    2, "labels-and-workflow",                "Labels & Workflow"),
+    ("using-the-portal", "Using the Portal",    1, "submitting-with-the-wizard",         "Submitting a CAP with the Wizard"),
+    ("using-the-portal", "Using the Portal",    2, "browsing-the-constitution",          "Browsing & Comparing the Constitution"),
+    ("using-the-portal", "Using the Portal",    3, "commenting-and-discussing",          "Commenting & Discussion"),
+    ("using-the-portal", "Using the Portal",    4, "labels-and-workflow",                "Labels & Workflow"),
     ("constitution",     "Constitution",        0, "article-by-article-breakdown",       "Article-by-Article Breakdown"),
     ("faq",              "FAQ",                 0, "faq-what-is-a-cap",                  "What is a CAP?"),
     ("faq",              "FAQ",                 1, "faq-what-is-a-cis",                  "What is a CIS?"),
@@ -304,6 +309,8 @@ def comment_to_dict(c: Comment) -> dict:
         "author_display_name": c.author_display_name,
         "created_at": c.created_at.isoformat() if c.created_at else None,
         "updated_at": c.updated_at.isoformat() if c.updated_at else None,
+        "flagged": c.flagged,
+        "flagged_by_name": c.flagged_by_name,
     }
 
 
@@ -385,7 +392,13 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
         raise HTTPException(status_code=400, detail="Invalid or expired challenge")
 
     cutoff = datetime.now(timezone.utc) - timedelta(minutes=10)
-    if record.created_at < cutoff:
+    created_at = record.created_at
+    # SQLite drops tzinfo on read-back even for DateTime(timezone=True) columns
+    # (Postgres preserves it); the column is always written in UTC, so treat a
+    # naive value as UTC rather than raising on this naive/aware comparison.
+    if created_at.tzinfo is None:
+        created_at = created_at.replace(tzinfo=timezone.utc)
+    if created_at < cutoff:
         db.delete(record)
         db.commit()
         raise HTTPException(status_code=400, detail="Challenge expired")
@@ -641,9 +654,10 @@ def add_label(number: int, body: dict, user: dict = Depends(require_user),
     if name == "withdrawn":
         raise HTTPException(status_code=400, detail="Use POST /proposals/{number}/withdraw to withdraw a proposal")
 
-    # Editors can set any label; authors can only set author-ready
+    # Editors can set any label; the proposal's own author can set author-only labels on it.
     editor = is_editor(user["sub"], db)
-    if not editor and name not in AUTHOR_LABELS and name not in {"author-ready"}:
+    is_author = p.author_stake_address == user["sub"]
+    if not editor and not (is_author and name in AUTHOR_LABELS):
         raise HTTPException(status_code=403, detail="Editors only")
 
     # Remove conflicting lifecycle labels if adding a new lifecycle label
@@ -678,7 +692,8 @@ def remove_label(number: int, name: str, user: dict = Depends(require_user),
         raise HTTPException(status_code=404, detail="Proposal not found")
 
     editor = is_editor(user["sub"], db)
-    if not editor and name not in AUTHOR_LABELS:
+    is_author = p.author_stake_address == user["sub"]
+    if not editor and not (is_author and name in AUTHOR_LABELS):
         raise HTTPException(status_code=403, detail="Editors only")
 
     db.query(Label).filter(Label.proposal_number == number, Label.name == name).delete()
@@ -783,6 +798,25 @@ def cancel_withdrawal(number: int, user: dict = Depends(require_user),
     return proposal_to_dict(p)
 
 
+@app.post("/proposals/{number}/remove", tags=["proposals"], summary="Remove a proposal (moderation)",
+          description="Unilaterally closes a proposal for spam or abuse, bypassing the normal author/editor "
+                      "withdrawal flow and its two-person rule. The proposal remains visible (marked "
+                      "`withdrawn`) and the action is recorded in the audit trail for transparency — "
+                      "it is not deleted. **Requires admin role.**")
+def remove_proposal(number: int, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if any(l.name == "withdrawn" for l in p.labels):
+        raise HTTPException(status_code=409, detail="Proposal is already withdrawn")
+
+    record_audit(db, number, "removed_by_admin", user)
+    _apply_withdrawn(db, p)
+    db.commit()
+    db.refresh(p)
+    return proposal_to_dict(p)
+
+
 # ── Comments ───────────────────────────────────────────────────────────────────
 
 @app.get("/proposals/{number}/comments", tags=["comments"], summary="List comments on a proposal",
@@ -830,6 +864,53 @@ def update_comment(comment_id: int, req: CommentCreate, user: dict = Depends(req
         raise HTTPException(status_code=403, detail="Only the author can edit their comment")
     c.body = req.body
     c.updated_at = datetime.now(timezone.utc)
+    record_audit(db, c.proposal_number, "comment_edited", user, {"comment_id": comment_id})
+    db.commit()
+    db.refresh(c)
+    return comment_to_dict(c)
+
+
+@app.delete("/comments/{comment_id}", status_code=204, tags=["comments"], summary="Remove a comment (moderation)",
+            description="Permanently removes a comment. Distinct from editorial flagging — this is a moderation "
+                        "action for spam or abusive content. **Requires admin role.**")
+def delete_comment(comment_id: int, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    c = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    number = c.proposal_number
+    record_audit(db, number, "comment_removed", user, {
+        "comment_id": comment_id, "author": c.author_stake_address,
+    })
+    db.delete(c)
+    db.commit()
+
+
+@app.post("/comments/{comment_id}/flag", tags=["comments"], summary="Flag a comment for admin review",
+          description="Editors don't have delete power, but can flag a comment for an admin to review and "
+                      "remove if warranted. **Requires editor or admin role.**")
+def flag_comment(comment_id: int, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
+    c = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    c.flagged = True
+    c.flagged_by = user["sub"]
+    c.flagged_by_name = user.get("display_name")
+    record_audit(db, c.proposal_number, "comment_flagged", user, {"comment_id": comment_id})
+    db.commit()
+    db.refresh(c)
+    return comment_to_dict(c)
+
+
+@app.delete("/comments/{comment_id}/flag", tags=["comments"], summary="Clear a comment's flag",
+            description="**Requires editor or admin role.**")
+def unflag_comment(comment_id: int, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
+    c = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    c.flagged = False
+    c.flagged_by = None
+    c.flagged_by_name = None
+    record_audit(db, c.proposal_number, "comment_flag_cleared", user, {"comment_id": comment_id})
     db.commit()
     db.refresh(c)
     return comment_to_dict(c)
@@ -1264,7 +1345,7 @@ def get_guide(slug: str, db: Session = Depends(get_db)):
         "slug": guide.slug,
         "title": guide.title,
         "content": guide.content,
-        "updated_at": guide.updated_at.isoformat(),
+        "updated_at": guide.updated_at.isoformat() if guide.updated_at else None,
         "updated_by_name": guide.updated_by_name,
     }
 

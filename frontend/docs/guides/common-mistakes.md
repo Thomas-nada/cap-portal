@@ -6,9 +6,9 @@ These are the most frequent issues editors encounter during initial review. Avoi
 
 ## 1. Quoting the original text inaccurately
 
-The Specification section requires the exact current wording of the constitutional text you are proposing to change. Even minor differences in punctuation, capitalisation, or spacing can cause the automated application to fail.
+If you ever transcribe constitutional text by hand instead of using the wizard's selection tool, even minor differences in punctuation, capitalization, or spacing will make your "original text" not actually match the Constitution — which undermines the revision and confuses reviewers.
 
-**Fix:** Use the CAP Portal's Amendment Wizard to select text directly from the Constitution. This guarantees an exact match.
+**Fix:** Always use the Amendment Wizard's **Browse Constitution** step to highlight and select text directly, rather than typing it out. This guarantees an exact match.
 
 ---
 
@@ -20,38 +20,38 @@ A single CAP should address one coherent change or a closely related set of chan
 
 ---
 
-## 3. Skipping the Rationale section
+## 3. Skipping the Analysis & Test section
 
-The Rationale section is not optional. Editors and the community need to understand why you chose this specific wording over alternatives. Without it, a proposal is harder to assess and more likely to attract objections that could have been pre-empted.
+The Analysis & Test section is not optional. Editors and the community need to understand how the change works, what it affects, and how it can be verified. Without it, a proposal is harder to assess and more likely to attract objections that could have been pre-empted.
 
-**Fix:** For each significant design choice, explain what alternatives were considered and why they were rejected.
+**Fix:** Explain the mechanism of the change, any trade-offs, and give a concrete way to verify it does what you claim.
 
 ---
 
-## 4. Writing a Motivation that describes the solution
+## 4. Writing a "Why" section that describes the solution
 
-The Motivation section should describe the **problem**, not the fix. A common mistake is using the Motivation to argue for your proposed wording, which belongs in the Specification and Rationale.
+The "Why is this change needed?" section should describe the **problem**, not the fix. A common mistake is using it to argue for your proposed wording — that belongs in your revisions and the Analysis & Test section.
 
-**Fix:** Write the Motivation as if you were presenting the problem to someone who has no proposed solution yet. Would they agree there is a problem worth solving?
+**Fix:** Write the "Why" section as if you were presenting the problem to someone who has no proposed solution yet. Would they agree there is a problem worth solving?
 
 ---
 
 ## 5. Setting the wrong category
 
-The category you select determines your recommended minimum deliberation period. Selecting a lighter category (e.g., Editorial) for a change that is actually Substantive shortens the deliberation window inappropriately and will be corrected by an editor.
+The category you select determines your recommended minimum deliberation period. Selecting a lighter category (e.g., Editorial) for a change that's actually Substantive shortens the deliberation window inappropriately — editors can and will correct the category label if it doesn't fit.
 
-**Fix:** When in doubt, choose the more conservative category. See the [Labels and Workflow](labels-and-workflow) guide for definitions.
-
----
-
-## 6. Not monitoring the issue after submission
-
-Submission is the beginning of the process, not the end. Editors and community members will post questions and feedback in the issue comments during the deliberation period. Proposals where the author is unresponsive tend to stall.
-
-**Fix:** Subscribe to your issue and check it regularly. Respond to questions promptly and update the proposal if the feedback warrants it.
+**Fix:** When in doubt, choose the more conservative category. See [Labels & Workflow](labels-and-workflow) for definitions and the exact day counts.
 
 ---
 
-## 7. Uploading sensitive content as exhibits
+## 6. Not monitoring your proposal after submission
 
-Do not include private keys, credentials, personal data, or confidential documents in exhibits or issue text. Everything submitted is public.
+Submission is the beginning of the process, not the end. Editors and community members will post questions and feedback in the discussion thread during deliberation. Proposals where the author is unresponsive tend to stall.
+
+**Fix:** Check your proposal's discussion thread regularly and respond to questions promptly. Update the proposal if the feedback warrants it.
+
+---
+
+## 7. Uploading sensitive content as links and files
+
+Do not include private keys, credentials, personal data, or confidential documents in your Links and Files section or anywhere in your proposal text. Everything submitted is public.

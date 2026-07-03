@@ -3,7 +3,7 @@
 **PREAMBLE**
 ------------
 
-Poop
+Cardano is a decentralized ecosystem of blockchain technology, smart contracts, and community governance, committed to improving economic, political, and social systems for everyone, everywhere. By offering this foundational infrastructure, Cardano empowers individuals and communities to manage their identity, value, and governance, fostering the emergence of decentralized applications, businesses, and network states.
 
 Through unbiased processing of immutable data, we, the participants of the Cardano Community, consisting of individuals, organizations, contributors, and others, choose to follow in the footsteps of the early Internet and cryptocurrency pioneers, who first forged bonds of community through digital technologies. We are guided by our shared principles and tenets as we exercise our self-governance by balancing decentralized decision-making with accountability and safeguarding the security of the Cardano Blockchain.
 
@@ -18,13 +18,15 @@ With these purposes in mind, we, the Cardano Community, affirm our intention to 
 
 2.  Cardano Community. The collective group of all individuals and organizations that, in embracing the shared principles and objectives set forth in the Cardano Blockchain Ecosystem Constitution, own ada, develop, build on, support, maintain, contribute to, and use the Cardano Blockchain.
 
-3.  Cardano Community Member. Any participant, individual or organization in the Cardano Community, including the CC.
+3.  The Constitutional Committee shall reach a binding decision only with the affirmative vote of at least two-thirds (2/3) of its sitting members.
 
 4.  Constitutional Committee (CC). The governing body and its component elected seats charged with ensuring that applicable governance actions take effect on the Cardano Blockchain only if in alignment with the principles and provisions set forth in the Cardano Blockchain Ecosystem Constitution.
 
 5.  Constitutional Committee member (CC member). A person, whether an individual or organization, that serves as a member of the Constitutional Committee.
 
 6.  Delegated Representative (DRep). The individual or entity registered to vote with respect to on-chain governance actions on its own behalf or on behalf of other ada owners.
+
+Members who abstain from a vote are recorded separately from those who vote against, to distinguish neutrality from opposition.
 
 7.  Net Change Limit. The maximum allowed amount or percentage of lovelace that may be removed from the Cardano Treasury in a given period.
 

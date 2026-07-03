@@ -55,6 +55,9 @@ class Comment(Base):
     author_display_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+    flagged = Column(Boolean, nullable=False, default=False)
+    flagged_by = Column(String, nullable=True)
+    flagged_by_name = Column(String, nullable=True)
 
     proposal = relationship("Proposal", back_populates="comments")
 

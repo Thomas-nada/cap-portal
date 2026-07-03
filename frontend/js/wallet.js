@@ -123,27 +123,27 @@ export function renderWalletModal() {
     const available = getAvailableWallets();
 
     const walletList = available.length === 0
-        ? `<div class="text-center py-8">
-               <i data-lucide="wallet" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
-               <p class="text-slate-500 font-bold mb-2">No wallet detected</p>
-               <p class="text-slate-400 text-xs">Install a Cardano wallet extension (Eternl, Vespr, Lace…) and refresh.</p>
+ ? `<div class="text-center py-8">
+ <i data-lucide="wallet" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
+ <p class="text-slate-500 font-bold mb-2">No wallet detected</p>
+ <p class="text-slate-400 text-xs">Install a Cardano wallet extension (Eternl, Vespr, Lace…) and refresh.</p>
            </div>`
-        : `<div class="space-y-2 mb-2" id="wallet-list">
+ : `<div class="space-y-2 mb-2" id="wallet-list">
                ${available.map(w => `
                <button onclick="window._walletModalPickWallet('${w.id}')"
-                   class="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-slate-100 dark:border-slate-800 hover:border-blue-400 dark:hover:border-blue-600 transition-all text-left group">
+ class="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-400 transition-all text-left group">
                    ${w.icon
-                       ? `<img src="${w.icon}" class="w-8 h-8 rounded-xl flex-shrink-0" alt="${w.label}">`
-                       : `<div class="w-8 h-8 rounded-xl flex-shrink-0 bg-slate-100 dark:bg-slate-800 flex items-center justify-center text-xs font-black text-slate-500">${w.label.charAt(0)}</div>`}
-                   <span class="font-black text-slate-900 dark:text-white group-hover:text-blue-600 dark:group-hover:text-blue-400 transition-colors">${w.label}</span>
-                   <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors"></i>
+ ? `<img src="${w.icon}" class="w-8 h-8 rounded-xl flex-shrink-0" alt="${w.label}">`
+ : `<div class="w-8 h-8 rounded-xl flex-shrink-0 bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500">${w.label.charAt(0)}</div>`}
+ <span class="font-black text-slate-900 group-hover:text-blue-600 transition-colors">${w.label}</span>
+ <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors"></i>
                </button>`).join('')}
            </div>`;
 
     const devSection = DEV_MODE
-        ? `<div class="pt-4 border-t border-slate-100 dark:border-slate-800 mt-4">
+ ? `<div class="pt-4 border-t border-slate-100 mt-4">
                <button onclick="window._walletModalDevLogin()"
-                   class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+ class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
                    Dev Login (no wallet)
                </button>
            </div>`
@@ -152,13 +152,13 @@ export function renderWalletModal() {
     return `
     <div id="wallet-modal-backdrop"
          onclick="if(event.target===this) document.getElementById('wallet-modal-backdrop').remove()"
-         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-sm p-8">
-            <div class="flex items-center justify-between mb-6">
-                <h2 id="wallet-modal-title" class="text-xl font-black text-slate-900 dark:text-white">Connect Wallet</h2>
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-sm p-6 sm:p-8">
+ <div class="flex items-center justify-between mb-6">
+ <h2 id="wallet-modal-title" class="text-xl font-black text-slate-900 ">Connect Wallet</h2>
                 <button onclick="document.getElementById('wallet-modal-backdrop').remove()"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+ class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
 
@@ -176,7 +176,7 @@ export function showDisplayNameStep(walletId, walletLabel) {
     const body  = document.getElementById('wallet-modal-body');
     if (title) title.textContent = walletLabel;
     if (body) body.innerHTML = `
-        <p class="text-sm text-slate-500 dark:text-slate-400 mb-4">
+ <p class="text-sm text-slate-500 mb-4">
             Choose a display name others will see on your proposals and comments.
             You can leave it blank to use your stake address.
         </p>
@@ -184,14 +184,14 @@ export function showDisplayNameStep(walletId, walletLabel) {
                type="text"
                placeholder="Display name (optional)"
                maxlength="40"
-               class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-4 font-medium"
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-4 font-medium"
                onkeydown="if(event.key==='Enter') window._walletModalSelect('${walletId}', document.getElementById('wallet-display-name').value.trim())">
         <button onclick="window._walletModalSelect('${walletId}', document.getElementById('wallet-display-name').value.trim())"
-            class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
+ class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
             Sign in with ${walletLabel}
         </button>
         <button onclick="window._walletModalBack()"
-            class="w-full mt-2 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+ class="w-full mt-2 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
             Back
         </button>`;
 

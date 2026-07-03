@@ -1,22 +1,22 @@
 export function renderConstitution(state) {
     if (state.loading?.constitution) {
         return `
-        <div class="flex items-center justify-center py-40">
-            <div class="flex flex-col items-center gap-6">
-                <div class="w-16 h-16 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
-                <p class="text-slate-400 font-bold uppercase tracking-widest text-xs text-center">Loading Constitution…</p>
+ <div class="flex items-center justify-center py-40">
+ <div class="flex flex-col items-center gap-6">
+ <div class="w-16 h-16 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-xs text-center">Loading Constitution…</p>
             </div>
         </div>`;
     }
 
     if (!state.constitutionVersions?.length) {
         return `
-        <div class="max-w-7xl mx-auto pb-20 fade-in text-center">
-            <div class="bg-white dark:bg-slate-900 p-20 rounded-[4rem] border border-dashed border-slate-200 dark:border-slate-800">
-                <i data-lucide="alert-circle" class="w-16 h-16 text-slate-400 mx-auto mb-6"></i>
-                <p class="text-slate-400 font-bold uppercase tracking-widest text-xs mb-4">No Constitution Versions Available</p>
+ <div class="max-w-7xl mx-auto pb-20 fade-in text-center">
+ <div class="bg-white/80 p-20 rounded-[4rem] border border-dashed border-slate-200 ">
+ <i data-lucide="alert-circle" class="w-16 h-16 text-slate-400 mx-auto mb-6"></i>
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-xs mb-4">No Constitution Versions Available</p>
                 <button onclick="window.reloadConstitution()"
-                    class="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all">
+ class="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all">
                     Retry
                 </button>
             </div>
@@ -152,35 +152,35 @@ export function renderConstitution(state) {
     ];
 
     return `
-    <div class="max-w-7xl mx-auto pb-20 fade-in text-left relative">
-        <header class="mb-12">
-            <div class="flex items-center gap-4 mb-4">
-                <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
-                    <i data-lucide="book-open" class="w-6 h-6"></i>
+ <div class="max-w-7xl mx-auto pb-20 fade-in text-left relative">
+ <header class="mb-12">
+ <div class="flex items-center gap-4 mb-4">
+ <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
+ <i data-lucide="book-open" class="w-6 h-6"></i>
                 </div>
                 <div>
-                    <h1 class="text-6xl font-black italic tracking-tighter text-slate-900 dark:text-white uppercase leading-none">Constitution</h1>
-                    <p class="text-slate-500 text-xl font-medium mt-2">Foundational governance document</p>
+ <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Constitution</h1>
+ <p class="text-on-surface-variant text-xl font-medium mt-2">Foundational governance document</p>
                 </div>
             </div>
             ${!isDiffMode ? `
-            <div class="mt-6 flex items-start gap-3 px-5 py-4 bg-blue-50 dark:bg-blue-900/20 border border-blue-100 dark:border-blue-800/40 rounded-2xl">
-                <i data-lucide="mouse-pointer-2" class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"></i>
-                <p class="text-sm text-blue-700 dark:text-blue-300 font-medium leading-relaxed">
-                    <span class="font-black">Proposing a change?</span>
-                    Highlight any section of the text. Click <span class="font-black">+ CAP</span> to flag as a Constitutional Amendment Proposal, or <span class="font-black">+ CIS</span> as a Constitutional Issue Statement.
+ <div class="mt-6 flex items-start gap-3 px-5 py-4 bg-blue-50 border border-blue-100 rounded-2xl">
+ <i data-lucide="mouse-pointer-2" class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"></i>
+ <p class="text-sm text-blue-700 font-medium leading-relaxed">
+ <span class="font-black">Proposing a change?</span>
+ Highlight any section of the text. Click <span class="font-black">+ CAP</span> to flag as a Constitutional Amendment Proposal, or <span class="font-black">+ CIS</span> as a Constitutional Issue Statement.
                 </p>
             </div>
             ` : ''}
         </header>
 
-        <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
-            <aside class="lg:col-span-1 space-y-6 sticky top-8 h-fit">
+ <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
+ <aside class="lg:col-span-1 space-y-6 lg:sticky lg:top-8 h-fit">
                 <!-- Version Selector -->
-                <div class="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Version</h3>
+ <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+ <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Version</h3>
                     <select onchange="window.switchConstitutionVersion(this.value)"
-                        class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all">
+ class="w-full p-3 rounded-xl border border-slate-200 bg-white/80 text-slate-900 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all">
                         ${state.constitutionVersions.map(v => `
                         <option value="${v.name}" ${v.name === state.constitutionCurrentVersion ? 'selected' : ''}>
                             ${v.name} ${v.isCurrent ? '(Current)' : ''}
@@ -191,40 +191,40 @@ export function renderConstitution(state) {
 
                 <!-- Download -->
                 <button onclick="window.downloadConstitution()"
-                    class="w-full px-4 py-3 rounded-xl bg-emerald-50 dark:bg-emerald-900/20 border-2 border-emerald-200 dark:border-emerald-900/30 text-emerald-600 dark:text-emerald-400 font-bold text-sm hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
-                    <i data-lucide="download" class="w-4 h-4"></i>
+ class="w-full px-4 py-3 rounded-xl bg-emerald-50 border-2 border-emerald-200 text-emerald-600 font-bold text-sm hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
+ <i data-lucide="download" class="w-4 h-4"></i>
                     Download (.txt)
                 </button>
 
                 <!-- Diff Mode -->
-                <div class="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Compare Mode</h3>
+ <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+ <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Compare Mode</h3>
                     ${!isDiffMode ? `
                     <button onclick="window.enableDiffMode()"
-                        class="w-full px-4 py-3 rounded-xl bg-blue-50 dark:bg-blue-900/20 border-2 border-blue-200 dark:border-blue-900/30 text-blue-600 dark:text-blue-400 font-bold text-sm hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
-                        <i data-lucide="git-compare" class="w-4 h-4"></i>
+ class="w-full px-4 py-3 rounded-xl bg-blue-50 border-2 border-blue-200 text-blue-600 font-bold text-sm hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
+ <i data-lucide="git-compare" class="w-4 h-4"></i>
                         Enable Diff View
                     </button>
                     ` : `
                     <select onchange="window.setCompareVersion(this.value)"
-                        class="w-full p-3 rounded-xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white font-bold text-sm focus:outline-none mb-3">
+ class="w-full p-3 rounded-xl border border-slate-200 bg-white/80 text-slate-900 font-bold text-sm focus:outline-none mb-3">
                         ${state.constitutionVersions.filter(v => v.name !== state.constitutionCurrentVersion).map(v => `
                         <option value="${v.name}" ${v.name === state.constitutionCompareVersion ? 'selected' : ''}>${v.name}</option>
                         `).join('')}
                     </select>
                     <button onclick="window.disableDiffMode()"
-                        class="w-full px-4 py-3 rounded-xl bg-slate-100 dark:bg-slate-800 text-slate-600 dark:text-slate-300 font-bold text-xs hover:bg-slate-200 dark:hover:bg-slate-700 transition-all flex items-center justify-center gap-2">
-                        <i data-lucide="x" class="w-4 h-4"></i> Exit Diff Mode
+ class="w-full px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+ <i data-lucide="x" class="w-4 h-4"></i> Exit Diff Mode
                     </button>
                     `}
                 </div>
 
                 <!-- Navigation -->
-                <div class="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Jump To</h3>
-                    <div class="space-y-1 max-h-96 overflow-y-auto">
+ <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+ <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Jump To</h3>
+ <div class="space-y-1 max-h-96 overflow-y-auto">
                         ${sections.map(s => `
-                        <a href="#${s.id}" class="block px-3 py-2 rounded-lg text-xs font-bold text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+ <a href="#${s.id}" class="block px-3 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
                             ${s.label}
                         </a>
                         `).join('')}
@@ -232,18 +232,18 @@ export function renderConstitution(state) {
                 </div>
 
                 ${isDiffMode ? `
-                <div class="bg-white dark:bg-slate-900 p-6 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-                    <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Legend</h3>
-                    <div class="space-y-2 text-xs font-bold text-slate-600 dark:text-slate-300">
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-400 rounded"></div><span>Removed</span></div>
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-400 rounded"></div><span>Added</span></div>
-                        <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded"></div><span>Modified</span></div>
+ <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
+ <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Legend</h3>
+ <div class="space-y-2 text-xs font-bold text-slate-600 ">
+ <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-400 rounded"></div><span>Removed</span></div>
+ <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-400 rounded"></div><span>Added</span></div>
+ <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded"></div><span>Modified</span></div>
                     </div>
                 </div>
                 ` : ''}
             </aside>
 
-            <div id="constitution-col" class="lg:col-span-3">
+ <div id="constitution-col" class="lg:col-span-3">
                 ${isDiffMode ? renderDiffView(currentVersion, compareVersion) : renderSingleView(currentVersion)}
             </div>
         </div>
@@ -251,7 +251,7 @@ export function renderConstitution(state) {
 }
 
 function renderSingleView(version) {
-    if (!version?.content) return '<p class="text-slate-400">Constitution content not available.</p>';
+ if (!version?.content) return '<p class="text-slate-400">Constitution content not available.</p>';
     let content = version.content;
     content = content.replace(/<!--[\s\S]*?-->/g, '').trimStart();
 
@@ -274,16 +274,16 @@ function renderSingleView(version) {
         for (const mapping of sectionMappings) {
             for (const pattern of mapping.patterns) {
                 if (pattern.test(headerText)) {
-                    return `<h2 id="${mapping.id}" class="scroll-mt-32 font-black italic tracking-tighter text-3xl uppercase text-slate-900 dark:text-white mt-16 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">${headerText}</h2>`;
+ return `<h2 id="${mapping.id}" class="scroll-mt-32 font-black italic tracking-tighter text-3xl uppercase text-slate-900 mt-16 mb-8 border-b border-slate-100 pb-4">${headerText}</h2>`;
                 }
             }
         }
         const defaultId = headerText.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '');
-        return `<h2 id="${defaultId}" class="scroll-mt-32 font-black italic tracking-tighter text-3xl uppercase text-slate-900 dark:text-white mt-16 mb-8 border-b border-slate-100 dark:border-slate-800 pb-4">${headerText}</h2>`;
+ return `<h2 id="${defaultId}" class="scroll-mt-32 font-black italic tracking-tighter text-3xl uppercase text-slate-900 mt-16 mb-8 border-b border-slate-100 pb-4">${headerText}</h2>`;
     });
 
     return `
-    <article id="constitution-content" class="bg-white dark:bg-slate-900 p-10 sm:p-20 rounded-[4rem] border border-slate-100 dark:border-slate-800 shadow-sm prose dark:prose-invert max-w-none text-left leading-relaxed selection:bg-blue-600 selection:text-white">
+ <article id="constitution-content" class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed selection:bg-blue-600 selection:text-white">
         ${html}
     </article>`;
 }
@@ -311,11 +311,11 @@ function wordDiff(oldStr, newStr) {
         const op = wOps[k];
         if (op.t === 'eq') { const v = escapeHtml(op.v); oH += v; nH += v; k++; }
         else if (op.t === 'del' && k+1 < wOps.length && wOps[k+1].t === 'ins') {
-            oH += `<mark class="diff-del">${escapeHtml(op.v)}</mark>`;
-            nH += `<mark class="diff-rep">${escapeHtml(wOps[k+1].v)}</mark>`;
+ oH += `<mark class="diff-del">${escapeHtml(op.v)}</mark>`;
+ nH += `<mark class="diff-rep">${escapeHtml(wOps[k+1].v)}</mark>`;
             k += 2;
-        } else if (op.t === 'del') { oH += `<mark class="diff-del">${escapeHtml(op.v)}</mark>`; k++; }
-        else { nH += `<mark class="diff-ins">${escapeHtml(op.v)}</mark>`; k++; }
+ } else if (op.t === 'del') { oH += `<mark class="diff-del">${escapeHtml(op.v)}</mark>`; k++; }
+ else { nH += `<mark class="diff-ins">${escapeHtml(op.v)}</mark>`; k++; }
     }
     return { oH, nH };
 }
@@ -327,24 +327,24 @@ function applyLineGroup(delLines, insLines) {
         const { oH, nH } = wordDiff(delStr, insStr);
         return { oH: oH + '\n', nH: nH + '\n' };
     } else if (delStr) {
-        return { oH: `<mark class="diff-del">${escapeHtml(delStr)}</mark>\n`, nH: '' };
+ return { oH: `<mark class="diff-del">${escapeHtml(delStr)}</mark>\n`, nH: '' };
     } else {
-        return { oH: '', nH: `<mark class="diff-ins">${escapeHtml(insStr)}</mark>\n` };
+ return { oH: '', nH: `<mark class="diff-ins">${escapeHtml(insStr)}</mark>\n` };
     }
 }
 
 function renderDiffView(currentVersion, compareVersion) {
-    if (!currentVersion || !compareVersion) return '<p class="text-slate-400 p-10">Missing version data.</p>';
+ if (!currentVersion || !compareVersion) return '<p class="text-slate-400 p-10">Missing version data.</p>';
     const oldText = (currentVersion.content || '').replace(/\r\n/g, '\n');
     const newText = (compareVersion.content || '').replace(/\r\n/g, '\n');
     if (oldText === newText) {
         return `
-        <div class="bg-white dark:bg-slate-900 p-20 rounded-[4rem] border border-slate-100 dark:border-slate-800 shadow-sm text-center">
-            <div class="w-16 h-16 bg-green-100 dark:bg-green-900/30 rounded-full flex items-center justify-center mx-auto mb-6">
-                <i data-lucide="check-circle" class="w-8 h-8 text-green-500"></i>
+ <div class="bg-white/80 p-20 rounded-[4rem] border border-slate-100 shadow-sm text-center">
+ <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
+ <i data-lucide="check-circle" class="w-8 h-8 text-green-500"></i>
             </div>
-            <p class="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">No Differences Found</p>
-            <p class="text-slate-500 text-sm">These two versions appear to be identical.</p>
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">No Differences Found</p>
+ <p class="text-slate-500 text-sm">These two versions appear to be identical.</p>
         </div>`;
     }
 
@@ -395,31 +395,31 @@ function renderDiffView(currentVersion, compareVersion) {
             k++;
         }
         const { oH, nH } = applyLineGroup(delLines, insLines);
-        const none = '<span class="text-slate-300 dark:text-slate-600 italic text-xs">nothing</span>';
-        changeCards += `<div class="bg-white dark:bg-slate-900 rounded-[2rem] border border-slate-100 dark:border-slate-800 shadow-sm overflow-hidden">
-            <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 dark:divide-slate-800">
-                <div class="p-6"><p class="text-[9px] font-black uppercase tracking-widest text-red-400 mb-3">Before</p><p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">${oH.trim() || none}</p></div>
-                <div class="p-6"><p class="text-[9px] font-black uppercase tracking-widest text-green-500 mb-3">After</p><p class="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap">${nH.trim() || none}</p></div>
+ const none = '<span class="text-slate-300 italic text-xs">nothing</span>';
+ changeCards += `<div class="bg-white/80 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
+ <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 ">
+ <div class="p-6"><p class="text-[9px] font-black uppercase tracking-widest text-red-400 mb-3">Before</p><p class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">${oH.trim() || none}</p></div>
+ <div class="p-6"><p class="text-[9px] font-black uppercase tracking-widest text-green-500 mb-3">After</p><p class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">${nH.trim() || none}</p></div>
             </div>
         </div>`;
       }
     }
 
     return `
-    <div class="space-y-4">
-        <div class="bg-white dark:bg-slate-900 p-6 sm:p-8 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-            <div class="flex flex-wrap items-center gap-4">
+ <div class="space-y-4">
+ <div class="bg-white/80 p-6 sm:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
+ <div class="flex flex-wrap items-center gap-4">
                 <div>
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comparing versions</p>
-                    <p class="text-lg font-black text-slate-900 dark:text-white">
-                        ${escapeHtml(currentVersion.name)} <span class="text-slate-400 font-normal mx-2">→</span> ${escapeHtml(compareVersion.name)}
+ <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comparing versions</p>
+ <p class="text-lg font-black text-slate-900 ">
+ ${escapeHtml(currentVersion.name)} <span class="text-slate-400 font-normal mx-2">→</span> ${escapeHtml(compareVersion.name)}
                     </p>
                 </div>
-                <div class="ml-auto flex items-center gap-3 flex-wrap">
-                    <div class="flex items-center gap-2 text-[11px] font-bold">
-                        <mark class="diff-del rounded px-2 py-0.5">removed</mark>
-                        <mark class="diff-ins rounded px-2 py-0.5">added</mark>
-                        <mark class="diff-rep rounded px-2 py-0.5">replaced</mark>
+ <div class="ml-auto flex items-center gap-3 flex-wrap">
+ <div class="flex items-center gap-2 text-[11px] font-bold">
+ <mark class="diff-del rounded px-2 py-0.5">removed</mark>
+ <mark class="diff-ins rounded px-2 py-0.5">added</mark>
+ <mark class="diff-rep rounded px-2 py-0.5">replaced</mark>
                     </div>
                     <button onclick="
                         const full=document.getElementById('diff-view-full');
@@ -428,32 +428,32 @@ function renderDiffView(currentVersion, compareVersion) {
                         full.classList.toggle('hidden',showingFull);
                         changes.classList.toggle('hidden',!showingFull);
                         document.getElementById('diff-toggle-label').textContent=showingFull?'Show Full Text':'Show Changes Only';
-                    " class="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-50 dark:bg-slate-800 text-slate-600 dark:text-slate-300 text-xs font-bold hover:bg-slate-100 dark:hover:bg-slate-700 transition-colors">
-                        <i data-lucide="layers" class="w-3.5 h-3.5"></i>
+ " class="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors">
+ <i data-lucide="layers" class="w-3.5 h-3.5"></i>
                         <span id="diff-toggle-label">Show Changes Only</span>
                     </button>
                 </div>
             </div>
         </div>
-        <div id="diff-view-full" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
-            <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-red-100 dark:border-red-900/30 shadow-sm overflow-hidden flex flex-col">
-                <div class="px-8 py-4 border-b border-red-100 dark:border-red-900/30 bg-red-50 dark:bg-red-900/10 shrink-0">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-red-500">Before — ${escapeHtml(currentVersion.name)}</p>
+ <div id="diff-view-full" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-red-100 shadow-sm overflow-hidden flex flex-col">
+ <div class="px-8 py-4 border-b border-red-100 bg-red-50 shrink-0">
+ <p class="text-[10px] font-black uppercase tracking-widest text-red-500">Before — ${escapeHtml(currentVersion.name)}</p>
                 </div>
-                <div class="p-8 overflow-auto max-h-[75vh]">
-                    <pre class="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-sans m-0">${oldHtml}</pre>
+ <div class="p-8 overflow-auto max-h-[75vh]">
+ <pre class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap font-sans m-0">${oldHtml}</pre>
                 </div>
             </div>
-            <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-green-100 dark:border-green-900/30 shadow-sm overflow-hidden flex flex-col">
-                <div class="px-8 py-4 border-b border-green-100 dark:border-green-900/30 bg-green-50 dark:bg-green-900/10 shrink-0">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-green-600">After — ${escapeHtml(compareVersion.name)}</p>
+ <div class="bg-white/80 rounded-[2.5rem] border border-green-100 shadow-sm overflow-hidden flex flex-col">
+ <div class="px-8 py-4 border-b border-green-100 bg-green-50 shrink-0">
+ <p class="text-[10px] font-black uppercase tracking-widest text-green-600">After — ${escapeHtml(compareVersion.name)}</p>
                 </div>
-                <div class="p-8 overflow-auto max-h-[75vh]">
-                    <pre class="text-sm leading-relaxed text-slate-700 dark:text-slate-300 whitespace-pre-wrap font-sans m-0">${newHtml}</pre>
+ <div class="p-8 overflow-auto max-h-[75vh]">
+ <pre class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap font-sans m-0">${newHtml}</pre>
                 </div>
             </div>
         </div>
-        <div id="diff-view-changes" class="hidden space-y-3">
+ <div id="diff-view-changes" class="hidden space-y-3">
             ${changeCards}
         </div>
     </div>`;

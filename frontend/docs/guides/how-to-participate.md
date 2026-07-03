@@ -1,60 +1,34 @@
 # How to Participate
 
-You do not need to submit a proposal to participate in Cardano's governance process. There are several ways to contribute, from reading and reacting to active proposals to drafting your own.
+You do not need to submit a proposal to participate in Cardano's constitutional governance process. There are several ways to contribute, from reading and discussing active proposals to drafting your own.
 
 ---
 
 ## What You Need
 
-A **GitHub account** is required for most forms of participation. If you don't have one, create one at [github.com](https://github.com) — it's free.
+To **read** proposals, you need nothing — the Registry, Board, and every proposal page are public.
 
-The [CAP Portal](https://thomas-nada.github.io/CAP) provides additional features for authenticated users, including the Amendment Wizard for drafting proposals.
+To **participate** — comment, submit a CAP or CIS, or suggest edits — you need a **Cardano wallet** (Eternl, Lace, Vespr, or any CIP-30 compatible extension). See [Connecting Your Cardano Wallet](connecting-your-wallet) for how that works. No separate account or sign-up is required — your wallet is your identity.
 
 ---
 
 ## Ways to Participate
 
-### Read and Follow Proposals
+### Read Proposals
 
-You don't need an account to read. Browse all active and historical proposals in the [Issues tab](https://github.com/Thomas-nada/CAP/issues) of the repository.
-
-To stay informed on a specific proposal, open the issue and click **Subscribe**. You'll receive notifications when new comments are posted.
-
-To follow all activity in the repository, use GitHub's **Watch** feature on the repository page.
-
----
+Browse all proposals in the **Registry** (a filterable list) or the **Board** (grouped by lifecycle stage: consultation, ready, done). No wallet needed.
 
 ### Comment and Deliberate
 
-Every CAP and CIS has an open comment thread during its deliberation period. Your input is welcome — whether you support the proposal, have concerns, or want to suggest refinements.
-
-See the [Commenting and Discussing](commenting-and-discussing) guide for how to contribute effectively.
-
----
-
-### React to Proposals
-
-If you want to signal support or concern without writing a full comment, use GitHub's reaction buttons (👍 👎 🎉 😕) on the issue or on specific comments. Editors and authors take reactions into account when assessing community sentiment.
-
----
+Every CAP and CIS has an open discussion thread for the duration of its deliberation period. Your input is welcome — whether you support the proposal, have concerns, or want to suggest refinements. See [Commenting & Discussion](commenting-and-discussing) for how to contribute effectively.
 
 ### Submit a CIS
 
-If you have identified a constitutional problem, ambiguity, or governance gap but aren't ready to propose a specific fix, submit a Constitutional Issue Statement (CIS). This formally documents the problem and opens it for community discussion.
-
-See the [Creating a CAP or CIS via GitHub](creating-a-cap) guide or use the [CAP Portal](https://thomas-nada.github.io/CAP) to get started.
-
----
+If you've identified a constitutional problem, ambiguity, or governance gap but aren't ready to propose a specific fix, submit a **Constitutional Issue Statement (CIS)**. This formally documents the problem and opens it for community discussion. Use **New Proposal** in the portal and choose CIS in the wizard — see [Submitting a CAP with the Wizard](submitting-with-the-wizard).
 
 ### Submit a CAP
 
-If you have a specific proposal to change or clarify the Constitution, submit a Constitutional Amendment Proposal (CAP). The portal's Amendment Wizard guides you through the process step by step, including selecting the exact constitutional text you want to change.
-
----
-
-### Attend Editor Meetings
-
-CAP Editors hold regular public meetings to discuss ongoing proposals with authors and the community. Meeting records are published in the repository under `CAP-Editors/CAPSLOCK/`. Details on upcoming meetings will be posted there.
+If you have a specific proposal to change or clarify the Constitution, submit a **Constitutional Amendment Proposal (CAP)**. The Amendment Wizard guides you through the process step by step, including selecting the exact constitutional text you want to change.
 
 ---
 
@@ -62,8 +36,8 @@ CAP Editors hold regular public meetings to discuss ongoing proposals with autho
 
 | Role | Who | What they do |
 | :--- | :--- | :--- |
-| **Author** | Any community member | Submits and owns a CAP or CIS |
-| **Community member** | Any community member | Comments, reacts, and deliberates on proposals |
-| **CAP Editor** | Appointed cohort | Facilitates the process, provides feedback, applies status labels |
+| **Author** | Any wallet-connected community member | Submits and owns a CAP or CIS |
+| **Community member** | Any wallet-connected community member | Comments and deliberates on proposals |
+| **CAP Editor** | Appointed cohort | Facilitates the process, suggests edits, applies lifecycle and status labels |
 
-Editors are facilitators, not gatekeepers. Authors retain full ownership of their proposals and may withdraw from the CAP process at any time to submit a governance action on-chain directly.
+Editors are facilitators, not gatekeepers. Authors retain full ownership of their proposals and may withdraw at any time — see the withdrawal process in [Labels & Workflow](labels-and-workflow).

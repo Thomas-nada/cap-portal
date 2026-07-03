@@ -118,7 +118,7 @@ One of the clearest improvements over a one-size-fits-all approach is the **cate
 | **Interpretive** | Clarifying wording without changing meaning | 30 days |
 | **Procedural** | Changing how a governance process works | 60 days |
 | **Substantive** | Changing a core principle or value | 60 days |
-| **Technical** | Changing on-chain economic rules | Varies |
+| **Technical** | Changing on-chain economic rules | 90 days |
 | **Other** | Anything that doesn't fit the above | 30 days |
 
 It's worth being clear about what these periods are: **recommended minimums, not hard rules**. Because Cardano is a decentralized system, nobody can actually stop someone from submitting an amendment directly on-chain without going through this process at all. What this process provides is legitimacy. It shows that a proposal has been properly debated and refined before the community votes on it.
@@ -141,7 +141,7 @@ The first three editors, known as the **Bootstrap Cohort**, will be selected fro
 
 One practical challenge with any multi-step process is that it becomes hard to track where things are. To solve this, the group designed a **tagging system**: a set of labels that get applied to every proposal to show exactly what stage it's at.
 
-A proposal moves through clear stages: `draft → submitted → review → consultation → revision → finalizing → ready → onchain → done`. At any point, anyone can look at a proposal and see exactly where it is and what needs to happen next.
+Every proposal carries exactly one **lifecycle label** at all times: `consultation → ready → done`, or `withdrawn` if pulled at any point. Within whichever lifecycle stage it's in, editors can layer on status tags like `review`, `revision`, `finalizing`, or `onchain` to show finer-grained progress without changing the underlying stage. At any point, anyone can look at a proposal and see exactly where it is and what needs to happen next — see [Labels & Workflow](labels-and-workflow) for the full breakdown.
 
 There are also tags for special situations: grouping small changes together, putting something on hold, fast-tracking urgent changes, and editor signal tags that only editors can apply. This keeps things transparent without creating noise.
 

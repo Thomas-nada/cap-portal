@@ -1,14 +1,16 @@
-# Commenting and Discussing on GitHub
+# Commenting and Discussing
 
-The GitHub issue thread is the official deliberation space for every CAP and CIS. This guide explains how to participate constructively.
+Every CAP and CIS has a discussion thread on its proposal page in the portal. This is the official deliberation space — there is no separate forum or external issue tracker.
 
 ---
 
 ## How to Comment
 
-Open any CAP or CIS issue in the [repository](https://github.com/Thomas-nada/CAP/issues) and scroll to the bottom. Click inside the comment box, write your contribution, and click **Comment**.
+1. Open any proposal and scroll to the **Discussion** section.
+2. You must be **connected with your Cardano wallet** to post — if you haven't connected yet, the portal will prompt you to do so.
+3. Type your comment and submit. It's posted immediately and attributed to your stake address (and display name, if you've set one).
 
-You must be signed in to your GitHub account to comment.
+Comments are public and readable by anyone, including visitors who haven't connected a wallet.
 
 ---
 
@@ -16,47 +18,28 @@ You must be signed in to your GitHub account to comment.
 
 **Be specific.** Reference the exact section or wording you are responding to. Quote the relevant text so others know what you mean:
 
-> "Article IV currently reads '...shall be required...' — I think this should be '...may be required...' because..."
+> "The proposed text in Article III §6 says '...computed over a canonical JSON serialization...' — I think we should also name the specific scheme (e.g. RFC 8785) to avoid ambiguity."
 
 **Be constructive.** If you disagree with a proposal, explain why and suggest an alternative if you have one. Point out trade-offs, unintended consequences, or implementation challenges.
 
-**Stay on topic.** Keep discussion focused on the proposal at hand. If you want to raise a related but separate issue, open a new issue or CIS.
+**Stay on topic.** Keep discussion focused on the proposal at hand. If you want to raise a related but separate issue, submit a new CAP or CIS instead of derailing the thread.
 
 **Be evidence-based.** Support your position with references to the Constitution, on-chain data, precedents, or other governance frameworks where relevant.
 
 ---
 
-## Using Reactions
+## Editing Your Own Comments
 
-GitHub reactions (👍 👎 🎉 😕) are a lightweight way to signal agreement or concern without cluttering the thread. Use them for:
-
-- **👍** — I agree with this comment or support this proposal
-- **👎** — I disagree or have concerns
-- **🎉** — Strong support
-- **😕** — This needs more discussion
-
-Editors and authors take reactions into account when gauging community sentiment.
+You can edit any comment you've posted at any time — there is currently no option to delete a comment once posted, so edit it instead if you need to correct or retract something.
 
 ---
 
-## Tagging People
+## Suggested Edits (Editors)
 
-You can mention specific people in a comment using `@username`. Use this to:
-
-- Ask a specific person a question: `@Thomas-nada what was the intent of this clause?`
-- Invite a domain expert to weigh in
-- Notify a CAP Editor if you believe a procedural issue needs attention
-
-Do not use mentions to pressure people or create noise.
+Separately from comments, CAP Editors can leave **structured edit suggestions** on specific fields of a proposal (e.g. the Summary or Why section) — these appear in a dedicated "Suggested Changes" panel on the proposal, not in the comment thread. The author can **approve** or **reject** each suggestion individually. See the [Editor Guide](editor-guide) for details.
 
 ---
 
-## Editing and Deleting Comments
+## Audit Trail
 
-You can edit or delete your own comments at any time using the `...` menu on the top right of your comment. Note that edited comments show an "edited" indicator, so the history is visible to everyone.
-
----
-
-## Following a Discussion
-
-Click **Subscribe** on any issue to receive notifications when new comments are posted. You can manage your notification preferences in your GitHub account settings.
+Every comment, label change, and suggestion is recorded in the proposal's append-only **audit log**, visible on the proposal page. This gives a full, tamper-evident history of how a proposal was discussed and reviewed.

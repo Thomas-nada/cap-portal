@@ -1,6 +1,6 @@
 # Public API
 
-The CAP Portal exposes a fully public REST API. You can read all proposals, comments, and versions without authentication. To write — post comments, submit proposals, or follow a proposal — you either provide an email address or authenticate with a Cardano wallet.
+The CAP Portal exposes a fully public REST API. You can read all proposals, comments, and versions without authentication. To write — post comments or submit proposals — you authenticate with a Cardano wallet.
 
 Interactive documentation with a built-in "Try it out" feature is available at:
 
@@ -96,7 +96,7 @@ Returns an array of proposal summaries including `number`, `title`, `stage`, `au
 GET /proposals/{number}
 ```
 
-Returns full proposal detail including `structured` content (abstract, motivation, rationale, specification, references).
+Returns full proposal detail including `structured` content (abstract, motivation, analysis, impact, exhibits, revisions).
 
 ### Create a proposal *(requires auth)*
 
@@ -106,17 +106,21 @@ Authorization: Bearer <token>
 
 {
   "title": "My Proposal Title",
+  "type": "CAP",
   "structured": {
-    "abstract":      "A brief summary.",
-    "motivation":    "Why this is needed.",
-    "rationale":     "Why this solution.",
-    "specification": "Technical details.",
-    "references":    "Links and sources."
+    "abstract":   "A brief summary.",
+    "motivation": "Why this is needed.",
+    "analysis":   "How the change works and how to verify it.",
+    "impact":     "Practical consequences if adopted.",
+    "exhibits":   "Links and supporting references.",
+    "revisions":  [
+      { "original": "Exact current constitutional text.", "proposed": "Your replacement wording.", "section": "Article II Section 6" }
+    ]
   }
 }
 ```
 
-All fields in `structured` except `abstract` are optional. Content supports Markdown.
+`structured` is a free-form object — the API does not enforce a fixed schema on its keys — but the fields above are what the portal's own Amendment Wizard generates, and what every other client should produce for consistency. Content supports Markdown.
 
 ### Get proposal versions
 
@@ -142,7 +146,7 @@ GET /proposals/{number}/comments
 POST /proposals/{number}/comments
 Authorization: Bearer <token>
 
-{ "content": "Comment text. Markdown is supported." }
+{ "body": "Comment text. Markdown is supported." }
 ```
 
 ---
@@ -164,43 +168,10 @@ POST /proposals/{number}/suggestions
 Authorization: Bearer <token>
 
 {
-  "section":  "motivation",
-  "old_text": "The original text to replace.",
-  "new_text": "The suggested replacement.",
-  "note":     "Optional explanation."
+  "field":            "motivation",
+  "suggested_value":  "The suggested replacement text for that field.",
+  "reason":           "Optional explanation."
 }
-```
-
----
-
-## Follow / Unfollow
-
-Anyone can subscribe to email updates for a proposal — no wallet required.
-
-### Subscribe
-
-```http
-POST /proposals/{number}/subscribe
-
-{ "email": "you@example.com" }
-```
-
-### Check subscription status
-
-```http
-GET /proposals/{number}/subscribe?email=you@example.com
-```
-
-```json
-{ "subscribed": true }
-```
-
-### Unsubscribe
-
-```http
-DELETE /proposals/{number}/subscribe
-
-{ "email": "you@example.com" }
 ```
 
 ---
@@ -220,16 +191,3 @@ Rate limit headers are included in every response (`X-RateLimit-Limit`, `X-RateL
 ## CORS
 
 The API allows requests from any origin (`*`). Credentials (cookies) are not used — only the `Authorization` header.
-
----
-
-## Example: Building a third-party client
-
-The Norwegian-language CAP portal (`/norsk-portal`) was built using only this API as a proof of concept. It demonstrates:
-
-- Reading and displaying proposals without authentication
-- Email-based follow/unfollow
-- Full CIP-30 wallet authentication
-- Posting comments after login
-
-The source code is in `E:\CAP-Local\norsk-portal\` and is a good reference implementation.

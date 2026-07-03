@@ -1,14 +1,14 @@
 import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          createProposal, updateProposal, addLabel, removeLabel,
-         withdrawProposal, cancelWithdrawal,
-         createComment, updateComment,
+         withdrawProposal, cancelWithdrawal, removeProposal,
+         createComment, updateComment, deleteComment, flagComment, unflagComment,
          fetchConstitutionVersions, fetchConstitutionContent,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchVersions, fetchVersion,
          getMe, devSeedEditor, setDisplayName, updateProfile,
-         generateDraftConstitution, subscribeToProposal, checkSubscription, unsubscribeFromProposal,
+         generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
          fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
 
@@ -53,6 +53,8 @@ export const state = {
     view: 'dashboard',
     loading: { init: true, proposals: false, proposal: false },
     error: null,
+    auditPanelExpanded: true,
+    mobileNavOpen: false,
     // Filters
     kanbanSearch: '',
     registrySearch: '',
@@ -108,14 +110,45 @@ export function updateUI(rerender = false) {
     }
 
     root.innerHTML = nav + `
-        <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+ <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             ${content}
         </main>
+        <footer class="mt-16 bg-[#0228aa] border-t border-white/10">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
+                <div class="flex flex-col gap-0">
+                    <img src="intersect-logo.png" alt="Intersect" class="w-48 h-auto -ml-5">
+                    <p class="text-xs text-white/50 -mt-3">&copy; ${new Date().getFullYear()} Intersect. All Rights Reserved.</p>
+                </div>
+                <nav class="flex flex-col gap-1">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Links</p>
+                    <a href="https://intersectmbo.org" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Home</a>
+                </nav>
+                <div class="flex flex-col gap-2">
+                    <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Follow us</p>
+                    <a href="https://x.com/intersectmbo" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors">
+                        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
+                        X
+                    </a>
+                    <a href="https://www.linkedin.com/company/intersectmbo/" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors">
+                        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
+                        LinkedIn
+                    </a>
+                </div>
+            </div>
+        </footer>
         ${state.user ? `
         <button onclick="window.openBugReportModal()" title="Report a bug"
-            class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
-            <i data-lucide="bug" class="w-6 h-6"></i>
-        </button>` : ''}`;
+ class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
+ <i data-lucide="bug" class="w-6 h-6"></i>
+        </button>` : ''}
+        ${state.error ? `
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
+ <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+ <p class="text-sm font-semibold leading-snug">${escapeHtmlGlobal(state.error)}</p>
+            <button onclick="window.dismissError()" class="flex-shrink-0 hover:bg-white/20 rounded-lg p-1 -m-1 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>` : ''}`;
 
     lucide.createIcons();
     if (window.fixPreCode) window.fixPreCode();
@@ -123,10 +156,20 @@ export function updateUI(rerender = false) {
 
 window.updateUI = updateUI;
 
+function escapeHtmlGlobal(str) {
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+window.dismissError = () => {
+    state.error = null;
+    updateUI();
+};
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 window.setView = (view) => {
     state.view = view;
+    state.mobileNavOpen = false;
     const map = {
         dashboard: '#/home', list: '#/registry', kanban: '#/kanban',
         constitution: '#/constitution', create: '#/create',
@@ -136,8 +179,14 @@ window.setView = (view) => {
     updateUI();
 };
 
+window.toggleMobileNav = () => {
+    state.mobileNavOpen = !state.mobileNavOpen;
+    updateUI();
+};
+
 window.handleRouting = async () => {
     const hash = window.location.hash || '#/home';
+    if (hash && !hash.startsWith('#/')) return; // in-page anchor (e.g. constitution "Jump To" links) — let the browser scroll, don't reroute
     state.error = null;
 
     if (hash === '#/home' || hash === '#/') {
@@ -267,6 +316,10 @@ function computeStats() {
 }
 
 async function loadConstitution() {
+    // Always land on the current version, never a stale diff selection left
+    // over from a previous visit (e.g. comparing a proposal's draft, or a
+    // manually-enabled diff view) — diff mode is opt-in per visit only.
+    state.constitutionCompareVersion = null;
     try {
         if (!state.constitutionVersions.length) {
             const raw = await fetchConstitutionVersions();
@@ -361,15 +414,6 @@ window.openProposal = async (number, addToHistory = true) => {
         state.auditEvents = audit;
         state.suggestions = suggestions;
         state.proposalVersions = versions;
-        state.subscribeSuccess = false;
-        state.isSubscribed = false;
-        const email = state.user?.email;
-        if (email) {
-            checkSubscription(number, email).then(r => {
-                state.isSubscribed = r.subscribed;
-                updateUI();
-            }).catch(() => {});
-        }
         if (addToHistory) window.location.hash = `#/detail/${number}`;
     } catch (e) {
         state.error = e.message;
@@ -427,7 +471,11 @@ window.submitWizard = async () => {
         // Generate draft constitution if proposal includes revisions
         const hasRevisions = structured.revisions?.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed));
         if (hasRevisions) {
-            try { await generateDraftConstitution(proposal.number); } catch (_) {}
+            try {
+                await generateDraftConstitution(proposal.number);
+                state.constitutionVersions = []; // force refetch so the new draft shows up
+                state.constitutionCurrentVersion = null;
+            } catch (_) {}
         }
         state.wizardData = {};
         state.wizardStep = 1;
@@ -460,61 +508,6 @@ window.postComment = async (formOrNumber, bodyArg) => {
         state.error = e.message;
     } finally {
         state.loading = { ...state.loading, postComment: false };
-        updateUI();
-    }
-};
-
-window.followProposalAsUser = async () => {
-    const email = state.user?.email;
-    const number = state.currentProposal?.number;
-    if (!email || !number) return;
-    state.loading = { ...state.loading, followProposal: true };
-    updateUI();
-    try {
-        await subscribeToProposal(number, email);
-        state.isSubscribed = true;
-        state.subscribeSuccess = true;
-    } catch (e) {
-        state.error = e.message;
-    } finally {
-        state.loading = { ...state.loading, followProposal: false };
-        updateUI();
-    }
-};
-
-window.unfollowProposalAsUser = async () => {
-    const email = state.user?.email;
-    const number = state.currentProposal?.number;
-    if (!email || !number) return;
-    state.loading = { ...state.loading, followProposal: true };
-    updateUI();
-    try {
-        await unsubscribeFromProposal(number, email);
-        state.isSubscribed = false;
-        state.subscribeSuccess = false;
-    } catch (e) {
-        state.error = e.message;
-    } finally {
-        state.loading = { ...state.loading, followProposal: false };
-        updateUI();
-    }
-};
-
-window.followProposal = async (form) => {
-    const email = new FormData(form).get('email')?.trim();
-    const number = state.currentProposal?.number;
-    if (!email || !number) return;
-    state.loading = { ...state.loading, followProposal: true };
-    updateUI();
-    try {
-        await subscribeToProposal(number, email);
-        state.subscribeSuccess = true;
-        state.isSubscribed = true;
-        form.reset();
-    } catch (e) {
-        state.error = e.message;
-    } finally {
-        state.loading = { ...state.loading, followProposal: false };
         updateUI();
     }
 };
@@ -607,8 +600,8 @@ function versionWordDiff(oldStr, newStr) {
     while (i < m || j < n) {
         if (i < m && j < n && O[i] === N[j]) { html += esc(O[i++]); j++; }
         else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j]))
-            html += `<mark class="diff-ins">${esc(N[j++])}</mark>`;
-        else html += `<mark class="diff-del">${esc(O[i++])}</mark>`;
+ html += `<mark class="diff-ins">${esc(N[j++])}</mark>`;
+ else html += `<mark class="diff-del">${esc(O[i++])}</mark>`;
     }
     return html;
 }
@@ -635,35 +628,35 @@ window.openVersionModal = async (number, version) => {
         const renderRevisions = (revisions) => {
             if (!revisions?.length) return '';
             return revisions.map(r => r.type === 'addition' ? `
-            <div class="rounded-2xl border border-cyan-100 dark:border-cyan-900/40 overflow-hidden mb-4">
-                ${r.section ? `<div class="px-5 py-2 bg-cyan-50 dark:bg-cyan-900/20 text-xs font-black text-cyan-500 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
-                <div class="grid grid-cols-2 divide-x divide-cyan-100 dark:divide-cyan-900/30">
-                    <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
-                        <div class="text-sm text-slate-600 dark:text-slate-400 font-mono leading-relaxed italic">${esc(r.insert_after || '')}</div></div>
-                    <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
-                        <div class="text-sm text-slate-900 dark:text-white font-mono leading-relaxed">${esc(r.proposed || '')}</div></div>
+ <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
+ ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-xs font-black text-cyan-500 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
+ <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
+ <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
+ <div class="text-sm text-slate-600 font-mono leading-relaxed italic">${esc(r.insert_after || '')}</div></div>
+ <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
+ <div class="text-sm text-slate-900 font-mono leading-relaxed">${esc(r.proposed || '')}</div></div>
                 </div>
             </div>` : `
-            <div class="rounded-2xl border border-slate-100 dark:border-slate-800 overflow-hidden mb-4">
-                ${r.section ? `<div class="px-5 py-2 bg-slate-50 dark:bg-slate-800/50 text-xs font-black text-slate-400 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
-                <div class="grid grid-cols-2 divide-x divide-slate-100 dark:divide-slate-800">
-                    <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
-                        <div class="text-sm text-slate-600 dark:text-slate-400 font-mono leading-relaxed">${esc(r.original || '')}</div></div>
-                    <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
-                        <div class="text-sm text-slate-900 dark:text-white font-mono leading-relaxed">${esc(r.proposed || '')}</div></div>
+ <div class="rounded-2xl border border-slate-100 overflow-hidden mb-4">
+ ${r.section ? `<div class="px-5 py-2 bg-slate-50 text-xs font-black text-slate-400 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
+ <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 ">
+ <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
+ <div class="text-sm text-slate-600 font-mono leading-relaxed">${esc(r.original || '')}</div></div>
+ <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
+ <div class="text-sm text-slate-900 font-mono leading-relaxed">${esc(r.proposed || '')}</div></div>
                 </div>
             </div>`).join('');
         };
 
         // Full view — identical structure to the proposal detail
         const fullSections = [];
-        if (s.abstract)   fullSections.push(`<h2 class="text-xl font-black text-slate-900 dark:text-white mt-2 mb-3">${isCIS ? 'Summary' : 'Summary'}</h2><div class="prose dark:prose-invert max-w-none text-sm">${renderMd(s.abstract)}</div>`);
-        if (s.motivation) fullSections.push(`<h2 class="text-xl font-black text-slate-900 dark:text-white mt-2 mb-3">${isCIS ? 'Problem' : 'Why is this change needed?'}</h2><div class="prose dark:prose-invert max-w-none text-sm">${renderMd(s.motivation)}</div>`);
-        if (s.analysis)   fullSections.push(`<h2 class="text-xl font-black text-slate-900 dark:text-white mt-2 mb-3">${isCIS ? 'Context' : 'Analysis &amp; Test'}</h2><div class="prose dark:prose-invert max-w-none text-sm">${renderMd(s.analysis)}</div>`);
-        if (s.impact)     fullSections.push(`<h2 class="text-xl font-black text-slate-900 dark:text-white mt-2 mb-3">Impact</h2><div class="prose dark:prose-invert max-w-none text-sm">${renderMd(s.impact)}</div>`);
-        if (s.revisions?.length) fullSections.push(`<h2 class="text-xl font-black text-slate-900 dark:text-white mt-2 mb-3">Proposed Revisions</h2>${renderRevisions(s.revisions)}`);
-        if (s.exhibits)   fullSections.push(`<h2 class="text-xl font-black text-slate-900 dark:text-white mt-2 mb-3">Links &amp; Files</h2><div class="prose dark:prose-invert max-w-none text-sm">${renderMd(s.exhibits)}</div>`);
-        const fullContent = `<h1 class="text-2xl font-black tracking-tight text-slate-900 dark:text-white mb-6">${esc(v.title)}</h1>` + fullSections.join('<hr class="border-slate-100 dark:border-slate-800 my-4">');
+ if (s.abstract) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">${isCIS ? 'Summary' : 'Summary'}</h2><div class="prose max-w-none text-sm">${renderMd(s.abstract)}</div>`);
+ if (s.motivation) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">${isCIS ? 'Problem' : 'Why is this change needed?'}</h2><div class="prose max-w-none text-sm">${renderMd(s.motivation)}</div>`);
+ if (s.analysis) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">${isCIS ? 'Context' : 'Analysis &amp; Test'}</h2><div class="prose max-w-none text-sm">${renderMd(s.analysis)}</div>`);
+ if (s.impact) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">Impact</h2><div class="prose max-w-none text-sm">${renderMd(s.impact)}</div>`);
+ if (s.revisions?.length) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">Proposed Revisions</h2>${renderRevisions(s.revisions)}`);
+ if (s.exhibits) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">Links &amp; Files</h2><div class="prose max-w-none text-sm">${renderMd(s.exhibits)}</div>`);
+ const fullContent = `<h1 class="text-2xl font-black tracking-tight text-slate-900 mb-6">${esc(v.title)}</h1>` + fullSections.join('<hr class="border-slate-100 my-4">');
 
         // Diff view — field by field word diff
         const DIFF_FIELDS = [
@@ -679,14 +672,14 @@ window.openVersionModal = async (number, version) => {
             const changed = (f.cur || '') !== (f.old || '');
             const diffHtml = prev ? versionWordDiff(f.old || '', f.cur || '') : esc(f.cur || '');
             return `
-            <div class="${!changed ? 'opacity-40' : ''}">
-                <div class="flex items-center gap-2 mb-2">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${esc(f.label)}</p>
-                    ${changed ? `<span class="text-[8px] font-black uppercase tracking-widest text-blue-500 bg-blue-50 dark:bg-blue-900/20 px-2 py-0.5 rounded-full">Changed</span>` : `<span class="text-[8px] text-slate-300 dark:text-slate-600 font-bold">Unchanged</span>`}
+ <div class="${!changed ? 'opacity-40' : ''}">
+ <div class="flex items-center gap-2 mb-2">
+ <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${esc(f.label)}</p>
+ ${changed ? `<span class="text-[8px] font-black uppercase tracking-widest text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Changed</span>` : `<span class="text-[8px] text-slate-300 font-bold">Unchanged</span>`}
                 </div>
-                <div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 dark:bg-slate-950/60 rounded-2xl p-4 border border-slate-100 dark:border-slate-800">${diffHtml}</div>
+ <div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100 ">${diffHtml}</div>
             </div>`;
-        }).join('<hr class="border-slate-100 dark:border-slate-800 my-2">');
+ }).join('<hr class="border-slate-100 my-2">');
 
         const hasPrev = !!prev;
 
@@ -694,43 +687,43 @@ window.openVersionModal = async (number, version) => {
         div.innerHTML = `
         <div id="version-modal-backdrop"
              onclick="if(event.target===this) document.getElementById('version-modal-backdrop').remove()"
-             class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
+ class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
 
                 <!-- Header -->
-                <div class="flex items-start justify-between p-8 border-b border-slate-100 dark:border-slate-800 flex-shrink-0">
+ <div class="flex items-start justify-between p-8 border-b border-slate-100 flex-shrink-0">
                     <div>
-                        <div class="flex items-center gap-3 mb-1">
-                            <span class="px-3 py-1 rounded-full bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 text-[10px] font-black uppercase tracking-widest">V${v.version}</span>
-                            <span class="text-[10px] text-slate-400 font-bold">${when}</span>
-                            <span class="text-[10px] text-slate-400">· ${esc(v.created_by_name || v.created_by)}</span>
+ <div class="flex items-center gap-3 mb-1">
+ <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest">V${v.version}</span>
+ <span class="text-[10px] text-slate-400 font-bold">${when}</span>
+ <span class="text-[10px] text-slate-400">· ${esc(v.created_by_name || v.created_by)}</span>
                         </div>
-                        <p class="text-sm font-black text-slate-900 dark:text-white mt-1">${esc(v.title)}</p>
-                        <p class="text-[10px] text-slate-400 mt-0.5 italic">${esc(v.change_summary || '')}</p>
+ <p class="text-sm font-black text-slate-900 mt-1">${esc(v.title)}</p>
+ <p class="text-[10px] text-slate-400 mt-0.5 italic">${esc(v.change_summary || '')}</p>
                     </div>
                     <button onclick="document.getElementById('version-modal-backdrop').remove()"
-                        class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-all ml-4">
-                        <i data-lucide="x" class="w-4 h-4"></i>
+ class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-all ml-4">
+ <i data-lucide="x" class="w-4 h-4"></i>
                     </button>
                 </div>
 
                 <!-- Tabs -->
-                <div class="flex gap-1 px-8 pt-4 flex-shrink-0">
+ <div class="flex gap-1 px-8 pt-4 flex-shrink-0">
                     <button id="ver-tab-full" onclick="window._verTab('full')"
-                        class="px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600 text-white">
+ class="px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600 text-white">
                         Full View
                     </button>
                     ${hasPrev ? `
                     <button id="ver-tab-diff" onclick="window._verTab('diff')"
-                        class="px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800">
+ class="px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-500 hover:bg-slate-100 ">
                         Changes vs V${v.version - 1}
                     </button>` : ''}
                 </div>
 
                 <!-- Content -->
-                <div class="overflow-y-auto p-8 space-y-6 flex-1">
-                    <div id="ver-panel-full" class="space-y-6">${fullContent}</div>
-                    <div id="ver-panel-diff" class="space-y-4 hidden">${diffFields}</div>
+ <div class="overflow-y-auto p-8 space-y-6 flex-1">
+ <div id="ver-panel-full" class="space-y-6">${fullContent}</div>
+ <div id="ver-panel-diff" class="space-y-4 hidden">${diffFields}</div>
                 </div>
             </div>
         </div>`;
@@ -740,9 +733,9 @@ window.openVersionModal = async (number, version) => {
         window._verTab = (tab) => {
             document.getElementById('ver-panel-full').classList.toggle('hidden', tab !== 'full');
             document.getElementById('ver-panel-diff')?.classList.toggle('hidden', tab !== 'diff');
-            document.getElementById('ver-tab-full').className = `px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'full' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`;
+            document.getElementById('ver-tab-full').className = `px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'full' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 '}`;
             const diffBtn = document.getElementById('ver-tab-diff');
-            if (diffBtn) diffBtn.className = `px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'diff' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800'}`;
+            if (diffBtn) diffBtn.className = `px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'diff' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 '}`;
         };
     } catch (e) {
         alert(e.message);
@@ -775,41 +768,41 @@ window.openSuggestModal = (field) => {
     div.innerHTML = `
     <div id="suggest-modal-backdrop"
          onclick="if(event.target===this) document.getElementById('suggest-modal-backdrop').remove()"
-         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-2xl p-8">
-            <div class="flex items-center justify-between mb-6">
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-2xl p-6 sm:p-8">
+ <div class="flex items-center justify-between mb-6">
                 <div>
-                    <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Suggest Change</p>
-                    <h2 class="text-xl font-black text-slate-900 dark:text-white">${label}</h2>
+ <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Suggest Change</p>
+ <h2 class="text-xl font-black text-slate-900 ">${label}</h2>
                 </div>
                 <button onclick="document.getElementById('suggest-modal-backdrop').remove()"
-                    class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-all">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+ class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-all">
+ <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
             ${current ? `
-            <div class="mb-4">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Current</p>
-                <div class="bg-slate-50 dark:bg-slate-800 rounded-2xl p-4 text-sm text-slate-500 dark:text-slate-400 max-h-32 overflow-y-auto font-mono whitespace-pre-wrap">${escHtml(current)}</div>
+ <div class="mb-4">
+ <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Current</p>
+ <div class="bg-slate-50 rounded-2xl p-4 text-sm text-slate-500 max-h-32 overflow-y-auto font-mono whitespace-pre-wrap">${escHtml(current)}</div>
             </div>` : ''}
-            <div class="mb-4">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Suggested Value</p>
+ <div class="mb-4">
+ <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Suggested Value</p>
                 <textarea id="suggest-value" rows="6" placeholder="Enter your suggested text…"
-                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:border-blue-500 outline-none resize-none transition-all">${escHtml(current)}</textarea>
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none resize-none transition-all">${escHtml(current)}</textarea>
             </div>
-            <div class="mb-6">
-                <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Reason <span class="text-slate-300">(optional)</span></p>
+ <div class="mb-6">
+ <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Reason <span class="text-slate-300">(optional)</span></p>
                 <input id="suggest-reason" type="text" placeholder="Why are you suggesting this change?"
-                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-white text-sm focus:border-blue-500 outline-none transition-all">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none transition-all">
             </div>
-            <p id="suggest-error" class="text-red-500 text-xs font-bold mb-3 hidden"></p>
-            <div class="flex gap-3">
+ <p id="suggest-error" class="text-red-500 text-xs font-bold mb-3 hidden"></p>
+ <div class="flex gap-3">
                 <button onclick="window.submitSuggestion('${field}')"
-                    class="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
+ class="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
                     Submit Suggestion
                 </button>
                 <button onclick="document.getElementById('suggest-modal-backdrop').remove()"
-                    class="px-6 py-3 rounded-2xl text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-800 font-black transition-colors">
+ class="px-6 py-3 rounded-2xl text-slate-500 hover:bg-slate-100 font-black transition-colors">
                     Cancel
                 </button>
             </div>
@@ -1025,6 +1018,49 @@ window.editorCancelWithdraw = async () => {
     }
 };
 
+window.adminRemoveProposal = async () => {
+    const p = state.currentProposal;
+    if (!p || !state.user?.is_admin) return;
+    if (!confirm('Remove this proposal for moderation (spam/abuse)? It will be marked withdrawn immediately, with no editor confirmation required. This is logged in the audit trail.')) return;
+    try {
+        const updated = await removeProposal(p.number);
+        await applyWithdrawResult(p.number, updated);
+    } catch (e) {
+        state.error = e.message;
+        updateUI();
+    }
+};
+
+window.adminDeleteComment = async (commentId) => {
+    const p = state.currentProposal;
+    if (!p || !state.user?.is_admin) return;
+    if (!confirm('Permanently remove this comment? This cannot be undone.')) return;
+    try {
+        await deleteComment(commentId);
+        state.comments = await fetchComments(p.number);
+        state.auditEvents = await fetchAudit(p.number);
+        updateUI();
+    } catch (e) {
+        state.error = e.message;
+        updateUI();
+    }
+};
+
+window.editorToggleFlagComment = async (commentId, currentlyFlagged) => {
+    const p = state.currentProposal;
+    if (!p || !(state.user?.is_editor || state.user?.is_admin)) return;
+    try {
+        if (currentlyFlagged) await unflagComment(commentId);
+        else await flagComment(commentId);
+        state.comments = await fetchComments(p.number);
+        state.auditEvents = await fetchAudit(p.number);
+        updateUI();
+    } catch (e) {
+        state.error = e.message;
+        updateUI();
+    }
+};
+
 window.toggleAuditTrail = () => {
     const el = document.getElementById('audit-trail-body');
     const btn = document.getElementById('audit-trail-toggle');
@@ -1066,67 +1102,67 @@ function buildPreviewHtml(title, structured, type) {
 
     const sections = [];
     if (structured.abstract)
-        sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Summary</h2><div class="prose dark:prose-invert max-w-none">${md(structured.abstract)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Summary</h2><div class="prose max-w-none">${md(structured.abstract)}</div>`);
 
     if (isCIS) {
         if (structured.motivation)
-            sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Problem</h2><div class="prose dark:prose-invert max-w-none">${md(structured.motivation)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Problem</h2><div class="prose max-w-none">${md(structured.motivation)}</div>`);
         if (structured.analysis)
-            sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Context</h2><div class="prose dark:prose-invert max-w-none">${md(structured.analysis)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Context</h2><div class="prose max-w-none">${md(structured.analysis)}</div>`);
         if (structured.impact)
-            sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Impact</h2><div class="prose dark:prose-invert max-w-none">${md(structured.impact)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Impact</h2><div class="prose max-w-none">${md(structured.impact)}</div>`);
     } else {
         if (structured.motivation)
-            sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Why is this change needed?</h2><div class="prose dark:prose-invert max-w-none">${md(structured.motivation)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Why is this change needed?</h2><div class="prose max-w-none">${md(structured.motivation)}</div>`);
         if (structured.analysis)
-            sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Analysis &amp; Test</h2><div class="prose dark:prose-invert max-w-none">${md(structured.analysis)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Analysis &amp; Test</h2><div class="prose max-w-none">${md(structured.analysis)}</div>`);
     }
 
     if (structured.revisions?.length) {
         const rows = structured.revisions.filter(r => r.original || r.insert_after || r.proposed).map(r =>
             r.type === 'addition' ? `
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div class="bg-cyan-50 dark:bg-cyan-900/10 border border-cyan-200 dark:border-cyan-800/30 rounded-2xl p-5">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After — ${esc(r.section || '')}</p>
-                    <p class="text-sm text-slate-600 dark:text-slate-400 italic leading-relaxed">${esc(r.insert_after)}</p>
+ <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+ <div class="bg-cyan-50 border border-cyan-200 rounded-2xl p-5">
+ <p class="text-[10px] font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After — ${esc(r.section || '')}</p>
+ <p class="text-sm text-slate-600 italic leading-relaxed">${esc(r.insert_after)}</p>
                 </div>
-                <div class="bg-cyan-50 dark:bg-cyan-900/10 border border-cyan-200 dark:border-cyan-800/30 rounded-2xl p-5">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</p>
-                    <div class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed prose dark:prose-invert max-w-none">${md(r.proposed)}</div>
+ <div class="bg-cyan-50 border border-cyan-200 rounded-2xl p-5">
+ <p class="text-[10px] font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</p>
+ <div class="text-sm text-slate-700 leading-relaxed prose max-w-none">${md(r.proposed)}</div>
                 </div>
             </div>` : `
-            <div class="grid grid-cols-2 gap-4 mb-4">
-                <div class="bg-red-50 dark:bg-red-900/10 border border-red-200 dark:border-red-800/30 rounded-2xl p-5">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Original — ${esc(r.section || '')}</p>
-                    <p class="text-sm text-slate-600 dark:text-slate-400 italic leading-relaxed">${esc(r.original)}</p>
+ <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
+ <div class="bg-red-50 border border-red-200 rounded-2xl p-5">
+ <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Original — ${esc(r.section || '')}</p>
+ <p class="text-sm text-slate-600 italic leading-relaxed">${esc(r.original)}</p>
                 </div>
-                <div class="bg-green-50 dark:bg-green-900/10 border border-green-200 dark:border-green-800/30 rounded-2xl p-5">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2">Proposed</p>
-                    <div class="text-sm text-slate-700 dark:text-slate-300 leading-relaxed prose dark:prose-invert max-w-none">${md(r.proposed)}</div>
+ <div class="bg-green-50 border border-green-200 rounded-2xl p-5">
+ <p class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2">Proposed</p>
+ <div class="text-sm text-slate-700 leading-relaxed prose max-w-none">${md(r.proposed)}</div>
                 </div>
             </div>`).join('');
-        sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Structured Revisions</h2>${rows}`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Structured Revisions</h2>${rows}`);
     }
 
     if (structured.exhibits)
-        sections.push(`<h2 class="text-2xl font-black text-slate-900 dark:text-white mt-10 mb-4">Links &amp; Files</h2><div class="prose dark:prose-invert max-w-none">${md(structured.exhibits)}</div>`);
+ sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Links &amp; Files</h2><div class="prose max-w-none">${md(structured.exhibits)}</div>`);
 
     return `
-        <div class="flex items-center justify-between mb-8 p-5 bg-amber-50 dark:bg-amber-900/20 border border-amber-200 dark:border-amber-700/40 rounded-2xl sticky top-4 z-10 backdrop-blur-sm">
-            <div class="flex items-center gap-3">
-                <i data-lucide="eye" class="w-4 h-4 text-amber-600"></i>
-                <span class="text-xs font-black uppercase tracking-widest text-amber-700 dark:text-amber-400">Preview — Not Yet Submitted</span>
+ <div class="flex items-center justify-between mb-8 p-5 bg-amber-50 border border-amber-200 rounded-2xl sticky top-4 z-10 backdrop-blur-sm">
+ <div class="flex items-center gap-3">
+ <i data-lucide="eye" class="w-4 h-4 text-amber-600"></i>
+ <span class="text-xs font-black uppercase tracking-widest text-amber-700 ">Preview — Not Yet Submitted</span>
             </div>
-            <button onclick="window.closePreview()" class="flex items-center gap-2 text-sm font-black text-slate-600 dark:text-slate-300 hover:text-slate-900 dark:hover:text-white transition-colors px-4 py-2 rounded-xl hover:bg-white/60 dark:hover:bg-slate-800/60">
-                <i data-lucide="x" class="w-4 h-4"></i> Close
+ <button onclick="window.closePreview()" class="flex items-center gap-2 text-sm font-black text-slate-600 hover:text-slate-900 transition-colors px-4 py-2 rounded-xl hover:bg-white/60 ">
+ <i data-lucide="x" class="w-4 h-4"></i> Close
             </button>
         </div>
-        <div class="bg-white dark:bg-slate-900 p-10 sm:p-20 rounded-[4rem] border border-slate-100 dark:border-slate-800 shadow-sm">
-            <div class="flex flex-wrap gap-3 mb-8">
-                <span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">${esc(type)}</span>
-                ${structured.category ? `<span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-950">${esc(structured.category)}</span>` : ''}
+ <div class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm">
+ <div class="flex flex-wrap gap-3 mb-8">
+ <span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-slate-50 ">${esc(type)}</span>
+ ${structured.category ? `<span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-slate-50 ">${esc(structured.category)}</span>` : ''}
             </div>
-            <h1 class="text-5xl font-black tracking-tight text-slate-900 dark:text-white mb-8">${esc(title || 'Untitled')}</h1>
+ <h1 class="text-5xl font-black tracking-tight text-slate-900 mb-8">${esc(title || 'Untitled')}</h1>
             ${sections.join('\n')}
         </div>`;
 }
@@ -1178,8 +1214,8 @@ function showPreviewOverlay(title, structured, type) {
 
     const overlay = document.createElement('div');
     overlay.id = 'preview-overlay';
-    overlay.className = 'fixed inset-0 z-[200] bg-slate-50 dark:bg-slate-950 overflow-y-auto';
-    overlay.innerHTML = `<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${buildPreviewHtml(title, structured, type)}</div>`;
+    overlay.className = 'fixed inset-0 z-[200] bg-slate-50 overflow-y-auto';
+ overlay.innerHTML = `<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${buildPreviewHtml(title, structured, type)}</div>`;
     document.body.appendChild(overlay);
     lucide.createIcons();
     overlay.scrollTop = 0;
@@ -1299,10 +1335,10 @@ function showWalletModal() {
     window._walletModalSelect = async (walletId) => {
         const savedName = localStorage.getItem('cap_display_name') || null;
         const body = document.getElementById('wallet-modal-body');
-        if (body) body.innerHTML = `<div class="py-8 text-center"><div class="loading-spinner mx-auto mb-4"></div><p class="text-slate-500 font-bold">Connecting wallet…</p></div>`;
+ if (body) body.innerHTML = `<div class="py-8 text-center"><div class="loading-spinner mx-auto mb-4"></div><p class="text-slate-500 font-bold">Connecting wallet…</p></div>`;
         try {
             const result = await connectAndAuth(walletId, savedName);
-            state.user = { stake_address: result.stake_address, display_name: result.display_name, email: result.email, notification_prefs: result.notification_prefs || {}, is_editor: result.is_editor, is_admin: result.is_admin };
+            state.user = { stake_address: result.stake_address, display_name: result.display_name, is_editor: result.is_editor, is_admin: result.is_admin };
             document.getElementById('wallet-modal-backdrop')?.remove();
 
             // First-time user: no display name in the DB yet — ask for one after signing
@@ -1312,6 +1348,7 @@ function showWalletModal() {
                 updateUI();
             }
         } catch (e) {
+            console.error('Wallet connection failed:', e);
             document.getElementById('wallet-modal-backdrop')?.remove();
             state.error = `Wallet connection failed: ${e.message}`;
             updateUI();
@@ -1322,19 +1359,19 @@ function showWalletModal() {
         const div = document.createElement('div');
         div.innerHTML = `
         <div id="set-name-backdrop"
-             class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-            <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-sm p-8">
-                <h2 class="text-xl font-black text-slate-900 dark:text-white mb-2">Choose a display name</h2>
-                <p class="text-sm text-slate-500 dark:text-slate-400 mb-6">This is shown on your proposals and comments. You can skip and use your stake address.</p>
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-sm p-6 sm:p-8">
+ <h2 class="text-xl font-black text-slate-900 mb-2">Choose a display name</h2>
+ <p class="text-sm text-slate-500 mb-6">This is shown on your proposals and comments. You can skip and use your stake address.</p>
                 <input id="set-name-input" type="text" placeholder="Display name (optional)" maxlength="40"
-                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-4 font-medium"
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-4 font-medium"
                     onkeydown="if(event.key==='Enter') window._submitSetName()">
                 <button onclick="window._submitSetName()"
-                    class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors mb-2">
+ class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors mb-2">
                     Save name
                 </button>
                 <button onclick="window._skipSetName()"
-                    class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-800 transition-all">
+ class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
                     Skip for now
                 </button>
             </div>
@@ -1351,7 +1388,7 @@ function showWalletModal() {
                 const result = await setDisplayName(name);
                 localStorage.setItem('cap_token', result.token);
                 localStorage.setItem('cap_display_name', result.display_name || '');
-                state.user = { stake_address: result.stake_address, display_name: result.display_name, email: result.email, notification_prefs: result.notification_prefs || {}, is_editor: result.is_editor, is_admin: result.is_admin };
+                state.user = { stake_address: result.stake_address, display_name: result.display_name, is_editor: result.is_editor, is_admin: result.is_admin };
             } catch (e) {
                 // Non-fatal — user is already signed in, just without a name
             }
@@ -1386,63 +1423,33 @@ window.openProfile = () => {
     if (existing) existing.remove();
 
     const current = state.user?.display_name || '';
-    const currentEmail = state.user?.email || '';
     const addr = state.user?.stake_address || '';
-    const prefs = state.user?.notification_prefs || {};
-    const isEditor = state.user?.is_editor;
-    const isAdmin = state.user?.is_admin;
-
-    const chk = (key, label) => {
-        const checked = prefs[key] !== false ? 'checked' : '';
-        return `<label class="flex items-center gap-3 cursor-pointer py-2">
-            <input type="checkbox" id="pref-${key}" ${checked}
-                class="w-4 h-4 rounded accent-blue-600 cursor-pointer flex-shrink-0">
-            <span class="text-sm text-slate-700 dark:text-slate-300">${label}</span>
-        </label>`;
-    };
 
     const div = document.createElement('div');
     div.innerHTML = `
     <div id="profile-modal-backdrop"
          onclick="if(event.target===this) document.getElementById('profile-modal-backdrop').remove()"
-         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-sm p-8 max-h-[90vh] overflow-y-auto">
-            <div class="flex items-center justify-between mb-6">
-                <h2 class="text-xl font-black text-slate-900 dark:text-white">Profile</h2>
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-sm p-6 sm:p-8 max-h-[90vh] overflow-y-auto">
+ <div class="flex items-center justify-between mb-6">
+ <h2 class="text-xl font-black text-slate-900 ">Profile</h2>
                 <button onclick="document.getElementById('profile-modal-backdrop').remove()"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+ class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
 
-            <p class="text-xs font-mono text-slate-400 dark:text-slate-500 bg-slate-50 dark:bg-slate-800 rounded-2xl px-4 py-3 mb-6 break-all">${addr}</p>
+ <p class="text-xs font-mono text-slate-400 bg-slate-50 rounded-2xl px-4 py-3 mb-6 break-all">${addr}</p>
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Display name</label>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Display name</label>
             <input id="profile-name-input" type="text" value="${current}" placeholder="Your display name" maxlength="40"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-4 font-medium"
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-6 font-medium"
                 onkeydown="if(event.key==='Enter') window._saveProfile()">
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
-                Email <span class="text-slate-400 font-normal normal-case tracking-normal">— for notifications (optional)</span>
-            </label>
-            <input id="profile-email-input" type="email" value="${currentEmail}" placeholder="you@example.com"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-6 font-medium"
-                onkeydown="if(event.key==='Enter') window._saveProfile()">
-
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Email notifications</label>
-            <div class="bg-slate-50 dark:bg-slate-800 rounded-2xl px-4 py-2 mb-6 divide-y divide-slate-100 dark:divide-slate-700">
-                ${chk('comment_on_my_proposal', 'Comment on my proposal')}
-                ${chk('comment_in_thread', 'Reply in a discussion I joined')}
-                ${chk('suggestion_received', 'Edit suggestion on my proposal')}
-                ${chk('suggestion_resolved', 'My suggestion was approved/rejected')}
-                ${chk('lifecycle_change', 'Status change on proposals I follow')}
-                ${(isEditor || isAdmin) ? chk('new_proposal', 'New proposal submitted') : ''}
-            </div>
-
-            <div id="profile-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
+ <div id="profile-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
 
             <button onclick="window._saveProfile()"
-                class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
+ class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
                 Save changes
             </button>
         </div>
@@ -1454,29 +1461,22 @@ window.openProfile = () => {
 
 window._saveProfile = async () => {
     const input = document.getElementById('profile-name-input');
-    const emailInput = document.getElementById('profile-email-input');
     const errEl = document.getElementById('profile-error');
     const name = input?.value.trim() || '';
-    const email = emailInput?.value.trim() || null;
 
     if (!name) {
         if (errEl) { errEl.textContent = 'Display name cannot be empty.'; errEl.classList.remove('hidden'); }
         return;
     }
 
-    const prefKeys = ['comment_on_my_proposal', 'comment_in_thread', 'suggestion_received', 'suggestion_resolved', 'lifecycle_change', 'new_proposal'];
-    const notification_prefs = Object.fromEntries(
-        prefKeys.map(k => [k, document.getElementById(`pref-${k}`)?.checked ?? true])
-    );
-
     const btn = document.querySelector('#profile-modal-backdrop button.bg-blue-600');
     if (btn) btn.textContent = 'Saving…';
 
     try {
-        const result = await updateProfile(name, email, notification_prefs);
+        const result = await updateProfile(name);
         localStorage.setItem('cap_token', result.token);
         localStorage.setItem('cap_display_name', result.display_name || '');
-        state.user = { stake_address: result.stake_address, display_name: result.display_name, email: result.email, notification_prefs: result.notification_prefs, is_editor: result.is_editor, is_admin: result.is_admin };
+        state.user = { stake_address: result.stake_address, display_name: result.display_name, is_editor: result.is_editor, is_admin: result.is_admin };
         document.getElementById('profile-modal-backdrop')?.remove();
         updateUI();
     } catch (e) {
@@ -1561,7 +1561,11 @@ window.viewProposalDiff = async (proposalNumber) => {
     state.constitutionCompareVersion = null;
     state.view = 'constitution';
     state.loading = { ...state.loading, constitution: true };
-    window.location.hash = '#/constitution';
+    // Update the URL without firing 'hashchange' — that event triggers
+    // handleRouting() -> loadConstitution(), which would race this function's
+    // own load below and randomly clobber one side of the diff (the visible
+    // symptom: one side renders empty until you toggle diff mode off and on).
+    history.replaceState(null, '', '#/constitution');
     updateUI();
     try {
         const raw = await fetchConstitutionVersions();
@@ -1588,7 +1592,9 @@ window.openConstitutionForWizard = () => {
     // save wizard state and go to constitution; constitution's commitSelection
     // will call addTextToCAP / addTextToCIS which navigate back
     state.view = 'constitution';
-    window.location.hash = '#/constitution';
+    // Avoid 'hashchange' firing a second, redundant loadConstitution() via
+    // handleRouting() — we already call it explicitly below.
+    history.replaceState(null, '', '#/constitution');
     loadConstitution();
 };
 
@@ -1670,20 +1676,22 @@ window.openGuide = async (slug) => {
     window.location.hash = `#/learn/${slug}`;
     updateUI();
 
-    // Try API first (editor-saved version), fall back to static file
+    // Try API first (editor-saved version), fall back to static file if the API has no content yet
     let markdown = null;
     try {
         const data = await fetchGuide(slug);
-        markdown = data.content;
+        markdown = data.content || null;
         state.guideLastEditor = data.updated_by_name || null;
         state.guideLastUpdated = data.updated_at || null;
     } catch {
+        state.guideLastEditor = null;
+        state.guideLastUpdated = null;
+    }
+    if (!markdown) {
         try {
             const res = await fetch(`docs/guides/${slug}.md`);
             if (res.ok) markdown = await res.text();
         } catch {}
-        state.guideLastEditor = null;
-        state.guideLastUpdated = null;
     }
 
     if (markdown && typeof marked !== 'undefined') {
@@ -1726,45 +1734,45 @@ window.openNewGuideModal = () => {
     div.innerHTML = `
     <div id="new-guide-modal"
          onclick="if(event.target===this) document.getElementById('new-guide-modal').remove()"
-         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-md p-8">
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-blue-100 dark:bg-blue-900/30 rounded-2xl flex items-center justify-center">
-                        <i data-lucide="plus" class="w-5 h-5 text-blue-600"></i>
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-md p-6 sm:p-8">
+ <div class="flex items-center justify-between mb-6">
+ <div class="flex items-center gap-3">
+ <div class="w-10 h-10 bg-blue-100 rounded-2xl flex items-center justify-center">
+ <i data-lucide="plus" class="w-5 h-5 text-blue-600"></i>
                     </div>
-                    <h2 class="text-xl font-black text-slate-900 dark:text-white">New Guide</h2>
+ <h2 class="text-xl font-black text-slate-900 ">New Guide</h2>
                 </div>
                 <button onclick="document.getElementById('new-guide-modal').remove()"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+ class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
             <input id="ng-title" type="text" placeholder="Guide title" maxlength="120"
                 oninput="window._ngSlugFromTitle()"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 mb-4 font-medium">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 mb-4 font-medium">
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Slug <span class="font-normal normal-case tracking-normal text-slate-400">— URL identifier</span></label>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Slug <span class="font-normal normal-case tracking-normal text-slate-400">— URL identifier</span></label>
             <input id="ng-slug" type="text" placeholder="my-guide-slug" maxlength="80"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 mb-4 font-mono text-sm">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 mb-4 font-mono text-sm">
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Section</label>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Section</label>
             <select id="ng-section" onchange="window._ngToggleNewSection()"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 mb-3 font-medium">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 mb-3 font-medium">
                 ${sectionOptions}
                 <option value="__new__">+ New section…</option>
             </select>
-            <div id="ng-new-section-wrap" class="hidden mb-4">
+ <div id="ng-new-section-wrap" class="hidden mb-4">
                 <input id="ng-new-section-label" type="text" placeholder="Section name (e.g. Getting Started)"
-                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-blue-400 font-medium">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 font-medium">
             </div>
 
-            <div id="ng-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
+ <div id="ng-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
 
             <button onclick="window._createNewGuide()"
-                class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
+ class="w-full py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
                 Create &amp; Edit
             </button>
         </div>
@@ -1929,48 +1937,48 @@ window.openBugReportModal = () => {
     div.innerHTML = `
     <div id="bug-report-modal"
          onclick="if(event.target===this) document.getElementById('bug-report-modal').remove()"
-         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl w-full max-w-md p-8">
-            <div class="flex items-center justify-between mb-6">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-red-100 dark:bg-red-900/30 rounded-2xl flex items-center justify-center">
-                        <i data-lucide="bug" class="w-5 h-5 text-red-500"></i>
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-md p-6 sm:p-8">
+ <div class="flex items-center justify-between mb-6">
+ <div class="flex items-center gap-3">
+ <div class="w-10 h-10 bg-red-100 rounded-2xl flex items-center justify-center">
+ <i data-lucide="bug" class="w-5 h-5 text-red-500"></i>
                     </div>
-                    <h2 class="text-xl font-black text-slate-900 dark:text-white">Report a Bug</h2>
+ <h2 class="text-xl font-black text-slate-900 ">Report a Bug</h2>
                 </div>
                 <button onclick="document.getElementById('bug-report-modal').remove()"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+ class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
             <input id="bug-title" type="text" placeholder="Short summary of the issue" maxlength="120"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium">
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
             <textarea id="bug-description" rows="4" placeholder="What happened? What did you expect? Steps to reproduce…"
-                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium resize-none"></textarea>
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium resize-none"></textarea>
 
-            <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
-                Screenshot <span class="text-slate-400 font-normal normal-case tracking-normal">— optional</span>
+ <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+ Screenshot <span class="text-slate-400 font-normal normal-case tracking-normal">— optional</span>
             </label>
-            <label class="flex flex-col items-center justify-center w-full h-24 rounded-2xl border-2 border-dashed border-slate-200 dark:border-slate-700 hover:border-red-300 cursor-pointer transition-colors mb-1" id="bug-screenshot-label">
-                <i data-lucide="image-plus" class="w-6 h-6 text-slate-400 mb-1"></i>
-                <span class="text-xs text-slate-400">Click to attach or paste an image</span>
-                <input id="bug-screenshot-input" type="file" accept="image/*" class="hidden" onchange="window._bugScreenshotPicked(this)">
+ <label class="flex flex-col items-center justify-center w-full h-24 rounded-2xl border-2 border-dashed border-slate-200 hover:border-red-300 cursor-pointer transition-colors mb-1" id="bug-screenshot-label">
+ <i data-lucide="image-plus" class="w-6 h-6 text-slate-400 mb-1"></i>
+ <span class="text-xs text-slate-400">Click to attach or paste an image</span>
+ <input id="bug-screenshot-input" type="file" accept="image/*" class="hidden" onchange="window._bugScreenshotPicked(this)">
             </label>
-            <div id="bug-screenshot-preview" class="hidden mb-4 relative">
-                <img id="bug-screenshot-img" src="" class="w-full rounded-2xl border border-slate-200 dark:border-slate-700 max-h-40 object-contain">
-                <button onclick="window._bugScreenshotClear()" class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
-                    <i data-lucide="x" class="w-3 h-3"></i>
+ <div id="bug-screenshot-preview" class="hidden mb-4 relative">
+ <img id="bug-screenshot-img" src="" class="w-full rounded-2xl border border-slate-200 max-h-40 object-contain">
+ <button onclick="window._bugScreenshotClear()" class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
+ <i data-lucide="x" class="w-3 h-3"></i>
                 </button>
             </div>
 
-            <div id="bug-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
+ <div id="bug-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
 
             <button onclick="window._submitBugReport()"
-                class="w-full py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors">
+ class="w-full py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors">
                 Submit Report
             </button>
         </div>
@@ -2114,75 +2122,75 @@ window.openGuideEditor = () => {
     const currentContent = state.guideRawContent || '';
 
     const toolbarHtml = _guideToolbar.map(btn => {
-        if (btn.label === '|') return `<span class="w-px h-5 bg-slate-200 dark:bg-slate-700 mx-1 shrink-0"></span>`;
+ if (btn.label === '|') return `<span class="w-px h-5 bg-slate-200 mx-1 shrink-0"></span>`;
         return `<button type="button" title="${btn.title}" onclick="window._guideTbAction('${btn.title}')"
-            class="px-2 py-1 rounded-lg text-xs font-black text-slate-600 dark:text-slate-300 hover:bg-amber-100 dark:hover:bg-amber-900/30 hover:text-amber-700 transition-colors shrink-0">${btn.label}</button>`;
+ class="px-2 py-1 rounded-lg text-xs font-black text-slate-600 hover:bg-amber-100 hover:text-amber-700 transition-colors shrink-0">${btn.label}</button>`;
     }).join('');
 
     const div = document.createElement('div');
     div.innerHTML = `
     <div id="guide-editor-modal"
-         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
-        <div class="bg-white dark:bg-slate-900 rounded-[2.5rem] border border-slate-100 dark:border-slate-800 shadow-2xl flex flex-col" style="width:min(96vw,1100px);max-height:92vh">
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl flex flex-col" style="width:min(96vw,1100px);max-height:92vh">
 
             <!-- Header -->
-            <div class="flex items-center justify-between px-8 pt-8 pb-4 shrink-0">
-                <div class="flex items-center gap-3">
-                    <div class="w-10 h-10 bg-amber-100 dark:bg-amber-900/30 rounded-2xl flex items-center justify-center">
-                        <i data-lucide="pencil" class="w-5 h-5 text-amber-600"></i>
+ <div class="flex items-center justify-between px-8 pt-8 pb-4 shrink-0">
+ <div class="flex items-center gap-3">
+ <div class="w-10 h-10 bg-amber-100 rounded-2xl flex items-center justify-center">
+ <i data-lucide="pencil" class="w-5 h-5 text-amber-600"></i>
                     </div>
                     <div>
-                        <h2 class="text-xl font-black text-slate-900 dark:text-white">Edit Guide</h2>
-                        <p class="text-xs text-slate-400 font-mono">${slug}</p>
+ <h2 class="text-xl font-black text-slate-900 ">Edit Guide</h2>
+ <p class="text-xs text-slate-400 font-mono">${slug}</p>
                     </div>
                 </div>
                 <button onclick="document.getElementById('guide-editor-modal').remove()"
-                        class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-800 text-slate-400 transition-colors">
-                    <i data-lucide="x" class="w-4 h-4"></i>
+ class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
                 </button>
             </div>
 
             <!-- Title -->
-            <div class="px-8 pb-3 shrink-0">
+ <div class="px-8 pb-3 shrink-0">
                 <input id="guide-editor-title" type="text" value="${defaultTitle.replace(/"/g, '&quot;')}" maxlength="120"
                     placeholder="Guide title"
-                    class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-900 text-slate-900 dark:text-white focus:outline-none focus:border-amber-400 font-bold text-lg">
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-amber-400 font-bold text-lg">
             </div>
 
             <!-- Toolbar -->
-            <div class="px-8 pb-2 shrink-0">
-                <div class="flex items-center flex-wrap gap-0.5 px-3 py-2 bg-slate-50 dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700">
+ <div class="px-8 pb-2 shrink-0">
+ <div class="flex items-center flex-wrap gap-0.5 px-3 py-2 bg-slate-50 rounded-2xl border border-slate-100 ">
                     ${toolbarHtml}
                 </div>
             </div>
 
             <!-- Split pane -->
-            <div class="px-8 flex-1 overflow-hidden grid grid-cols-2 gap-4 min-h-0 pb-2">
-                <div class="flex flex-col min-h-0">
-                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Write</p>
+ <div class="px-8 flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0 pb-2">
+ <div class="flex flex-col min-h-0">
+ <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Write</p>
                     <textarea id="guide-editor-content"
                         oninput="window._guideUpdatePreview()"
-                        class="flex-1 w-full px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-white dark:bg-slate-950 text-slate-900 dark:text-white font-mono text-sm focus:outline-none focus:border-amber-400 resize-none"
+ class="flex-1 w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 font-mono text-sm focus:outline-none focus:border-amber-400 resize-none"
                         placeholder="Start writing…">${currentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
                 </div>
-                <div class="flex flex-col min-h-0">
-                    <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Preview</p>
+ <div class="flex flex-col min-h-0">
+ <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Preview</p>
                     <div id="guide-editor-preview"
-                        class="flex-1 overflow-y-auto px-4 py-3 rounded-2xl border-2 border-slate-100 dark:border-slate-800 bg-slate-50 dark:bg-slate-950 prose dark:prose-invert max-w-none text-sm">
+ class="flex-1 overflow-y-auto px-4 py-3 rounded-2xl border-2 border-slate-100 bg-slate-50 prose max-w-none text-sm">
                     </div>
                 </div>
             </div>
 
             <!-- Footer -->
-            <div class="px-8 py-5 shrink-0">
-                <div id="guide-editor-error" class="hidden text-red-500 text-sm font-bold mb-3"></div>
-                <div class="flex gap-3">
+ <div class="px-8 py-5 shrink-0">
+ <div id="guide-editor-error" class="hidden text-red-500 text-sm font-bold mb-3"></div>
+ <div class="flex gap-3">
                     <button onclick="window._saveGuide()"
-                        class="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black transition-colors">
+ class="flex-1 py-3 rounded-2xl bg-amber-500 hover:bg-amber-600 text-white font-black transition-colors">
                         Save Guide
                     </button>
                     <button onclick="document.getElementById('guide-editor-modal').remove()"
-                        class="px-6 py-3 rounded-2xl border-2 border-slate-200 dark:border-slate-700 text-slate-500 font-black hover:border-slate-400 transition-colors">
+ class="px-6 py-3 rounded-2xl border-2 border-slate-200 text-slate-500 font-black hover:border-slate-400 transition-colors">
                         Cancel
                     </button>
                 </div>

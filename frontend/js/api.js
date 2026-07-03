@@ -42,8 +42,8 @@ export async function setDisplayName(display_name) {
     return req('POST', '/auth/set-name', { display_name }, true);
 }
 
-export async function updateProfile(display_name, email = null, notification_prefs = null) {
-    return req('PATCH', '/auth/profile', { display_name, email, notification_prefs }, true);
+export async function updateProfile(display_name) {
+    return req('PATCH', '/auth/profile', { display_name }, true);
 }
 
 // Dev-only: seed an editor without auth
@@ -93,6 +93,10 @@ export async function cancelWithdrawal(number) {
     return req('POST', `/proposals/${number}/withdraw/cancel`, {}, true);
 }
 
+export async function removeProposal(number) {
+    return req('POST', `/proposals/${number}/remove`, {}, true);
+}
+
 // ── Comments ──────────────────────────────────────────────────────────────────
 
 export async function fetchComments(number) {
@@ -105,6 +109,18 @@ export async function createComment(number, body) {
 
 export async function updateComment(id, body) {
     return req('PATCH', `/comments/${id}`, { body }, true);
+}
+
+export async function flagComment(id) {
+    return req('POST', `/comments/${id}/flag`, {}, true);
+}
+
+export async function unflagComment(id) {
+    return req('DELETE', `/comments/${id}/flag`, null, true);
+}
+
+export async function deleteComment(id) {
+    return req('DELETE', `/comments/${id}`, null, true);
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────────
@@ -157,20 +173,6 @@ export async function removeAdmin(stake_address) {
 
 export async function claimFirstAdmin() {
     return req('POST', '/admins/bootstrap', {}, true);
-}
-
-// ── Subscriptions ─────────────────────────────────────────────────────────────
-
-export async function subscribeToProposal(number, email) {
-    return req('POST', `/proposals/${number}/subscribe`, { email });
-}
-
-export async function checkSubscription(number, email) {
-    return req('GET', `/proposals/${number}/subscribe?email=${encodeURIComponent(email)}`);
-}
-
-export async function unsubscribeFromProposal(number, email) {
-    return req('DELETE', `/proposals/${number}/subscribe`, { email });
 }
 
 // ── Versions ──────────────────────────────────────────────────────────────────
