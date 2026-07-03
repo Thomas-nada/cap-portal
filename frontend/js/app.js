@@ -122,6 +122,8 @@ export function updateUI(rerender = false) {
                 <nav class="flex flex-col gap-1">
                     <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Links</p>
                     <a href="https://intersectmbo.org" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Home</a>
+                    <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/terms-of-use" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Terms of Use</a>
+                    <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/privacy-policy" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Privacy Policy</a>
                 </nav>
                 <div class="flex flex-col gap-2">
                     <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Follow us</p>
@@ -1917,8 +1919,9 @@ function showAlphaAgreement() {
                     <li>You use this tool at your own risk and should not rely on it for critical or business-critical activities.</li>
                     <li>You should not upload or store confidential, sensitive, or irreplaceable information in the tool.</li>
                     <li>Features and functionality may change or be removed at any time without notice.</li>
-                    <li>We may collect usage data and feedback to improve the product, in accordance with our Privacy Policy.</li>
+                    <li>We may collect usage data and feedback to improve the product, in accordance with our <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/privacy-policy" target="_blank" rel="noopener noreferrer" style="color:#0228aa;font-weight:600;text-decoration:underline;">Privacy Policy</a>.</li>
                 </ul>
+                <p style="margin:0 0 1.25rem;font-size:0.8125rem;color:#475569;font-family:'Poppins',sans-serif;">By continuing, you also agree to our <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/terms-of-use" target="_blank" rel="noopener noreferrer" style="color:#0228aa;font-weight:600;text-decoration:underline;">Terms of Use</a>.</p>
                 <label style="display:flex;align-items:flex-start;gap:0.625rem;cursor:pointer;margin-bottom:1.5rem;">
                     <input type="checkbox" id="alpha-checkbox" style="margin-top:2px;accent-color:#0228aa;width:16px;height:16px;flex-shrink:0;">
                     <span style="font-size:0.8125rem;color:#334155;font-family:'Poppins',sans-serif;font-weight:500;">I have read and understand that this is an alpha release, and I accept the above terms.</span>
