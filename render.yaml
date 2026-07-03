@@ -12,9 +12,10 @@ services:
     rootDir: backend
     buildCommand: pip install -r requirements.txt
     startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
-    pythonVersion: "3.11"
     plan: free
     envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
       - key: DATABASE_URL
         fromDatabase:
           name: cap-portal-db
