@@ -1,0 +1,122 @@
+[
+ {
+  "kind": "badge",
+  "key": "badge1",
+  "start": 4.0,
+  "end": 19.11
+ },
+ {
+  "kind": "caption",
+  "key": "c1a",
+  "start": 5.1,
+  "end": 12.1
+ },
+ {
+  "kind": "caption",
+  "key": "c1b",
+  "start": 12.1,
+  "end": 19.11
+ },
+ {
+  "kind": "badge",
+  "key": "badge2",
+  "start": 21.93,
+  "end": 88.24
+ },
+ {
+  "kind": "caption",
+  "key": "c2a",
+  "start": 21.93,
+  "end": 40.56
+ },
+ {
+  "kind": "caption",
+  "key": "c2b",
+  "start": 40.56,
+  "end": 50.55
+ },
+ {
+  "kind": "caption",
+  "key": "c2c",
+  "start": 53.01,
+  "end": 64.02
+ },
+ {
+  "kind": "caption",
+  "key": "c2d",
+  "start": 64.02,
+  "end": 78.95
+ },
+ {
+  "kind": "caption",
+  "key": "c2e",
+  "start": 78.95,
+  "end": 88.24
+ },
+ {
+  "kind": "badge",
+  "key": "badge3",
+  "start": 88.24,
+  "end": 154.86
+ },
+ {
+  "kind": "caption",
+  "key": "c3a",
+  "start": 88.24,
+  "end": 98.73
+ },
+ {
+  "kind": "caption",
+  "key": "c3b",
+  "start": 98.73,
+  "end": 110.46
+ },
+ {
+  "kind": "caption",
+  "key": "c3c",
+  "start": 110.46,
+  "end": 129.92
+ },
+ {
+  "kind": "caption",
+  "key": "c3d",
+  "start": 129.93,
+  "end": 137.03
+ },
+ {
+  "kind": "caption",
+  "key": "c3e",
+  "start": 137.03,
+  "end": 143.95
+ },
+ {
+  "kind": "caption",
+  "key": "c3f",
+  "start": 145.94,
+  "end": 154.86
+ },
+ {
+  "kind": "badge",
+  "key": "badge4",
+  "start": 154.86,
+  "end": 174.67
+ },
+ {
+  "kind": "caption",
+  "key": "c4a",
+  "start": 154.86,
+  "end": 161.42
+ },
+ {
+  "kind": "caption",
+  "key": "c4b",
+  "start": 161.42,
+  "end": 174.67
+ },
+ {
+  "kind": "caption",
+  "key": "c5",
+  "start": 174.67,
+  "end": 180.69
+ }
+]

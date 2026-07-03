@@ -1,4 +1,6 @@
-const WALKTHROUGH_VIDEO_URL = 'videos/walkthrough.mp4';
+import { renderCaptionedVideo } from './videoCaptions.js';
+
+const WALKTHROUGH_VIDEO_URL = 'videos/walkthrough_clean.mp4';
 
 const PROCESS_STEPS = [
     { num: 1, icon: 'wallet',         label: 'Connect Wallet',  desc: 'Sign in with any Cardano wallet — no account or password needed.', bg: 'bg-blue-500',   text: 'text-blue-500' },
@@ -85,9 +87,7 @@ export function renderDashboard(state) {
  <h2 class="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-2 mb-6">
  <i data-lucide="play-circle" class="w-4 h-4 text-purple-500"></i> Watch the Walkthrough
             </h2>
- <div class="aspect-video rounded-2xl overflow-hidden border border-slate-100 ">
- <video src="${WALKTHROUGH_VIDEO_URL}" class="w-full h-full" controls></video>
-            </div>
+            ${renderCaptionedVideo(WALKTHROUGH_VIDEO_URL)}
         </div>
 
         <!-- Content grid -->
