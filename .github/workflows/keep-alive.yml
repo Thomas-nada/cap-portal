@@ -9,4 +9,4 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Ping backend
-        run: curl -sf https://cap-portal-j8nt.onrender.com/api/health || true
+        run: curl -sf https://cap-portal-api.onrender.com/health || true
