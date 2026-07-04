@@ -9,7 +9,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchVersions, fetchVersion,
-         getMe, devSeedEditor, setDisplayName, updateProfile,
+         getMe, devSeedEditor, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
          fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
@@ -1444,10 +1444,11 @@ function showWalletModal() {
             const result = await connectAndAuth(walletId, savedName);
             document.getElementById('wallet-modal-backdrop')?.remove();
 
-            // Per-account alpha agreement: each wallet must accept the terms once.
-            if (!hasAgreedAlpha(result.stake_address)) {
+            // Per-account alpha agreement. The server is the source of truth
+            // (result.alpha_agreed); on acceptance we record it server-side.
+            if (!result.alpha_agreed) {
                 await showAlphaAgreement();
-                markAgreedAlpha(result.stake_address);
+                try { await acceptAlphaAgreement(); } catch (_) { /* recorded on next login */ }
             }
 
             state.user = { stake_address: result.stake_address, display_name: result.display_name, is_editor: result.is_editor, is_admin: result.is_admin };
@@ -1966,14 +1967,9 @@ window.kanbanToggleTagPanel = () => { state.kanbanTagPanelOpen = !state.kanbanTa
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-// Alpha agreement acceptance is tracked per stake address, so every account
-// accepts the terms once (not just the first account to use this browser).
-function hasAgreedAlpha(stake) {
-    return !!stake && localStorage.getItem('cap_alpha_agreed_' + stake) === '1';
-}
-function markAgreedAlpha(stake) {
-    if (stake) localStorage.setItem('cap_alpha_agreed_' + stake, '1');
-}
+// Alpha-agreement acceptance is recorded server-side per account (see
+// /alpha-agreement/accept); the auth responses expose `alpha_agreed` so the
+// client knows whether to show the agreement.
 
 function showAlphaAgreement() {
     return new Promise(resolve => {
@@ -2019,8 +2015,8 @@ function showAlphaAgreement() {
             btn.style.cursor = checkbox.checked ? 'pointer' : 'not-allowed';
         });
         btn.addEventListener('click', () => {
-            // Per-account flag is set by the caller (markAgreedAlpha); the modal
-            // itself just resolves once the user accepts.
+            // The caller records acceptance server-side; the modal just resolves
+            // once the user accepts.
             overlay.remove();
             resolve();
         });
@@ -2053,11 +2049,12 @@ async function init() {
     window.addEventListener('hashchange', window.handleRouting);
     await window.handleRouting();
     if (state.user) {
-        // A restored session whose account never accepted the alpha terms
-        // (e.g. connected before this was per-account) still sees it once.
-        if (!hasAgreedAlpha(state.user.stake_address)) {
+        // A restored session whose account has no server-side acceptance record
+        // still sees the agreement once (dev sessions have no such field → skip).
+        if (state.user.alpha_agreed === false) {
             await showAlphaAgreement();
-            markAgreedAlpha(state.user.stake_address);
+            try { await acceptAlphaAgreement(); } catch (_) { /* recorded on next login */ }
+            state.user.alpha_agreed = true;
         }
         refreshUnreadCount();
     }

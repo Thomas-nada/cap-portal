@@ -542,6 +542,28 @@ def test_client_ip_uses_last_forwarded_for():
     assert client_ip(_Req(None, "198.51.100.5")) == "198.51.100.5"
 
 
+# ── Alpha User Agreement ──────────────────────────────────────────────────────
+
+def test_alpha_agreement_recorded_server_side(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    h = auth(AUTHOR_ADDR, "Alice")
+    assert client.get("/alpha-agreement/status", headers=h).json()["accepted"] is False
+    assert client.get("/auth/me", headers=h).json()["alpha_agreed"] is False
+
+    assert client.post("/alpha-agreement/accept", headers=h).status_code == 201
+    assert client.get("/alpha-agreement/status", headers=h).json()["accepted"] is True
+    assert client.get("/auth/me", headers=h).json()["alpha_agreed"] is True
+
+    # Idempotent — a second accept doesn't create a duplicate record.
+    client.post("/alpha-agreement/accept", headers=h)
+    from models import AlphaAgreement
+    assert db.query(AlphaAgreement).filter(AlphaAgreement.stake_address == AUTHOR_ADDR).count() == 1
+
+
+def test_alpha_agreement_requires_auth(client):
+    assert client.post("/alpha-agreement/accept").status_code == 401
+
+
 # ── Moderation workflow ───────────────────────────────────────────────────────
 
 def test_flag_requires_reason(client, db):

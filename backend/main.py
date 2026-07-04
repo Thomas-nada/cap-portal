@@ -41,7 +41,7 @@ from auth import verify_cip8_signature, derive_stake_addresses, create_token, de
 from database import engine, get_db, Base
 from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
                     User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
-                    ModerationCase, Notification)
+                    ModerationCase, Notification, AlphaAgreement)
 
 Base.metadata.create_all(bind=engine)
 
@@ -321,6 +321,17 @@ def is_admin(stake_address: str, db: Session) -> bool:
     return db.query(Admin).filter(Admin.stake_address == stake_address).first() is not None
 
 
+# Bump this string whenever the User Agreement text changes so users re-accept.
+ALPHA_AGREEMENT_VERSION = "alpha-2026-07"
+
+
+def has_accepted_alpha(stake_address: str, db: Session) -> bool:
+    return db.query(AlphaAgreement).filter(
+        AlphaAgreement.stake_address == stake_address,
+        AlphaAgreement.version == ALPHA_AGREEMENT_VERSION,
+    ).first() is not None
+
+
 # ── Serialisers ───────────────────────────────────────────────────────────────
 
 def to_iso(dt):
@@ -539,6 +550,7 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
         "display_name": display_name,
         "is_editor": editor,
         "is_admin": admin,
+        "alpha_agreed": has_accepted_alpha(req.stake_address, db),
     }
 
 
@@ -550,6 +562,7 @@ def get_me(user: dict = Depends(require_user), db: Session = Depends(get_db)):
         "display_name": user.get("display_name"),
         "is_editor": is_editor(user["sub"], db),
         "is_admin": is_admin(user["sub"], db),
+        "alpha_agreed": has_accepted_alpha(user["sub"], db),
     }
 
 
@@ -577,6 +590,7 @@ def set_display_name(req: SetNameRequest, user: dict = Depends(require_user), db
         "display_name": name,
         "is_editor": is_editor(user["sub"], db),
         "is_admin": is_admin(user["sub"], db),
+        "alpha_agreed": has_accepted_alpha(user["sub"], db),
     }
 
 
@@ -613,7 +627,28 @@ def update_profile(req: UpdateProfileRequest, user: dict = Depends(require_user)
         "display_name": name,
         "is_editor": is_editor(stake, db),
         "is_admin": is_admin(stake, db),
+        "alpha_agreed": has_accepted_alpha(stake, db),
     }
+
+
+# ── Alpha User Agreement ───────────────────────────────────────────────────────
+
+@app.get("/alpha-agreement/status", tags=["auth"], summary="Whether the user has accepted the current agreement",
+         description="**Requires authentication.**")
+def alpha_agreement_status(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    return {"accepted": has_accepted_alpha(user["sub"], db), "version": ALPHA_AGREEMENT_VERSION}
+
+
+@app.post("/alpha-agreement/accept", status_code=201, tags=["auth"],
+          summary="Record acceptance of the alpha User Agreement",
+          description="Stores a server-side record (stake address, version, timestamp) that the user accepted "
+                      "the current alpha User Agreement. Idempotent. **Requires authentication.**")
+def accept_alpha_agreement(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    if not has_accepted_alpha(user["sub"], db):
+        db.add(AlphaAgreement(stake_address=user["sub"], display_name=user.get("display_name"),
+                              version=ALPHA_AGREEMENT_VERSION))
+        db.commit()
+    return {"accepted": True, "version": ALPHA_AGREEMENT_VERSION}
 
 
 # ── Proposals ─────────────────────────────────────────────────────────────────

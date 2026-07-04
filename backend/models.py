@@ -217,6 +217,18 @@ class ModerationCase(Base):
     resolved_at = Column(DateTime(timezone=True), nullable=True)
 
 
+class AlphaAgreement(Base):
+    """Append-only record that a user accepted a specific version of the alpha
+    User Agreement — the server-side legal record of acceptance."""
+    __tablename__ = "alpha_agreements"
+
+    id = Column(Integer, primary_key=True, index=True)
+    stake_address = Column(String, nullable=False, index=True)
+    display_name = Column(String, nullable=True)   # name at time of acceptance
+    version = Column(String, nullable=False)        # which agreement text
+    accepted_at = Column(DateTime(timezone=True), default=now)
+
+
 class Notification(Base):
     """In-app notification shown in a user's profile/notifications panel."""
     __tablename__ = "notifications"

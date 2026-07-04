@@ -46,6 +46,11 @@ export async function updateProfile(display_name) {
     return req('PATCH', '/auth/profile', { display_name }, true);
 }
 
+// Records server-side that the user accepted the current alpha User Agreement.
+export async function acceptAlphaAgreement() {
+    return req('POST', '/alpha-agreement/accept', {}, true);
+}
+
 // Dev-only: seed an editor without auth
 export async function devSeedEditor(stake_address, display_name) {
     return req('POST', '/dev/seed-editor', { stake_address, display_name });
