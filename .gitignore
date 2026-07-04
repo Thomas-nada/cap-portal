@@ -26,3 +26,4 @@ backups/
 
 # Test tools (not for production)
 norsk-portal/
+backend/data/constitution/cap-*-proposed.md

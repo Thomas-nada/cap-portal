@@ -28,7 +28,7 @@ from sqlalchemy.orm import Session
 
 from auth import verify_cip8_signature, create_token, decode_token
 from database import engine, get_db, Base
-from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, BugReport, Guide
+from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc
 
 Base.metadata.create_all(bind=engine)
 
@@ -217,6 +217,29 @@ app.add_middleware(
 )
 
 CONSTITUTION_DIR = Path(__file__).parent / "data" / "constitution"
+
+
+def _migrate_constitution_files_to_db():
+    """One-time import of any generated cap-*-proposed.md files from disk into
+    the database. Safe to run repeatedly; existing DB entries are not touched."""
+    if not CONSTITUTION_DIR.exists():
+        return
+    from database import SessionLocal
+    db = SessionLocal()
+    try:
+        for f in CONSTITUTION_DIR.iterdir():
+            if f.suffix == ".md" and f.name.startswith("cap-"):
+                exists = db.query(ConstitutionDoc).filter(
+                    ConstitutionDoc.filename == f.name).first()
+                if not exists:
+                    db.add(ConstitutionDoc(filename=f.name,
+                                           content=f.read_text(encoding="utf-8")))
+        db.commit()
+    finally:
+        db.close()
+
+
+_migrate_constitution_files_to_db()
 
 
 # ── Auth helpers ─────────────────────────────────────────────────────────────
@@ -930,13 +953,16 @@ def get_audit(number: int, db: Session = Depends(get_db)):
 
 @app.get("/constitution", tags=["constitution"], summary="List published constitution versions",
          description="Returns available constitution document filenames. **Public.**")
-def list_constitution():
-    if not CONSTITUTION_DIR.exists():
-        return []
-    files = sorted(
-        [f.name for f in CONSTITUTION_DIR.iterdir() if f.suffix == ".md"],
-        reverse=True
-    )
+def list_constitution(db: Session = Depends(get_db)):
+    # Base constitution versions ship with the repo on disk; generated
+    # proposed drafts live in the database (survives ephemeral filesystems).
+    names = set()
+    if CONSTITUTION_DIR.exists():
+        names.update(f.name for f in CONSTITUTION_DIR.iterdir()
+                     if f.suffix == ".md" and not f.name.startswith("cap-"))
+    names.update(d.filename for d in db.query(ConstitutionDoc.filename).all())
+    files = sorted(names, reverse=True)
+
     def display_name(f):
         name = f.replace(".md", "")
         import re
@@ -949,10 +975,13 @@ def list_constitution():
 
 @app.get("/constitution/{filename}", tags=["constitution"], summary="Get constitution document content",
          description="Returns the raw markdown content of a specific constitution version. **Public.**")
-def get_constitution(filename: str):
+def get_constitution(filename: str, db: Session = Depends(get_db)):
     # Sanitise — only allow filenames, no path traversal
     if "/" in filename or "\\" in filename or ".." in filename:
         raise HTTPException(status_code=400, detail="Invalid filename")
+    doc = db.query(ConstitutionDoc).filter(ConstitutionDoc.filename == filename).first()
+    if doc:
+        return {"filename": filename, "content": doc.content}
     path = CONSTITUTION_DIR / filename
     if not path.exists() or path.suffix != ".md":
         raise HTTPException(status_code=404, detail="Constitution file not found")
@@ -1006,8 +1035,12 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
                 applied += 1
 
     filename = f"cap-{number}-proposed.md"
-    with open(CONSTITUTION_DIR / filename, "w", encoding="utf-8", newline="\n") as fh:
-        fh.write(modified)
+    doc = db.query(ConstitutionDoc).filter(ConstitutionDoc.filename == filename).first()
+    if doc:
+        doc.content = modified
+    else:
+        db.add(ConstitutionDoc(filename=filename, content=modified))
+    db.commit()
 
     return {"filename": filename, "applied": applied, "total": len(revisions)}
 

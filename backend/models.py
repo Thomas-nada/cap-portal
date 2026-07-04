@@ -160,6 +160,21 @@ class BugReport(Base):
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
 
 
+class ConstitutionDoc(Base):
+    """Runtime-generated constitution documents (e.g. cap-N proposed drafts).
+
+    Stored in the database rather than on disk so they survive redeploys on
+    hosts with ephemeral filesystems and are included in database backups.
+    The base constitution text ships with the repo and stays on disk.
+    """
+    __tablename__ = "constitution_docs"
+
+    filename = Column(String, primary_key=True)  # e.g. "cap-12-proposed.md"
+    content = Column(Text, nullable=False)       # markdown
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
+
+
 class Guide(Base):
     __tablename__ = "guides"
 
