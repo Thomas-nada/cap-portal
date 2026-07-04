@@ -613,7 +613,7 @@ window.openVersionModal = async (number, version) => {
     if (existing) existing.remove();
 
     const esc = str => String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-    const renderMd = text => window.marked ? window.marked.parse(String(text || '')) : `<p>${esc(text)}</p>`;
+    const renderMd = text => window.safeMarkdown(text);
 
     try {
         const fetches = [fetchVersion(number, version)];
@@ -1099,7 +1099,7 @@ window.removeReference = (id) => {
 
 function buildPreviewHtml(title, structured, type) {
     const isCIS = type === 'CIS';
-    const md = text => window.marked ? window.marked.parse(String(text || '')) : `<p>${String(text || '')}</p>`;
+    const md = text => window.safeMarkdown(text);
     const esc = str => String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 
     const sections = [];
@@ -1704,11 +1704,8 @@ window.openGuide = async (slug) => {
         } catch {}
     }
 
-    if (markdown && typeof marked !== 'undefined') {
-        state.guideHtml = marked.parse(markdown);
-        state.guideRawContent = markdown;
-    } else if (markdown) {
-        state.guideHtml = `<pre>${markdown}</pre>`;
+    if (markdown) {
+        state.guideHtml = window.safeMarkdown(markdown);
         state.guideRawContent = markdown;
     } else {
         state.guideHtml = null;
@@ -2169,9 +2166,7 @@ function _guideUpdatePreview() {
     const ta = document.getElementById('guide-editor-content');
     const preview = document.getElementById('guide-editor-preview');
     if (!ta || !preview) return;
-    preview.innerHTML = typeof marked !== 'undefined'
-        ? marked.parse(ta.value)
-        : ta.value;
+    preview.innerHTML = window.safeMarkdown(ta.value);
 }
 
 window.openGuideEditor = () => {

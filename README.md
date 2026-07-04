@@ -45,7 +45,12 @@ So: deploy, open the portal, connect your wallet, claim admin. Done.
 
 The backup workflow (`.github/workflows/backup.yml`) runs hourly from the **default branch** of your GitHub repo and stores compressed database dumps as workflow artifacts for 400 days.
 
-One-time setup: in GitHub → **Settings → Secrets and variables → Actions**, add a secret named `DATABASE_URL` containing your PostgreSQL connection string (from the Render database's "External Connection String").
+One-time setup: in GitHub → **Settings → Secrets and variables → Actions**, add two secrets:
+
+- `DATABASE_URL` — your PostgreSQL connection string (from the Render database's "External Connection String").
+- `BACKUP_PASSPHRASE` — a long random passphrase used to encrypt each dump (`openssl rand -hex 32`). **Store this somewhere safe and separate from the repo** — without it the backups cannot be restored. The workflow refuses to run if it is not set, so a backup is never written unencrypted.
+
+Backups are encrypted with AES-256 before upload, so they stay unreadable even though workflow artifacts on a public repository are downloadable by anyone.
 
 A keep-alive workflow (`.github/workflows/keep-alive.yml`) pings the backend every 10 minutes so Render's free tier doesn't spin it down; update the URL in that file to your own backend.
 
@@ -61,11 +66,13 @@ Everything user-generated lives in the PostgreSQL database and is captured by ev
 
 Works even if the original host disappears entirely — backups are stored on GitHub, independent of the hosting provider.
 
-1. Download the most recent backup artifact: GitHub → **Actions → Database Backup** → latest run → Artifacts.
+1. Download the most recent backup artifact: GitHub → **Actions → Database Backup** → latest run → Artifacts. Each is an AES-256-encrypted file (`.sql.gz.enc`).
 2. Create a fresh PostgreSQL database anywhere (Render, Fly.io, Supabase, a VPS, …).
-3. Restore the dump:
+3. Decrypt, decompress, and restore in one pipe (you'll need the `BACKUP_PASSPHRASE`):
    ```bash
-   gunzip < cap_portal_YYYYMMDD_HHMMSS.sql.gz | psql "$NEW_DATABASE_URL"
+   openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:"$BACKUP_PASSPHRASE" \
+     -in cap_portal_YYYYMMDD_HHMMSS.sql.gz.enc \
+     | gunzip | psql "$NEW_DATABASE_URL"
    ```
 4. Deploy the code (step 1 above) with `DATABASE_URL` pointing at the restored database and any fresh `JWT_SECRET` (users simply reconnect their wallets).
 

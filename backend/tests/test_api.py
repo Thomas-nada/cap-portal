@@ -68,9 +68,9 @@ def auth(stake, name="Test User"):
     return {"Authorization": f"Bearer {create_token(stake, name)}"}
 
 
-def seed_user(db, stake, name, email=None):
+def seed_user(db, stake, name):
     from models import User
-    db.add(User(stake_address=stake, display_name=name, email=email))
+    db.add(User(stake_address=stake, display_name=name))
     db.commit()
 
 
@@ -492,6 +492,69 @@ def test_non_admin_cannot_add_editor(client, db):
                     json={"stake_address": EDITOR_ADDR, "display_name": "Sneaky"},
                     headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 403
+
+
+# ── Rate limiting: per-client-IP keying behind a proxy (finding #4) ───────────
+
+def test_client_ip_uses_last_forwarded_for():
+    """The rate-limit key must be the real client IP (rightmost X-Forwarded-For
+    entry appended by Render's proxy), not the proxy socket address."""
+    from main import client_ip
+
+    class _Req:
+        def __init__(self, xff, peer):
+            self.headers = {"x-forwarded-for": xff} if xff else {}
+            self.client = type("C", (), {"host": peer})()
+
+    # Client-forged header ("1.1.1.1") followed by the real IP appended by Render.
+    assert client_ip(_Req("1.1.1.1, 203.0.113.9", "10.0.0.1")) == "203.0.113.9"
+    # No proxy header → fall back to the socket peer.
+    assert client_ip(_Req(None, "198.51.100.5")) == "198.51.100.5"
+
+
+# ── Auth: stake-address binding (security) ────────────────────────────────────
+
+def _make_signed_login(challenge, claimed_addr):
+    """Build a real CIP-8 COSE_Sign1 + COSE_Key for a fresh keypair, returning
+    the /auth/verify payload claiming `claimed_addr`."""
+    import cbor2
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+    from cryptography.hazmat.primitives import serialization
+    priv = Ed25519PrivateKey.generate()
+    protected = cbor2.dumps({1: -8})
+    payload = challenge.encode()
+    signature = priv.sign(cbor2.dumps(["Signature1", protected, b"", payload]))
+    cose_sign1 = cbor2.dumps([protected, {}, payload, signature])
+    pub = priv.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    cose_key = cbor2.dumps({1: 1, 3: -8, -1: 6, -2: pub})
+    return {
+        "stake_address": claimed_addr,
+        "challenge": challenge,
+        "signature": cose_sign1.hex(),
+        "key": cose_key.hex(),
+    }, pub
+
+
+def test_login_rejects_address_not_matching_key(client):
+    """A valid signature must not authenticate as an arbitrary stake address —
+    the address is bound to the signing key (finding #1)."""
+    challenge = client.get("/auth/challenge").json()["challenge"]
+    payload, _pub = _make_signed_login(challenge, "stake1uforged00000000000000000000000000000000000000000000")
+    r = client.post("/auth/verify", json=payload)
+    assert r.status_code == 401
+
+
+def test_login_accepts_matching_derived_address(client):
+    """Signing and claiming the address actually derived from the key succeeds."""
+    from auth import derive_stake_addresses
+    challenge = client.get("/auth/challenge").json()["challenge"]
+    payload, pub = _make_signed_login(challenge, "placeholder")
+    real_addr = next(a for a in derive_stake_addresses(pub) if a.startswith("stake1"))
+    payload["stake_address"] = real_addr
+    r = client.post("/auth/verify", json=payload)
+    assert r.status_code == 200
+    assert r.json()["stake_address"] == real_addr
 
 
 # ── Audit trail ───────────────────────────────────────────────────────────────

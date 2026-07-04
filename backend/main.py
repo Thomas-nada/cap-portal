@@ -9,10 +9,21 @@ from dotenv import load_dotenv
 import config as _config
 load_dotenv()
 
-if os.environ.get("ENVIRONMENT") == "production":
-    for _var in ("DATABASE_URL", "JWT_SECRET"):
-        if not _config.get(_var):
-            raise RuntimeError(f"Required config value '{_var}' is not set")
+# Refuse to start misconfigured. A real database (anything other than local
+# SQLite) means this is not a throwaway dev instance, so a proper JWT_SECRET is
+# mandatory — otherwise tokens would be signed with a random per-process key
+# (see auth.py) and every restart would silently invalidate all sessions, or
+# worse, a forgotten ENVIRONMENT var would have left a guessable secret in place.
+_db_url = _config.get("DATABASE_URL", "")
+_is_production = os.environ.get("ENVIRONMENT") == "production"
+_uses_real_db = bool(_db_url) and not _db_url.startswith("sqlite")
+if _is_production and not _db_url:
+    raise RuntimeError("Required config value 'DATABASE_URL' is not set")
+if (_is_production or _uses_real_db) and not _config.get("JWT_SECRET"):
+    raise RuntimeError(
+        "JWT_SECRET is not set. Refusing to start against a real database without "
+        "a configured signing secret (set JWT_SECRET, e.g. `openssl rand -hex 32`)."
+    )
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
 from typing import Optional
@@ -26,7 +37,7 @@ from slowapi.util import get_remote_address
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from auth import verify_cip8_signature, create_token, decode_token
+from auth import verify_cip8_signature, derive_stake_addresses, create_token, decode_token
 from database import engine, get_db, Base
 from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc
 
@@ -113,7 +124,19 @@ with engine.connect() as _conn:
                 pass
         _conn.commit()
 
-limiter = Limiter(key_func=get_remote_address)
+def client_ip(request: Request) -> str:
+    """Real client IP for rate limiting. Behind Render's proxy the socket peer
+    (request.client.host) is always the proxy, so every user would otherwise
+    share one rate-limit bucket. Render's load balancer appends the true client
+    IP as the LAST entry of X-Forwarded-For; taking the rightmost value is
+    spoof-resistant (a client-forged header is followed by the real IP)."""
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[-1].strip()
+    return get_remote_address(request)
+
+
+limiter = Limiter(key_func=client_ip)
 
 from fastapi.security import HTTPBearer
 _bearer_scheme = HTTPBearer(auto_error=False)
@@ -426,9 +449,17 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
         db.commit()
         raise HTTPException(status_code=400, detail="Challenge expired")
 
-    # Verify CIP-8 signature
-    if not verify_cip8_signature(req.signature, req.key, req.challenge):
+    # Verify CIP-8 signature and get the public key that actually signed
+    pub_key = verify_cip8_signature(req.signature, req.key, req.challenge)
+    if not pub_key:
         raise HTTPException(status_code=401, detail="Invalid signature")
+
+    # Bind the key to the claimed identity: the stake address is derived from
+    # the staking key (blake2b-224), so the signer can only ever authenticate
+    # as the one address their key hashes to. Without this check anyone could
+    # sign with their own key and claim an arbitrary stake address.
+    if req.stake_address not in derive_stake_addresses(pub_key):
+        raise HTTPException(status_code=401, detail="Signature key does not match the stake address")
 
     # Consume challenge
     db.delete(record)

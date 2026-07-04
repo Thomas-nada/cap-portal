@@ -269,7 +269,7 @@ function renderSingleView(version) {
         { id: 'appendix-ii-supporting-guidance', patterns: [/appendix\s+ii(?:[^i]|$)/i] }
     ];
 
-    let html = window.marked?.parse(content) || `<pre>${escapeHtml(content)}</pre>`;
+    let html = window.safeMarkdown(content) || `<pre>${escapeHtml(content)}</pre>`;
     html = html.replace(/<h2[^>]*>(.*?)<\/h2>/gi, (match, headerText) => {
         for (const mapping of sectionMappings) {
             for (const pattern of mapping.patterns) {

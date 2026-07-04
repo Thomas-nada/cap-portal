@@ -9,17 +9,28 @@ jobs:
   backup:
     runs-on: ubuntu-latest
     steps:
-      - name: Dump Postgres database
+      - name: Dump and encrypt Postgres database
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
+          BACKUP_PASSPHRASE: ${{ secrets.BACKUP_PASSPHRASE }}
         run: |
+          set -euo pipefail
+          if [ -z "${BACKUP_PASSPHRASE}" ]; then
+            echo "::error::BACKUP_PASSPHRASE secret is not set. Refusing to write an unencrypted backup."
+            exit 1
+          fi
           sudo apt-get install -y postgresql-client
           TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-          FILENAME="cap_portal_${TIMESTAMP}.sql.gz"
-          pg_dump "$DATABASE_URL" | gzip > "$FILENAME"
-          echo "FILENAME=$FILENAME" >> $GITHUB_ENV
+          FILENAME="cap_portal_${TIMESTAMP}.sql.gz.enc"
+          # Artifacts on a public repo are downloadable by anyone, so the dump is
+          # encrypted (AES-256) before it ever leaves this runner. Decrypt on
+          # restore with: openssl enc -d -aes-256-cbc -pbkdf2 -pass pass:...
+          pg_dump "$DATABASE_URL" | gzip \
+            | openssl enc -aes-256-cbc -salt -pbkdf2 -pass env:BACKUP_PASSPHRASE \
+            > "$FILENAME"
+          echo "FILENAME=$FILENAME" >> "$GITHUB_ENV"
 
-      - name: Upload backup as artifact
+      - name: Upload encrypted backup as artifact
         uses: actions/upload-artifact@v4
         with:
           name: db-backup-${{ env.FILENAME }}

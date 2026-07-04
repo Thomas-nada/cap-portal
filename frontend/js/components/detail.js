@@ -6,7 +6,7 @@ function stripFrontmatter(body) {
 }
 
 function md(text) {
-    return text?.trim() ? window.marked?.parse(text) : '';
+    return window.safeMarkdown(text);
 }
 
 function renderStructuredBody(s, type) {
@@ -257,7 +257,7 @@ export function renderDetail(state) {
  <div class="lg:col-span-2 space-y-16">
                     <!-- Proposal Body -->
  <article class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed">
-                        ${p.structured ? renderStructuredBody(p.structured, p.type) : window.marked?.parse(stripFrontmatter(p.body) || '*No content.*')}
+                        ${p.structured ? renderStructuredBody(p.structured, p.type) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
                     </article>
 
                     ${(p.structured?.revisions?.length && p.structured.revisions.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed))) ? `
@@ -330,7 +330,7 @@ export function renderDetail(state) {
                                             </div>
                                         </div>
  <div class="bg-white/80 p-8 rounded-[2.5rem] border ${c.flagged ? 'border-red-200 ' : 'border-slate-100 '} shadow-sm text-sm leading-relaxed prose max-w-none">
-                                            ${window.marked?.parse(c.body || '')}
+                                            ${window.safeMarkdown(c.body)}
                                         </div>
                                     </div>
                                 </div>`;
