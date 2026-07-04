@@ -30,7 +30,8 @@ from typing import Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
-from pydantic import BaseModel
+from fastapi.exceptions import RequestValidationError
+from pydantic import BaseModel, Field, field_validator
 from slowapi import Limiter, _rate_limit_exceeded_handler
 from slowapi.errors import RateLimitExceeded
 from slowapi.util import get_remote_address
@@ -233,10 +234,46 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 
 from fastapi.responses import JSONResponse as _JSONResponse
 
+# ── Input size limits ─────────────────────────────────────────────────────────
+# Deliberations can run long, so text limits are generous — they exist to stop a
+# single request bloating the database, not to constrain legitimate writing.
+MAX_TITLE = 300
+MAX_LONG_TEXT = 100_000       # ~16,000 words per proposal section / comment
+MAX_STRUCTURED_TOTAL = 500_000  # whole proposal body (all fields combined)
+MAX_REASON = 10_000
+MAX_GUIDE_CONTENT = 300_000
+MAX_SCREENSHOT = 5_000_000    # base64 data URL (~3.7 MB image)
+MAX_NAME = 200
+
+_PROPOSAL_TEXT_FIELDS = ("abstract", "motivation", "analysis", "impact", "exhibits")
+
+
+def _validate_structured(v):
+    if not isinstance(v, dict):
+        raise ValueError("Proposal content must be an object")
+    if len(json.dumps(v)) > MAX_STRUCTURED_TOTAL:
+        raise ValueError(f"Proposal content is too large (max {MAX_STRUCTURED_TOTAL:,} characters total)")
+    for key in _PROPOSAL_TEXT_FIELDS:
+        val = v.get(key)
+        if isinstance(val, str) and len(val) > MAX_LONG_TEXT:
+            raise ValueError(f"The '{key}' field is too long (max {MAX_LONG_TEXT:,} characters)")
+    return v
+
+
 @app.exception_handler(Exception)
 async def _unhandled_exception_handler(request: Request, exc: Exception) -> _JSONResponse:
     logger.error("Unhandled exception: %s", exc, exc_info=True)
     return _JSONResponse(status_code=500, content={"detail": "Internal server error"})
+
+
+@app.exception_handler(RequestValidationError)
+async def _validation_error_handler(request: Request, exc: RequestValidationError) -> _JSONResponse:
+    # Surface a single clean message (e.g. our size-limit text) instead of the
+    # default nested 422 structure, which the frontend can't display readably.
+    errs = exc.errors()
+    msg = (errs[0].get("msg") if errs else None) or "Invalid input"
+    msg = msg.replace("Value error, ", "")
+    return _JSONResponse(status_code=400, content={"detail": msg})
 
 app.add_middleware(
     CORSMiddleware,
@@ -470,11 +507,11 @@ def get_challenge(request: Request, db: Session = Depends(get_db)):
 
 
 class VerifyRequest(BaseModel):
-    stake_address: str
-    challenge: str
-    signature: str
-    key: str
-    display_name: Optional[str] = None
+    stake_address: str = Field(max_length=200)
+    challenge: str = Field(max_length=200)
+    signature: str = Field(max_length=20_000)
+    key: str = Field(max_length=20_000)
+    display_name: Optional[str] = Field(default=None, max_length=MAX_NAME)
 
 
 @app.post("/auth/verify", tags=["auth"], summary="Verify wallet signature and receive JWT",
@@ -567,7 +604,7 @@ def get_me(user: dict = Depends(require_user), db: Session = Depends(get_db)):
 
 
 class SetNameRequest(BaseModel):
-    display_name: str
+    display_name: str = Field(max_length=MAX_NAME)
 
 
 @app.post("/auth/set-name", tags=["auth"], summary="Set display name (first-time setup)")
@@ -595,7 +632,7 @@ def set_display_name(req: SetNameRequest, user: dict = Depends(require_user), db
 
 
 class UpdateProfileRequest(BaseModel):
-    display_name: str
+    display_name: str = Field(max_length=MAX_NAME)
 
 
 @app.patch("/auth/profile", tags=["auth"], summary="Update display name")
@@ -692,9 +729,14 @@ def get_proposal(number: int, authorization: Optional[str] = Header(None), db: S
 
 
 class ProposalCreate(BaseModel):
-    title: str
+    title: str = Field(min_length=1, max_length=MAX_TITLE)
     type: str = "CAP"
     structured: dict  # required — all content lives here
+
+    @field_validator("structured")
+    @classmethod
+    def _v_structured(cls, v):
+        return _validate_structured(v)
 
 
 @app.post("/proposals", status_code=201, tags=["proposals"], summary="Submit a new proposal",
@@ -736,8 +778,13 @@ def create_proposal(request: Request, req: ProposalCreate, user: dict = Depends(
 
 
 class ProposalUpdate(BaseModel):
-    title: Optional[str] = None
+    title: Optional[str] = Field(default=None, max_length=MAX_TITLE)
     structured: Optional[dict] = None
+
+    @field_validator("structured")
+    @classmethod
+    def _v_structured(cls, v):
+        return _validate_structured(v) if v is not None else v
 
 
 @app.patch("/proposals/{number}", tags=["proposals"], summary="Update a proposal",
@@ -969,7 +1016,7 @@ def list_comments(number: int, authorization: Optional[str] = Header(None), db: 
 
 
 class CommentCreate(BaseModel):
-    body: str
+    body: str = Field(min_length=1, max_length=MAX_LONG_TEXT)
 
 
 @app.post("/proposals/{number}/comments", status_code=201, tags=["comments"], summary="Post a comment",
@@ -1024,11 +1071,11 @@ def update_comment(comment_id: int, req: CommentCreate, user: dict = Depends(req
 # each with a required reason. The author and the flagging editor are notified.
 
 class FlagRequest(BaseModel):
-    reason: str
+    reason: str = Field(max_length=MAX_REASON)
 
 
 class ResolveRequest(BaseModel):
-    reason: str
+    reason: str = Field(max_length=MAX_REASON)
 
 
 def _require_reason(reason: str) -> str:
@@ -1554,9 +1601,9 @@ def list_suggestions(number: int, db: Session = Depends(get_db)):
 
 
 class SuggestionCreate(BaseModel):
-    field: str
-    suggested_value: str
-    reason: Optional[str] = None
+    field: str = Field(max_length=100)
+    suggested_value: str = Field(max_length=MAX_LONG_TEXT)
+    reason: Optional[str] = Field(default=None, max_length=MAX_REASON)
 
 
 @app.post("/proposals/{number}/suggestions", status_code=201, tags=["suggestions"], summary="Submit an edit suggestion",
@@ -1676,10 +1723,10 @@ def seed_editor(body: dict, db: Session = Depends(get_db)):
 # ── Guides ────────────────────────────────────────────────────────────────────
 
 class GuideUpdate(BaseModel):
-    title: str
-    content: str  # markdown
-    section: str = 'general'
-    section_label: Optional[str] = None
+    title: str = Field(min_length=1, max_length=MAX_TITLE)
+    content: str = Field(max_length=MAX_GUIDE_CONTENT)  # markdown
+    section: str = Field(default='general', max_length=100)
+    section_label: Optional[str] = Field(default=None, max_length=MAX_TITLE)
     sort_order: int = 0
 
 @app.get("/guides", tags=["guides"], summary="List all guides")
@@ -1745,9 +1792,9 @@ def delete_guide(slug: str, user: dict = Depends(require_editor_or_admin), db: S
 # ── Bug Reports ───────────────────────────────────────────────────────────────
 
 class BugReportCreate(BaseModel):
-    title: str
-    description: str
-    screenshot: Optional[str] = None  # base64 data URL
+    title: str = Field(min_length=1, max_length=MAX_TITLE)
+    description: str = Field(max_length=MAX_LONG_TEXT)
+    screenshot: Optional[str] = Field(default=None, max_length=MAX_SCREENSHOT)  # base64 data URL
     environment: Optional[dict] = None  # auto-captured env info
 
 class BugReportStatusUpdate(BaseModel):

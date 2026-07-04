@@ -542,6 +542,38 @@ def test_client_ip_uses_last_forwarded_for():
     assert client_ip(_Req(None, "198.51.100.5")) == "198.51.100.5"
 
 
+# ── Input size limits ─────────────────────────────────────────────────────────
+
+def test_long_deliberation_is_allowed(client, db):
+    """Limits are roomy — a ~12,000-word section must be accepted."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    long_text = "This is a thorough deliberation. " * 2200  # ~72k chars
+    r = client.post("/proposals", json=proposal_body(motivation=long_text),
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 201
+
+
+def test_oversized_input_rejected_with_clean_message(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    # Oversized title
+    r = client.post("/proposals", json={"title": "x" * 500, "type": "CAP", "structured": {"abstract": "a"}},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert isinstance(r.json()["detail"], str)  # single readable string, not a nested list
+    # Oversized section
+    r = client.post("/proposals", json={"title": "ok", "type": "CAP", "structured": {"motivation": "z" * 150_000}},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert "too long" in r.json()["detail"]
+
+
+def test_oversized_comment_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/comments", json={"body": "q" * 120_000}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+
+
 # ── Alpha User Agreement ──────────────────────────────────────────────────────
 
 def test_alpha_agreement_recorded_server_side(client, db):
