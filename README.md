@@ -1,84 +1,79 @@
 # CAP Portal
 
-A governance portal for submitting, reviewing, and tracking Cardano Amendment Proposals (CAPs) and Cardano Improvement Standards (CISs). Wallet authentication via CIP-30, role-based editorial workflow, public read API.
+A governance portal for submitting, reviewing, and tracking Constitutional Amendment Proposals (CAPs) and Constitutional Issue Submissions (CIS) for the Cardano Constitution. Wallet authentication via CIP-30, role-based editorial workflow, public read API.
 
 ## Stack
 
 | Layer | Technology |
 |---|---|
-| Backend | Python · FastAPI · SQLAlchemy · PostgreSQL |
-| Frontend | Vanilla JS · nginx |
+| Backend | Python · FastAPI · SQLAlchemy · PostgreSQL (SQLite for local dev) |
+| Frontend | Vanilla JS (ES modules, no build step) · any static file server |
 | Auth | Cardano CIP-30 wallet (Eternl, Vespr, Lace, …) |
-| Deployment | Docker Compose |
+| Hosting | Render (native Python web service + static site) |
+| Backups | GitHub Actions · hourly `pg_dump`, 400-day retention |
 
 ---
 
-## Deployment
+## Setting up a fresh instance
 
-The portal ships as three Docker services: `backend` (FastAPI), `frontend` (nginx), and `backup` (scheduled PostgreSQL dumps). A `docker-compose.yml` is included for running everything on a single host.
+### 1. Deploy
 
-### 1. Prerequisites
+**On Render (what the reference deployment uses):**
 
-- Docker and Docker Compose
-- A Cardano mainnet wallet extension installed in your browser
+1. Fork or clone this repository to your own GitHub account.
+2. In Render: **New → Blueprint**, connect the repo. `render.yaml` creates the PostgreSQL database and the backend API service automatically.
+3. In Render: **New → Static Site**, same repo. Set **Publish Directory** to `frontend` and add a Rewrite rule `/*` → `/index.html`.
+4. Update `API_BASE` in `frontend/js/config.js` to your backend service URL.
 
-### 2. Configure environment
+**Anywhere else:** any host that can run `pip install -r requirements.txt` and `uvicorn main:app` works. Set the environment variables below and serve `frontend/` from any static file server.
 
-```bash
-cp .env.example .env
-```
-
-Edit `.env` and set at minimum:
-
-```env
-POSTGRES_PASSWORD=<long random string>
-JWT_SECRET=<long random string>
-```
-
-Generate secrets with `openssl rand -hex 32`.
-
-### 3. Run
-
-```bash
-docker compose up -d
-```
-
-The portal is available at `http://localhost`.
-
-### 4. Reverse proxy / TLS (recommended for production)
-
-Put a reverse proxy such as [Caddy](https://caddyserver.com) or nginx in front of the stack to terminate TLS and serve the portal over HTTPS. Point it at `http://localhost:80`.
-
-### 5. Email notifications (optional)
-
-Add SMTP credentials to `.env`:
-
-```env
-SMTP_HOST=smtp.example.com
-SMTP_PORT=587
-SMTP_USERNAME=<username>
-SMTP_PASSWORD=<password>
-SMTP_FROM=noreply@yourdomain.com
-APP_URL=https://your-domain.com
-```
-
-Any SMTP provider works. Leave these blank to disable email notifications.
-
----
-
-## Environment variables
+### 2. Environment variables (backend)
 
 | Variable | Required | Description |
 |---|---|---|
-| `POSTGRES_PASSWORD` | Yes | PostgreSQL password |
-| `JWT_SECRET` | Yes | JWT signing secret |
-| `SMTP_HOST` | No | SMTP server hostname |
-| `SMTP_PORT` | No | SMTP port (default: 587) |
-| `SMTP_USERNAME` | No | SMTP username |
-| `SMTP_PASSWORD` | No | SMTP password |
-| `SMTP_FROM` | No | Sender address for notifications |
-| `APP_URL` | No | Public URL of the portal (used in email links) |
-| `BACKUP_RETAIN_DAYS` | No | Days of backup files to keep (default: 7) |
+| `DATABASE_URL` | Yes (production) | PostgreSQL connection string. Defaults to local SQLite `cap.db` when unset. |
+| `JWT_SECRET` | Yes | JWT signing secret. Generate with `openssl rand -hex 32`. |
+| `ENVIRONMENT` | No | Set to `production` in production. |
+
+### 3. Claim the admin role
+
+A fresh instance has no admins or editors. The **first authenticated user can claim the admin role** (and likewise the first editor role) from the Editors/Admins page in the portal — the claim option is shown only while no real admin/editor exists. As soon as one exists, the bootstrap locks itself permanently and further roles can only be granted by an existing admin.
+
+So: deploy, open the portal, connect your wallet, claim admin. Done.
+
+### 4. Enable backups (recommended)
+
+The backup workflow (`.github/workflows/backup.yml`) runs hourly from the **default branch** of your GitHub repo and stores compressed database dumps as workflow artifacts for 400 days.
+
+One-time setup: in GitHub → **Settings → Secrets and variables → Actions**, add a secret named `DATABASE_URL` containing your PostgreSQL connection string (from the Render database's "External Connection String").
+
+A keep-alive workflow (`.github/workflows/keep-alive.yml`) pings the backend every 10 minutes so Render's free tier doesn't spin it down; update the URL in that file to your own backend.
+
+---
+
+## Backup and restore
+
+### What is backed up
+
+Everything user-generated lives in the PostgreSQL database and is captured by every dump: proposals, comments, edit-history versions, the audit trail, users, **editors and admins**, guides, bug reports, and generated constitution drafts. Code, configuration, and the base constitution text live in this git repository.
+
+### Restoring (disaster recovery)
+
+Works even if the original host disappears entirely — backups are stored on GitHub, independent of the hosting provider.
+
+1. Download the most recent backup artifact: GitHub → **Actions → Database Backup** → latest run → Artifacts.
+2. Create a fresh PostgreSQL database anywhere (Render, Fly.io, Supabase, a VPS, …).
+3. Restore the dump:
+   ```bash
+   gunzip < cap_portal_YYYYMMDD_HHMMSS.sql.gz | psql "$NEW_DATABASE_URL"
+   ```
+4. Deploy the code (step 1 above) with `DATABASE_URL` pointing at the restored database and any fresh `JWT_SECRET` (users simply reconnect their wallets).
+
+All roles, proposals, and discussion history come back with the restore. Note that because the restored database already contains admins, the first-claim bootstrap stays locked — if you need to add yourself as admin on your own instance, insert your stake address directly:
+
+```sql
+INSERT INTO admins (stake_address, display_name) VALUES ('stake1...', 'Your Name');
+```
 
 ---
 
@@ -101,25 +96,25 @@ Interactive documentation is available at `/docs` on the backend service.
 
 | Role | Capabilities |
 |---|---|
-| **User** | Submit proposals, comment, follow proposals |
-| **Editor** | Apply lifecycle labels, suggest edits to proposals |
-| **Admin** | Manage editor and admin roles |
+| **User** | Submit proposals, comment, report bugs |
+| **Editor** | Apply lifecycle labels, suggest edits, flag content for admin review |
+| **Admin** | Manage editor and admin roles, moderate content |
 
-Roles are assigned by an existing admin via the portal's admin panel.
+Roles are assigned by an existing admin via the portal's Editors page. On a brand-new instance the first admin/editor is self-claimed (see above).
 
 ---
 
 ## Local development
 
 ```bash
-# Backend
+# Backend (SQLite, no configuration needed)
 cd backend
-python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
-uvicorn main:app --reload
+py -3 -m uvicorn main:app --reload --port 8000
 
-# Frontend — static files, no build step required
-# Open frontend/index.html or serve with any static file server
+# Frontend
+cd frontend
+py -3 dev-server.py 8765
 ```
 
-The backend defaults to SQLite (`cap.db`) when `DATABASE_URL` is not set.
+Set `API_BASE` in `frontend/js/config.js` — it defaults to `http://localhost:8000` when served from localhost. The portal is then available at http://localhost:8765.
