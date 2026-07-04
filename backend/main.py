@@ -39,7 +39,9 @@ from sqlalchemy.orm import Session
 
 from auth import verify_cip8_signature, derive_stake_addresses, create_token, decode_token
 from database import engine, get_db, Base
-from models import Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge, User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc
+from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
+                    User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
+                    ModerationCase, Notification)
 
 Base.metadata.create_all(bind=engine)
 
@@ -63,9 +65,14 @@ with engine.connect() as _conn:
         "ALTER TABLE guides ADD COLUMN sort_order INTEGER DEFAULT 0",
         "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by TEXT",
         "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by_name TEXT",
-        "ALTER TABLE comments ADD COLUMN flagged BOOLEAN NOT NULL DEFAULT FALSE",
-        "ALTER TABLE comments ADD COLUMN flagged_by TEXT",
-        "ALTER TABLE comments ADD COLUMN flagged_by_name TEXT",
+        "ALTER TABLE proposals ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'visible'",
+        "ALTER TABLE comments ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'visible'",
+        # Drop the superseded per-comment flag columns (replaced by the
+        # moderation_status + moderation_cases workflow). Their leftover NOT NULL
+        # constraint would otherwise break new comment inserts on existing DBs.
+        "ALTER TABLE comments DROP COLUMN flagged",
+        "ALTER TABLE comments DROP COLUMN flagged_by",
+        "ALTER TABLE comments DROP COLUMN flagged_by_name",
     ]:
         try:
             _conn.execute(text(_stmt))
@@ -187,6 +194,8 @@ All other endpoints are unrestricted.
         {"name": "versions",      "description": "Immutable version history with hash-chained integrity"},
         {"name": "audit",         "description": "Append-only event log for every proposal"},
         {"name": "constitution",  "description": "Published constitution document versions"},
+        {"name": "moderation",    "description": "Flag content for removal and admin review of cases"},
+        {"name": "notifications", "description": "In-app notifications"},
         {"name": "editors",       "description": "Editor role management"},
         {"name": "admins",        "description": "Admin role management"},
     ],
@@ -314,6 +323,17 @@ def is_admin(stake_address: str, db: Session) -> bool:
 
 # ── Serialisers ───────────────────────────────────────────────────────────────
 
+def to_iso(dt):
+    """Serialise a datetime as UTC ISO-8601 with an explicit offset. Timestamps
+    are always stored in UTC, but SQLite strips tzinfo on read-back, so a naive
+    value would serialise without a zone and be parsed as local time by the
+    browser. Treat naive values as UTC so clients always get an unambiguous time."""
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.isoformat()
+
 def proposal_to_dict(p: Proposal) -> dict:
     # body stores JSON for new proposals; fall back gracefully for legacy markdown
     structured = None
@@ -336,11 +356,12 @@ def proposal_to_dict(p: Proposal) -> dict:
         "author_stake_address": p.author_stake_address,
         "author_display_name": p.author_display_name,
         "labels": [{"name": l.name} for l in p.labels],
-        "comments": len(p.comments),
+        "comments": sum(1 for c in p.comments if c.moderation_status == "visible"),
+        "moderation_status": p.moderation_status,
         "withdrawal_requested_by": p.withdrawal_requested_by,
         "withdrawal_requested_by_name": p.withdrawal_requested_by_name,
-        "created_at": p.created_at.isoformat() if p.created_at else None,
-        "updated_at": p.updated_at.isoformat() if p.updated_at else None,
+        "created_at": to_iso(p.created_at),
+        "updated_at": to_iso(p.updated_at),
     }
 
 
@@ -351,11 +372,30 @@ def comment_to_dict(c: Comment) -> dict:
         "body": c.body,
         "author_stake_address": c.author_stake_address,
         "author_display_name": c.author_display_name,
-        "created_at": c.created_at.isoformat() if c.created_at else None,
-        "updated_at": c.updated_at.isoformat() if c.updated_at else None,
-        "flagged": c.flagged,
-        "flagged_by_name": c.flagged_by_name,
+        "created_at": to_iso(c.created_at),
+        "updated_at": to_iso(c.updated_at),
+        "moderation_status": c.moderation_status,
     }
+
+
+def notify(db: Session, recipient: str, ntype: str, title: str,
+           body: str = None, proposal_number: int = None):
+    """Queue an in-app notification (no-op for an empty recipient)."""
+    if not recipient:
+        return
+    db.add(Notification(recipient_stake_address=recipient, type=ntype,
+                        title=title, body=body, proposal_number=proposal_number))
+
+
+def admin_stakes(db: Session) -> list[str]:
+    return [a.stake_address for a in db.query(Admin).all()]
+
+
+def cap_ref(db: Session, number: int) -> str:
+    """A human reference to a proposal for notification text, e.g.
+    'CAP #12 "Clarify Quorum Threshold"'."""
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    return f'CAP #{number} "{p.title}"' if p and p.title else f'CAP #{number}'
 
 
 def audit_to_dict(e: AuditEvent) -> dict:
@@ -366,7 +406,7 @@ def audit_to_dict(e: AuditEvent) -> dict:
         "actor_stake_address": e.actor_stake_address,
         "actor_display_name": e.actor_display_name,
         "data": json.loads(e.data) if e.data else None,
-        "created_at": e.created_at.isoformat() if e.created_at else None,
+        "created_at": to_iso(e.created_at),
     }
 
 
@@ -583,21 +623,35 @@ def health_check():
     return {"status": "ok"}
 
 
+def _viewer_is_admin(authorization: Optional[str], db: Session) -> bool:
+    """True when the request carries a valid admin token. Used to decide whether
+    hidden (under-review / removed) content is visible to the caller."""
+    user = get_current_user(authorization)
+    return bool(user and is_admin(user["sub"], db))
+
+
 @app.get("/proposals", tags=["proposals"], summary="List all proposals",
-         description="Returns all proposals ordered by number descending. Each item includes title, type, lifecycle labels, author, and comment count. **Public.**")
-def list_proposals(state: Optional[str] = None, db: Session = Depends(get_db)):
+         description="Returns all proposals ordered by number descending. Content that is under review or "
+                     "removed is hidden from everyone except admins. **Public.**")
+def list_proposals(state: Optional[str] = None, authorization: Optional[str] = Header(None),
+                   db: Session = Depends(get_db)):
     q = db.query(Proposal)
     if state:
         q = q.filter(Proposal.state == state)
+    if not _viewer_is_admin(authorization, db):
+        q = q.filter(Proposal.moderation_status == "visible")
     proposals = q.order_by(Proposal.number.desc()).all()
     return [proposal_to_dict(p) for p in proposals]
 
 
 @app.get("/proposals/{number}", tags=["proposals"], summary="Get a single proposal",
-         description="Returns the full proposal including structured content fields, labels, and metadata. **Public.**")
-def get_proposal(number: int, db: Session = Depends(get_db)):
+         description="Returns the full proposal. A proposal that is under review or removed is only visible "
+                     "to admins. **Public.**")
+def get_proposal(number: int, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
     p = db.query(Proposal).filter(Proposal.number == number).first()
     if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if p.moderation_status != "visible" and not _viewer_is_admin(authorization, db):
         raise HTTPException(status_code=404, detail="Proposal not found")
     return proposal_to_dict(p)
 
@@ -866,32 +920,16 @@ def cancel_withdrawal(number: int, user: dict = Depends(require_user),
     return proposal_to_dict(p)
 
 
-@app.post("/proposals/{number}/remove", tags=["proposals"], summary="Remove a proposal (moderation)",
-          description="Unilaterally closes a proposal for spam or abuse, bypassing the normal author/editor "
-                      "withdrawal flow and its two-person rule. The proposal remains visible (marked "
-                      "`withdrawn`) and the action is recorded in the audit trail for transparency — "
-                      "it is not deleted. **Requires admin role.**")
-def remove_proposal(number: int, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    p = db.query(Proposal).filter(Proposal.number == number).first()
-    if not p:
-        raise HTTPException(status_code=404, detail="Proposal not found")
-    if any(l.name == "withdrawn" for l in p.labels):
-        raise HTTPException(status_code=409, detail="Proposal is already withdrawn")
-
-    record_audit(db, number, "removed_by_admin", user)
-    _apply_withdrawn(db, p)
-    db.commit()
-    db.refresh(p)
-    return proposal_to_dict(p)
-
-
 # ── Comments ───────────────────────────────────────────────────────────────────
 
 @app.get("/proposals/{number}/comments", tags=["comments"], summary="List comments on a proposal",
-         description="Returns all comments ordered by creation time. **Public.**")
-def list_comments(number: int, db: Session = Depends(get_db)):
-    comments = db.query(Comment).filter(Comment.proposal_number == number)\
-        .order_by(Comment.created_at.asc()).all()
+         description="Returns comments ordered by creation time. Comments under review or removed are hidden "
+                     "from everyone except admins. **Public.**")
+def list_comments(number: int, authorization: Optional[str] = Header(None), db: Session = Depends(get_db)):
+    q = db.query(Comment).filter(Comment.proposal_number == number)
+    if not _viewer_is_admin(authorization, db):
+        q = q.filter(Comment.moderation_status == "visible")
+    comments = q.order_by(Comment.created_at.asc()).all()
     return [comment_to_dict(c) for c in comments]
 
 
@@ -906,6 +944,10 @@ def create_comment(request: Request, number: int, req: CommentCreate, user: dict
                    db: Session = Depends(get_db)):
     p = db.query(Proposal).filter(Proposal.number == number).first()
     if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    # A hidden (under-review / removed) proposal is invisible to everyone but
+    # admins, so no one else may keep commenting on it either.
+    if p.moderation_status != "visible" and not is_admin(user["sub"], db):
         raise HTTPException(status_code=404, detail="Proposal not found")
 
     c = Comment(
@@ -938,50 +980,242 @@ def update_comment(comment_id: int, req: CommentCreate, user: dict = Depends(req
     return comment_to_dict(c)
 
 
-@app.delete("/comments/{comment_id}", status_code=204, tags=["comments"], summary="Remove a comment (moderation)",
-            description="Permanently removes a comment. Distinct from editorial flagging — this is a moderation "
-                        "action for spam or abusive content. **Requires admin role.**")
-def delete_comment(comment_id: int, user: dict = Depends(require_admin), db: Session = Depends(get_db)):
-    c = db.query(Comment).filter(Comment.id == comment_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="Comment not found")
-    number = c.proposal_number
-    record_audit(db, number, "comment_removed", user, {
-        "comment_id": comment_id, "author": c.author_stake_address,
-    })
-    db.delete(c)
+# ── Moderation: flag for removal → admin decides ───────────────────────────────
+#
+# An editor or admin flags a proposal/comment for removal with a required reason.
+# The item is hidden (not deleted) and a moderation case opens. Admins are
+# notified; the author is told their content is under review. An admin then
+# removes it (stays hidden, admin-only) or rejects the request (item restored),
+# each with a required reason. The author and the flagging editor are notified.
+
+class FlagRequest(BaseModel):
+    reason: str
+
+
+class ResolveRequest(BaseModel):
+    reason: str
+
+
+def _require_reason(reason: str) -> str:
+    r = (reason or "").strip()
+    if not r:
+        raise HTTPException(status_code=400, detail="A written reason is required")
+    return r
+
+
+def _actor_name(user: dict) -> str:
+    return user.get("display_name") or "an editor"
+
+
+@app.post("/proposals/{number}/flag", tags=["moderation"], summary="Flag a proposal for removal",
+          description="Hides the proposal and opens a moderation case for an admin to review. A written "
+                      "reason is required. **Requires editor or admin role.**")
+def flag_proposal(number: int, req: FlagRequest, user: dict = Depends(require_editor_or_admin),
+                  db: Session = Depends(get_db)):
+    reason = _require_reason(req.reason)
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if p.moderation_status != "visible":
+        raise HTTPException(status_code=409, detail="This proposal is already under review or removed")
+
+    p.moderation_status = "under_review"
+    case = ModerationCase(target_type="proposal", proposal_number=number,
+                          flagged_by=user["sub"], flagged_by_name=user.get("display_name"),
+                          flag_reason=reason)
+    db.add(case)
+    record_audit(db, number, "flagged_for_removal", user, {"target": "proposal", "reason": reason})
+    for a in admin_stakes(db):
+        notify(db, a, "flag_pending", "A proposal was flagged for removal",
+               f"CAP #{number} “{p.title}” was flagged by {_actor_name(user)}.\n\nReason: {reason}", number)
+    notify(db, p.author_stake_address, "under_review", "Your proposal is under review",
+           f"Your proposal “{p.title}” may be in violation of the Terms of Use and is being reviewed by an admin.",
+           number)
     db.commit()
+    db.refresh(p)
+    return proposal_to_dict(p)
 
 
-@app.post("/comments/{comment_id}/flag", tags=["comments"], summary="Flag a comment for admin review",
-          description="Editors don't have delete power, but can flag a comment for an admin to review and "
-                      "remove if warranted. **Requires editor or admin role.**")
-def flag_comment(comment_id: int, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
+@app.post("/comments/{comment_id}/flag", tags=["moderation"], summary="Flag a comment for removal",
+          description="Hides the comment and opens a moderation case for an admin to review. A written "
+                      "reason is required. **Requires editor or admin role.**")
+def flag_comment(comment_id: int, req: FlagRequest, user: dict = Depends(require_editor_or_admin),
+                 db: Session = Depends(get_db)):
+    reason = _require_reason(req.reason)
     c = db.query(Comment).filter(Comment.id == comment_id).first()
     if not c:
         raise HTTPException(status_code=404, detail="Comment not found")
-    c.flagged = True
-    c.flagged_by = user["sub"]
-    c.flagged_by_name = user.get("display_name")
-    record_audit(db, c.proposal_number, "comment_flagged", user, {"comment_id": comment_id})
+    if c.moderation_status != "visible":
+        raise HTTPException(status_code=409, detail="This comment is already under review or removed")
+
+    c.moderation_status = "under_review"
+    case = ModerationCase(target_type="comment", proposal_number=c.proposal_number, comment_id=comment_id,
+                          flagged_by=user["sub"], flagged_by_name=user.get("display_name"),
+                          flag_reason=reason)
+    db.add(case)
+    record_audit(db, c.proposal_number, "flagged_for_removal", user, {"target": "comment", "comment_id": comment_id, "reason": reason})
+    ref = cap_ref(db, c.proposal_number)
+    for a in admin_stakes(db):
+        notify(db, a, "flag_pending", "A comment was flagged for removal",
+               f"A comment on {ref} was flagged by {_actor_name(user)}.\n\nReason: {reason}",
+               c.proposal_number)
+    notify(db, c.author_stake_address, "under_review", "Your comment is under review",
+           f"Your comment on {ref} may be in violation of the Terms of Use and is being reviewed by an admin.",
+           c.proposal_number)
     db.commit()
     db.refresh(c)
     return comment_to_dict(c)
 
 
-@app.delete("/comments/{comment_id}/flag", tags=["comments"], summary="Clear a comment's flag",
-            description="**Requires editor or admin role.**")
-def unflag_comment(comment_id: int, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
-    c = db.query(Comment).filter(Comment.id == comment_id).first()
-    if not c:
-        raise HTTPException(status_code=404, detail="Comment not found")
-    c.flagged = False
-    c.flagged_by = None
-    c.flagged_by_name = None
-    record_audit(db, c.proposal_number, "comment_flag_cleared", user, {"comment_id": comment_id})
+def _case_target(db: Session, case: ModerationCase):
+    if case.target_type == "comment":
+        return db.query(Comment).filter(Comment.id == case.comment_id).first()
+    return db.query(Proposal).filter(Proposal.number == case.proposal_number).first()
+
+
+def _case_to_dict(db: Session, case: ModerationCase) -> dict:
+    target = _case_target(db, case)
+    d = {
+        "id": case.id,
+        "target_type": case.target_type,
+        "proposal_number": case.proposal_number,
+        "comment_id": case.comment_id,
+        "status": case.status,
+        "flagged_by": case.flagged_by,
+        "flagged_by_name": case.flagged_by_name,
+        "flag_reason": case.flag_reason,
+        "created_at": to_iso(case.created_at),
+        "resolved_by_name": case.resolved_by_name,
+        "resolution_reason": case.resolution_reason,
+        "resolved_at": to_iso(case.resolved_at),
+        "target_exists": target is not None,
+    }
+    if case.target_type == "comment":
+        d["target_preview"] = (target.body[:400] if target else None)
+        d["target_author"] = (target.author_display_name or target.author_stake_address) if target else None
+    else:
+        d["target_title"] = target.title if target else None
+        d["target_author"] = (target.author_display_name or target.author_stake_address) if target else None
+    return d
+
+
+@app.get("/moderation/cases", tags=["moderation"], summary="List moderation cases",
+         description="Returns removal requests. Filter by `status` (open, removed, rejected, all). **Requires admin role.**")
+def list_moderation_cases(status: Optional[str] = "open", user: dict = Depends(require_admin),
+                          db: Session = Depends(get_db)):
+    q = db.query(ModerationCase)
+    if status and status != "all":
+        q = q.filter(ModerationCase.status == status)
+    cases = q.order_by(ModerationCase.created_at.desc()).all()
+    return [_case_to_dict(db, c) for c in cases]
+
+
+def _resolve_case(db: Session, case_id: int, decision: str, reason: str, user: dict) -> dict:
+    case = db.query(ModerationCase).filter(ModerationCase.id == case_id).first()
+    if not case:
+        raise HTTPException(status_code=404, detail="Moderation case not found")
+    if case.status != "open":
+        raise HTTPException(status_code=409, detail="This case has already been resolved")
+
+    target = _case_target(db, case)
+    if not target:
+        raise HTTPException(status_code=404, detail="The flagged content no longer exists")
+
+    new_status = "removed" if decision == "remove" else "visible"
+    target.moderation_status = new_status
+    case.status = "removed" if decision == "remove" else "rejected"
+    case.resolved_by = user["sub"]
+    case.resolved_by_name = user.get("display_name")
+    case.resolution_reason = reason
+    case.resolved_at = datetime.now(timezone.utc)
+
+    kind = "comment" if case.target_type == "comment" else "proposal"
+    author = target.author_stake_address
+    pnum = case.proposal_number
+    ref = cap_ref(db, pnum)
+    record_audit(db, pnum, "moderation_" + case.status, user,
+                 {"target": kind, "comment_id": case.comment_id, "reason": reason})
+
+    if decision == "remove":
+        notify(db, author, "removed", f"Your {kind} was removed",
+               f"After review, an admin removed your {kind} on {ref} for violating the Terms of Use.\n\nReason: {reason}", pnum)
+        notify(db, case.flagged_by, "removed", f"A flagged {kind} was removed",
+               f"The {kind} you flagged on {ref} was reviewed and removed.\n\nAdmin reason: {reason}", pnum)
+    else:
+        notify(db, author, "reinstated", f"Your {kind} was restored",
+               f"After review, an admin restored your {kind} on {ref}. It is visible again.\n\nReason: {reason}", pnum)
+        notify(db, case.flagged_by, "reinstated", f"A flagged {kind} was restored",
+               f"The {kind} you flagged on {ref} was reviewed and kept (removal rejected).\n\nAdmin reason: {reason}", pnum)
+
     db.commit()
-    db.refresh(c)
-    return comment_to_dict(c)
+    return _case_to_dict(db, case)
+
+
+@app.post("/moderation/cases/{case_id}/remove", tags=["moderation"], summary="Remove flagged content",
+          description="Confirms removal: the content stays hidden (admin-only) and is not deleted. A written "
+                      "reason is required. Notifies the author and the flagging editor. **Requires admin role.**")
+def moderation_remove(case_id: int, req: ResolveRequest, user: dict = Depends(require_admin),
+                      db: Session = Depends(get_db)):
+    return _resolve_case(db, case_id, "remove", _require_reason(req.reason), user)
+
+
+@app.post("/moderation/cases/{case_id}/reject", tags=["moderation"], summary="Reject a removal request",
+          description="Rejects removal: the content becomes visible again. A written reason is required. "
+                      "Notifies the author and the flagging editor. **Requires admin role.**")
+def moderation_reject(case_id: int, req: ResolveRequest, user: dict = Depends(require_admin),
+                      db: Session = Depends(get_db)):
+    return _resolve_case(db, case_id, "reject", _require_reason(req.reason), user)
+
+
+# ── Notifications ──────────────────────────────────────────────────────────────
+
+def notification_to_dict(n: Notification) -> dict:
+    return {
+        "id": n.id,
+        "type": n.type,
+        "title": n.title,
+        "body": n.body,
+        "proposal_number": n.proposal_number,
+        "read": n.read,
+        "created_at": to_iso(n.created_at),
+    }
+
+
+@app.get("/notifications", tags=["notifications"], summary="List my notifications",
+         description="Returns the authenticated user's notifications, newest first. **Requires authentication.**")
+def list_notifications(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    rows = db.query(Notification).filter(Notification.recipient_stake_address == user["sub"])\
+        .order_by(Notification.created_at.desc()).limit(100).all()
+    return [notification_to_dict(n) for n in rows]
+
+
+@app.get("/notifications/unread-count", tags=["notifications"], summary="Count unread notifications",
+         description="**Requires authentication.**")
+def unread_notification_count(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    n = db.query(Notification).filter(
+        Notification.recipient_stake_address == user["sub"], Notification.read == False).count()  # noqa: E712
+    return {"count": n}
+
+
+@app.post("/notifications/{notif_id}/read", tags=["notifications"], summary="Mark a notification read",
+          description="**Requires authentication.**")
+def mark_notification_read(notif_id: int, user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    n = db.query(Notification).filter(Notification.id == notif_id,
+                                      Notification.recipient_stake_address == user["sub"]).first()
+    if not n:
+        raise HTTPException(status_code=404, detail="Notification not found")
+    n.read = True
+    db.commit()
+    return {"ok": True}
+
+
+@app.post("/notifications/read-all", tags=["notifications"], summary="Mark all notifications read",
+          description="**Requires authentication.**")
+def mark_all_notifications_read(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    db.query(Notification).filter(Notification.recipient_stake_address == user["sub"],
+                                  Notification.read == False).update({"read": True})  # noqa: E712
+    db.commit()
+    return {"ok": True}
 
 
 # ── Audit trail ────────────────────────────────────────────────────────────────
@@ -1226,7 +1460,7 @@ def version_to_dict(v: ProposalVersion) -> dict:
         "title": v.title,
         "structured": structured,
         "change_summary": v.change_summary,
-        "created_at": v.created_at.isoformat() if v.created_at else None,
+        "created_at": to_iso(v.created_at),
         "created_by": v.created_by,
         "created_by_name": v.created_by_name,
         "previous_hash": v.previous_hash,
@@ -1270,8 +1504,8 @@ def suggestion_to_dict(s: Suggestion) -> dict:
         "status": s.status,
         "editor_stake_address": s.editor_stake_address,
         "editor_display_name": s.editor_display_name,
-        "created_at": s.created_at.isoformat() if s.created_at else None,
-        "resolved_at": s.resolved_at.isoformat() if s.resolved_at else None,
+        "created_at": to_iso(s.created_at),
+        "resolved_at": to_iso(s.resolved_at),
         "resolved_by": s.resolved_by,
     }
 
@@ -1429,7 +1663,7 @@ def get_guide(slug: str, db: Session = Depends(get_db)):
         "slug": guide.slug,
         "title": guide.title,
         "content": guide.content,
-        "updated_at": guide.updated_at.isoformat() if guide.updated_at else None,
+        "updated_at": to_iso(guide.updated_at),
         "updated_by_name": guide.updated_by_name,
     }
 
@@ -1461,7 +1695,7 @@ def upsert_guide(slug: str, body: GuideUpdate,
         db.add(guide)
     db.commit()
     db.refresh(guide)
-    return {"slug": guide.slug, "title": guide.title, "updated_at": guide.updated_at.isoformat()}
+    return {"slug": guide.slug, "title": guide.title, "updated_at": to_iso(guide.updated_at)}
 
 @app.delete("/guides/{slug}", tags=["guides"], summary="Delete a guide (editor/admin only)", status_code=204)
 def delete_guide(slug: str, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
@@ -1503,7 +1737,7 @@ def submit_bug_report(body: BugReportCreate,
     db.commit()
     db.refresh(report)
     return {"id": report.id, "title": report.title, "status": report.status,
-            "created_at": report.created_at.isoformat()}
+            "created_at": to_iso(report.created_at)}
 
 @app.get("/bug-reports", tags=["bug-reports"], summary="List all bug reports (admin only)")
 def list_bug_reports(user: dict = Depends(require_admin),
@@ -1515,8 +1749,8 @@ def list_bug_reports(user: dict = Depends(require_admin),
              "reporter_stake_address": r.reporter_stake_address,
              "reporter_display_name": r.reporter_display_name,
              "status": r.status,
-             "created_at": r.created_at.isoformat(),
-             "updated_at": r.updated_at.isoformat()} for r in reports]
+             "created_at": to_iso(r.created_at),
+             "updated_at": to_iso(r.updated_at)} for r in reports]
 
 @app.patch("/bug-reports/{report_id}/status", tags=["bug-reports"],
            summary="Update bug report status (admin only)")

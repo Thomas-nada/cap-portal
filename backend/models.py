@@ -19,6 +19,9 @@ class Proposal(Base):
     state = Column(String, nullable=False, default="open")  # open | closed
     author_stake_address = Column(String, nullable=False)
     author_display_name = Column(String, nullable=True)
+    # Moderation lifecycle: visible | under_review (editor flagged, hidden pending
+    # admin decision) | removed (admin confirmed, stays hidden, admin-only).
+    moderation_status = Column(String, nullable=False, default="visible")
     # Two-person rule for editor-initiated withdrawal: set when one editor requests
     # withdrawal of someone else's proposal; a second, different editor must confirm.
     withdrawal_requested_by = Column(String, nullable=True)
@@ -54,9 +57,8 @@ class Comment(Base):
     author_display_name = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), default=now)
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
-    flagged = Column(Boolean, nullable=False, default=False)
-    flagged_by = Column(String, nullable=True)
-    flagged_by_name = Column(String, nullable=True)
+    # Moderation lifecycle: visible | under_review | removed (see Proposal).
+    moderation_status = Column(String, nullable=False, default="visible")
 
     proposal = relationship("Proposal", back_populates="comments")
 
@@ -186,3 +188,44 @@ class Guide(Base):
     section = Column(String, nullable=False, default='general')
     section_label = Column(String, nullable=True)   # display name, e.g. "Getting Started"
     sort_order = Column(Integer, nullable=False, default=0)
+
+
+class ModerationCase(Base):
+    """A removal request against a proposal or comment.
+
+    Lifecycle: an editor (or admin) flags an item for removal with a reason,
+    which hides it and opens a case (status=open). An admin then either
+    'removed' it (stays hidden) or 'rejected' the request (item restored),
+    each with a required reason.
+    """
+    __tablename__ = "moderation_cases"
+
+    id = Column(Integer, primary_key=True, index=True)
+    target_type = Column(String, nullable=False)          # "proposal" | "comment"
+    proposal_number = Column(Integer, nullable=False)     # the proposal, or the comment's proposal
+    comment_id = Column(Integer, nullable=True)           # set when target_type == "comment"
+    status = Column(String, nullable=False, default="open")  # open | removed | rejected
+
+    flagged_by = Column(String, nullable=False)
+    flagged_by_name = Column(String, nullable=True)
+    flag_reason = Column(Text, nullable=False)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+    resolved_by = Column(String, nullable=True)
+    resolved_by_name = Column(String, nullable=True)
+    resolution_reason = Column(Text, nullable=True)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+
+
+class Notification(Base):
+    """In-app notification shown in a user's profile/notifications panel."""
+    __tablename__ = "notifications"
+
+    id = Column(Integer, primary_key=True, index=True)
+    recipient_stake_address = Column(String, nullable=False, index=True)
+    type = Column(String, nullable=False)   # flag_pending | under_review | removed | reinstated
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=True)
+    proposal_number = Column(Integer, nullable=True)   # deep-link target
+    read = Column(Boolean, nullable=False, default=False)
+    created_at = Column(DateTime(timezone=True), default=now)

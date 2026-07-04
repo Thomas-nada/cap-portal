@@ -542,6 +542,107 @@ def test_client_ip_uses_last_forwarded_for():
     assert client_ip(_Req(None, "198.51.100.5")) == "198.51.100.5"
 
 
+# ── Moderation workflow ───────────────────────────────────────────────────────
+
+def test_flag_requires_reason(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/flag", json={"reason": "   "}, headers=auth(EDITOR_ADDR))
+    assert r.status_code == 400
+
+
+def test_flagged_comment_hidden_from_public_visible_to_admin(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    cid = client.post("/proposals/1/comments", json={"body": "flag me"}, headers=auth(AUTHOR_ADDR, "Alice")).json()["id"]
+    client.post(f"/comments/{cid}/flag", json={"reason": "spam"}, headers=auth(EDITOR_ADDR))
+
+    assert all(c["id"] != cid for c in client.get("/proposals/1/comments").json())          # public
+    assert any(c["id"] == cid for c in client.get("/proposals/1/comments",
+               headers=auth(ADMIN_ADDR, "Admin")).json())                                     # admin
+
+
+def test_flag_notifies_admin_and_author(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/flag", json={"reason": "off topic"}, headers=auth(EDITOR_ADDR))
+
+    admin_notifs = client.get("/notifications", headers=auth(ADMIN_ADDR, "Admin")).json()
+    author_notifs = client.get("/notifications", headers=auth(AUTHOR_ADDR, "Alice")).json()
+    assert any(n["type"] == "flag_pending" for n in admin_notifs)
+    assert any(n["type"] == "under_review" for n in author_notifs)
+
+
+def test_admin_reject_restores_and_notifies(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/flag", json={"reason": "maybe bad"}, headers=auth(EDITOR_ADDR))
+    case = client.get("/moderation/cases", headers=auth(ADMIN_ADDR, "Admin")).json()[0]
+
+    r = client.post(f"/moderation/cases/{case['id']}/reject", json={"reason": "actually fine"},
+                    headers=auth(ADMIN_ADDR, "Admin"))
+    assert r.status_code == 200
+    assert client.get("/proposals/1").status_code == 200  # visible again to public
+    author_notifs = client.get("/notifications", headers=auth(AUTHOR_ADDR, "Alice")).json()
+    assert any(n["type"] == "reinstated" for n in author_notifs)
+
+
+def test_cannot_comment_on_hidden_proposal(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/flag", json={"reason": "spam"}, headers=auth(EDITOR_ADDR))
+    # Under review → author can no longer comment, but an admin still can.
+    assert client.post("/proposals/1/comments", json={"body": "still here?"},
+                       headers=auth(AUTHOR_ADDR, "Alice")).status_code == 404
+    assert client.post("/proposals/1/comments", json={"body": "admin note"},
+                       headers=auth(ADMIN_ADDR, "Admin")).status_code == 201
+
+
+def test_admin_remove_keeps_hidden_admin_only(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/flag", json={"reason": "spam"}, headers=auth(EDITOR_ADDR))
+    case = client.get("/moderation/cases", headers=auth(ADMIN_ADDR, "Admin")).json()[0]
+    client.post(f"/moderation/cases/{case['id']}/remove", json={"reason": "confirmed"},
+                headers=auth(ADMIN_ADDR, "Admin"))
+
+    assert client.get("/proposals/1").status_code == 404                                   # public
+    assert client.get("/proposals/1", headers=auth(ADMIN_ADDR, "Admin")).status_code == 200  # admin
+
+
+def test_resolve_reason_required_and_case_closes(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/flag", json={"reason": "x"}, headers=auth(EDITOR_ADDR))
+    case = client.get("/moderation/cases", headers=auth(ADMIN_ADDR, "Admin")).json()[0]
+    assert client.post(f"/moderation/cases/{case['id']}/remove", json={"reason": " "},
+                       headers=auth(ADMIN_ADDR, "Admin")).status_code == 400
+    client.post(f"/moderation/cases/{case['id']}/remove", json={"reason": "ok"}, headers=auth(ADMIN_ADDR, "Admin"))
+    # second resolution on the same case is a conflict
+    assert client.post(f"/moderation/cases/{case['id']}/reject", json={"reason": "no"},
+                       headers=auth(ADMIN_ADDR, "Admin")).status_code == 409
+
+
+def test_non_editor_cannot_flag(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_user(db, EDITOR_ADDR, "Bob")  # plain user, not an editor
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    assert client.post("/proposals/1/flag", json={"reason": "x"}, headers=auth(EDITOR_ADDR, "Bob")).status_code == 403
+
+
 # ── Auth: stake-address binding (security) ────────────────────────────────────
 
 def _make_signed_login(challenge, claimed_addr):

@@ -93,8 +93,44 @@ export async function cancelWithdrawal(number) {
     return req('POST', `/proposals/${number}/withdraw/cancel`, {}, true);
 }
 
-export async function removeProposal(number) {
-    return req('POST', `/proposals/${number}/remove`, {}, true);
+// ── Moderation ────────────────────────────────────────────────────────────────
+
+export async function flagProposal(number, reason) {
+    return req('POST', `/proposals/${number}/flag`, { reason }, true);
+}
+
+export async function flagComment(commentId, reason) {
+    return req('POST', `/comments/${commentId}/flag`, { reason }, true);
+}
+
+export async function fetchModerationCases(status = 'open') {
+    return req('GET', `/moderation/cases?status=${encodeURIComponent(status)}`, null, true);
+}
+
+export async function moderationRemove(caseId, reason) {
+    return req('POST', `/moderation/cases/${caseId}/remove`, { reason }, true);
+}
+
+export async function moderationReject(caseId, reason) {
+    return req('POST', `/moderation/cases/${caseId}/reject`, { reason }, true);
+}
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+export async function fetchNotifications() {
+    return req('GET', '/notifications', null, true);
+}
+
+export async function fetchUnreadCount() {
+    return req('GET', '/notifications/unread-count', null, true);
+}
+
+export async function markNotificationRead(id) {
+    return req('POST', `/notifications/${id}/read`, {}, true);
+}
+
+export async function markAllNotificationsRead() {
+    return req('POST', '/notifications/read-all', {}, true);
 }
 
 // ── Comments ──────────────────────────────────────────────────────────────────
@@ -109,18 +145,6 @@ export async function createComment(number, body) {
 
 export async function updateComment(id, body) {
     return req('PATCH', `/comments/${id}`, { body }, true);
-}
-
-export async function flagComment(id) {
-    return req('POST', `/comments/${id}/flag`, {}, true);
-}
-
-export async function unflagComment(id) {
-    return req('DELETE', `/comments/${id}/flag`, null, true);
-}
-
-export async function deleteComment(id) {
-    return req('DELETE', `/comments/${id}`, null, true);
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

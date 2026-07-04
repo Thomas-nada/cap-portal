@@ -11,9 +11,18 @@ export function renderNav(state) {
         { id: 'constitution', label: 'Constitution', icon: 'book-open' },
         { id: 'learn',        label: 'Guides',       icon: 'book' },
         { id: 'editors',      label: 'Editors',      icon: 'shield' },
+        ...(state.user?.is_admin ? [{ id: 'moderation', label: 'Moderation', icon: 'gavel' }] : []),
         ...(state.user?.is_admin ? [{ id: 'bugs', label: 'Bugs', icon: 'bug' }] : []),
         ...(isLoggedIn ? [{ id: 'wizard', label: 'New CAP', icon: 'plus-square' }] : [])
     ];
+
+    const bell = isLoggedIn ? `
+        <button onclick="window.toggleNotifications()" title="Notifications"
+ class="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-600">
+ <i data-lucide="bell" class="w-5 h-5"></i>
+            ${state.unreadCount > 0 ? `<span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-primary text-white text-[10px] font-black flex items-center justify-center">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>` : ''}
+        </button>
+    ` : '';
 
     const sessionControls = isLoggedIn ? `
  <div class="flex items-center gap-2">
@@ -86,6 +95,7 @@ export function renderNav(state) {
             </div>
 
  <div class="flex items-center gap-2 pr-1 sm:pr-2">
+                ${bell}
                 ${sessionControls}
                 <button onclick="window.toggleMobileNav()"
  class="lg:hidden w-10 h-10 flex items-center justify-center rounded-2xl text-slate-600 hover:bg-slate-100 transition-colors">

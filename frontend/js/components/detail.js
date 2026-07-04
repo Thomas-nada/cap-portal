@@ -297,39 +297,37 @@ export function renderDetail(state) {
                             ` : (state.comments||[]).map(c => {
                                 const cName = c.author_display_name || shortAddress(c.author_stake_address);
                                 const cAddr = shortAddress(c.author_stake_address);
+                                const mod = c.moderation_status || 'visible';
+                                const modBadge = mod === 'under_review'
+                                    ? `<span class="text-[9px] font-black px-2 py-1 rounded-full bg-amber-500 text-white uppercase tracking-wider flex items-center gap-1"><i data-lucide="eye-off" class="w-2.5 h-2.5"></i> Under review</span>`
+                                    : mod === 'removed'
+                                    ? `<span class="text-[9px] font-black px-2 py-1 rounded-full bg-red-600 text-white uppercase tracking-wider flex items-center gap-1"><i data-lucide="ban" class="w-2.5 h-2.5"></i> Removed</span>`
+                                    : '';
+                                const cardBorder = mod === 'removed' ? 'border-red-200' : mod === 'under_review' ? 'border-amber-200' : 'border-slate-100';
+                                const canFlag = (isEditor || isAdmin) && mod === 'visible';
                                 return `
- <div class="flex gap-8 group">
+ <div class="flex gap-8 group ${mod !== 'visible' ? 'opacity-80' : ''}">
  <div class="w-14 h-14 rounded-3xl bg-slate-100 flex items-center justify-center flex-shrink-0">
  <i data-lucide="user" class="w-6 h-6 text-slate-400"></i>
                                     </div>
  <div class="flex-grow space-y-4">
- <div class="flex items-center gap-4">
+ <div class="flex items-center gap-4 flex-wrap">
  <div class="flex flex-col leading-tight">
  <span class="text-sm font-black text-slate-900 ">${escapeHtml(cName)}</span>
  <span class="text-xs text-slate-400 font-mono">(${cAddr})</span>
                                             </div>
  <span class="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">${new Date(c.created_at).toLocaleString()}</span>
-                                            ${c.flagged ? `
- <span class="text-[9px] font-black px-2 py-1 rounded-full bg-red-600 text-white uppercase tracking-wider flex items-center gap-1" title="Flagged by ${escapeHtml(c.flagged_by_name || 'an editor')} for admin review">
- <i data-lucide="flag" class="w-2.5 h-2.5"></i> Flagged
-                                            </span>
-                                            ` : ''}
+                                            ${modBadge}
  <div class="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                ${isEditor ? `
-                                                <button onclick="window.editorToggleFlagComment(${c.id}, ${c.flagged ? 'true' : 'false'})" title="${c.flagged ? 'Clear flag' : 'Flag for admin review'}"
- class="text-slate-300 ${c.flagged ? 'text-red-500' : 'hover:text-red-500'} transition-all p-1.5 rounded-lg hover:bg-red-50 ">
- <i data-lucide="flag" class="w-3.5 h-3.5"></i>
-                                                </button>
-                                                ` : ''}
-                                                ${isAdmin ? `
-                                                <button onclick="window.adminDeleteComment(${c.id})" title="Remove comment (admin moderation)"
- class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 ">
- <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
+                                                ${canFlag ? `
+                                                <button onclick="window.flagCommentForRemoval(${c.id})" title="Flag this comment for removal"
+ class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1 text-[10px] font-black uppercase tracking-wide">
+ <i data-lucide="flag" class="w-3.5 h-3.5"></i> Flag
                                                 </button>
                                                 ` : ''}
                                             </div>
                                         </div>
- <div class="bg-white/80 p-8 rounded-[2.5rem] border ${c.flagged ? 'border-red-200 ' : 'border-slate-100 '} shadow-sm text-sm leading-relaxed prose max-w-none">
+ <div class="bg-white/80 p-8 rounded-[2.5rem] border ${cardBorder} shadow-sm text-sm leading-relaxed prose max-w-none">
                                             ${window.safeMarkdown(c.body)}
                                         </div>
                                     </div>
@@ -388,8 +386,8 @@ export function renderDetail(state) {
                     <!-- Editor Controls -->
                     ${isEditor ? renderEditorControls(p, state) : ''}
 
-                    <!-- Admin Controls (moderation, separate from editor's process-guide role) -->
-                    ${isAdmin ? renderAdminControls(p, state) : ''}
+                    <!-- Moderation (flag for removal; admins get a queue link) -->
+                    ${(isEditor || isAdmin) ? renderModerationPanel(p, state, isAdmin) : ''}
                 </aside>
             </div>
         </div>`;
@@ -674,53 +672,48 @@ function renderEditorControls(p, state) {
             </div>
         </div>
 
-        <!-- Flag for Admin Review -->
- <div class="space-y-3">
- <p class="text-[9px] font-black uppercase tracking-[0.18em] text-slate-400">Moderation</p>
-            ${labels.includes('flagged-for-removal') ? `
-            <button onclick="window.editorToggleStatusTag('flagged-for-removal')"
- class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-600 bg-red-600 text-white text-[10px] font-black uppercase tracking-wider transition-all">
- <i data-lucide="flag" class="w-3.5 h-3.5"></i>
-                Flagged for admin review — click to clear
-            </button>
-            ` : `
-            <button onclick="window.editorToggleStatusTag('flagged-for-removal')"
- class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-500 text-[10px] font-black uppercase tracking-wider hover:border-red-400 hover:text-red-600 transition-all">
- <i data-lucide="flag" class="w-3.5 h-3.5"></i>
-                Flag for Admin Review
-            </button>
-            `}
- <p class="text-[9px] text-slate-400">Editors can't delete content directly — this notifies an admin to review it for possible removal.</p>
-        </div>
-
         <!-- Withdraw override (two-person rule for editors) -->
         ${renderEditorWithdraw(p, state, labels)}
         </div>` : ''}
     </div>`;
 }
 
-function renderAdminControls(p, state) {
-    const labels = (p.labels || []).map(l => l.name);
-    if (labels.includes('withdrawn')) return '';
+function renderModerationPanel(p, state, isAdmin) {
+    const mod = p.moderation_status || 'visible';
+    let statusBlock = '';
+    if (mod === 'under_review') {
+        statusBlock = `
+ <div class="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500 text-white text-[10px] font-black uppercase tracking-wider mb-4">
+ <i data-lucide="eye-off" class="w-3.5 h-3.5 flex-shrink-0"></i> Hidden — under review by an admin
+        </div>`;
+    } else if (mod === 'removed') {
+        statusBlock = `
+ <div class="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase tracking-wider mb-4">
+ <i data-lucide="ban" class="w-3.5 h-3.5 flex-shrink-0"></i> Removed — visible to admins only
+        </div>`;
+    }
 
-    const flagged = labels.includes('flagged-for-removal');
+    const flagBtn = mod === 'visible' ? `
+        <button onclick="window.flagProposalForRemoval()"
+ class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-wider hover:bg-red-100 transition-all">
+ <i data-lucide="flag" class="w-3.5 h-3.5"></i> Flag for Removal
+        </button>` : '';
+
+    const queueBtn = (isAdmin && mod !== 'visible') ? `
+        <button onclick="window.setView('moderation')"
+ class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-[10px] font-black uppercase tracking-wider hover:bg-slate-100 transition-all mt-2">
+ <i data-lucide="gavel" class="w-3.5 h-3.5"></i> Review in Moderation Queue
+        </button>` : '';
+
     return `
  <div class="bg-white/80 p-8 rounded-[2.5rem] border-2 border-red-100 shadow-xl">
  <h3 class="text-[10px] font-black uppercase tracking-[0.2em] text-red-600 flex items-center gap-2 mb-4">
- <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i> Admin Controls
+ <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i> Moderation
         </h3>
-        ${flagged ? `
- <div class="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-600 text-white text-[10px] font-black uppercase tracking-wider mb-4">
- <i data-lucide="flag" class="w-3.5 h-3.5 flex-shrink-0"></i>
-            An editor flagged this proposal for review
-        </div>
-        ` : ''}
- <p class="text-[10px] text-slate-400 mb-4">Moderation only — for spam or abusive submissions. Unlike editor actions, this requires no second confirmation and is recorded in the audit trail.</p>
-        <button onclick="window.adminRemoveProposal()"
- class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 text-[10px] font-black uppercase tracking-wider hover:bg-red-100 transition-all">
- <i data-lucide="trash-2" class="w-3.5 h-3.5"></i>
-            Remove Proposal (Moderation)
-        </button>
+        ${statusBlock}
+ <p class="text-[10px] text-slate-400 mb-4">Flagging hides the content and sends it to an admin with your reason. The author is notified it is under review.</p>
+        ${flagBtn}
+        ${queueBtn}
     </div>`;
 }
 
@@ -935,32 +928,25 @@ function getAuditDetails(ev, state) {
                 detail: '',
             };
 
-        case 'comment_removed':
+        case 'flagged_for_removal':
             return {
-                icon: 'trash-2', color: 'text-red-500',
-                message: 'Comment removed by admin',
-                detail: 'Moderation action — original author retained in the record.',
+                icon: 'flag', color: 'text-amber-600',
+                message: `${ev.data?.target === 'comment' ? 'Comment' : 'Proposal'} flagged for removal`,
+                detail: ev.data?.reason ? `Reason: ${ev.data.reason}` : '',
             };
 
-        case 'removed_by_admin':
+        case 'moderation_removed':
             return {
-                icon: 'shield-alert', color: 'text-red-600',
-                message: 'Proposal removed by admin',
-                detail: 'Moderation action — closed without editor/author confirmation.',
+                icon: 'ban', color: 'text-red-600',
+                message: `${ev.data?.target === 'comment' ? 'Comment' : 'Proposal'} removed by admin`,
+                detail: ev.data?.reason ? `Reason: ${ev.data.reason}` : 'Hidden from public; kept for the record.',
             };
 
-        case 'comment_flagged':
+        case 'moderation_rejected':
             return {
-                icon: 'flag', color: 'text-red-500',
-                message: 'Comment flagged for admin review',
-                detail: '',
-            };
-
-        case 'comment_flag_cleared':
-            return {
-                icon: 'flag', color: 'text-slate-400',
-                message: 'Comment flag cleared',
-                detail: '',
+                icon: 'rotate-ccw', color: 'text-green-600',
+                message: `Removal rejected — ${ev.data?.target === 'comment' ? 'comment' : 'proposal'} restored`,
+                detail: ev.data?.reason ? `Reason: ${ev.data.reason}` : '',
             };
 
         default:

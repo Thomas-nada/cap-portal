@@ -1,7 +1,9 @@
 import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          createProposal, updateProposal, addLabel, removeLabel,
-         withdrawProposal, cancelWithdrawal, removeProposal,
-         createComment, updateComment, deleteComment, flagComment, unflagComment,
+         withdrawProposal, cancelWithdrawal,
+         createComment, updateComment,
+         flagProposal, flagComment, fetchModerationCases, moderationRemove, moderationReject,
+         fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
          fetchConstitutionVersions, fetchConstitutionContent,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin,
@@ -28,6 +30,7 @@ import { renderEdit }         from './components/edit.js';
 import { renderConstitution } from './components/constitution.js';
 import { renderLearnHub as renderLearn } from './components/learn.js';
 import { renderEditors }      from './components/editors.js';
+import { renderModeration }   from './components/moderation.js';
 import { renderBugs }         from './components/bugs.js';
 
 // ── Global state ──────────────────────────────────────────────────────────────
@@ -43,6 +46,11 @@ export const state = {
     editors: [],
     admins: [],
     bugReports: [],
+    moderationCases: [],
+    moderationFilter: 'open',
+    notifications: [],
+    notificationsOpen: false,
+    unreadCount: 0,
     suggestions: [],
     proposalVersions: [],
     constitutionVersions: [],        // [{name, filename, isCurrent, content}]
@@ -102,6 +110,7 @@ export function updateUI(rerender = false) {
         case 'constitution': content = renderConstitution(state); break;
         case 'learn':        content = renderLearn(state); break;
         case 'editors':      content = renderEditors(state); break;
+        case 'moderation':   content = renderModeration(state); break;
         case 'bugs':         content = renderBugs(state); break;
         default:             content = renderDashboard(state);
     }
@@ -140,6 +149,7 @@ export function updateUI(rerender = false) {
  class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
  <i data-lucide="bug" class="w-6 h-6"></i>
         </button>` : ''}
+        ${state.notificationsOpen ? renderNotificationsPanel() : ''}
         ${state.error ? `
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
  <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
@@ -159,6 +169,61 @@ function escapeHtmlGlobal(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }
 
+function timeAgoShort(iso) {
+    if (!iso) return '';
+    const mins = Math.floor((Date.now() - new Date(iso)) / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const h = Math.floor(mins / 60);
+    if (h < 24) return `${h}h ago`;
+    return new Date(iso).toLocaleDateString();
+}
+
+const NOTIF_ICON = {
+    flag_pending: { icon: 'flag', color: 'text-amber-600 bg-amber-100' },
+    under_review: { icon: 'eye-off', color: 'text-amber-600 bg-amber-100' },
+    removed:      { icon: 'ban', color: 'text-red-600 bg-red-100' },
+    reinstated:   { icon: 'check-circle', color: 'text-green-600 bg-green-100' },
+};
+
+function renderNotificationsPanel() {
+    const list = state.notifications || [];
+    return `
+    <div onclick="if(event.target===this) window.toggleNotifications()"
+         class="fixed inset-0 z-[55] flex justify-end sm:justify-center sm:items-start">
+      <div class="mt-24 mr-6 sm:mr-0 w-full max-w-sm bg-white rounded-[2rem] border border-slate-100 shadow-2xl overflow-hidden">
+        <div class="flex items-center justify-between px-6 py-4 border-b border-slate-100">
+          <h3 class="text-sm font-black text-slate-900">Notifications</h3>
+          <button onclick="window.toggleNotifications()" class="w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-100 text-slate-400">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        <div class="max-h-[60vh] overflow-y-auto">
+          ${list.length === 0 ? `
+          <div class="p-10 text-center text-slate-400">
+            <i data-lucide="bell-off" class="w-8 h-8 mx-auto mb-3 opacity-40"></i>
+            <p class="text-xs font-bold">No notifications yet.</p>
+          </div>` : list.map(n => {
+            const ic = NOTIF_ICON[n.type] || { icon: 'bell', color: 'text-slate-500 bg-slate-100' };
+            return `
+            <button onclick="window.notificationGoTo(${n.id}, ${n.proposal_number == null ? 'null' : n.proposal_number})"
+              class="w-full text-left flex gap-3 px-5 py-4 border-b border-slate-50 hover:bg-slate-50 transition-colors ${n.read ? '' : 'bg-blue-50/40'}">
+              <div class="w-9 h-9 rounded-xl flex items-center justify-center flex-shrink-0 ${ic.color}">
+                <i data-lucide="${ic.icon}" class="w-4 h-4"></i>
+              </div>
+              <div class="min-w-0 flex-1">
+                <p class="text-sm font-bold text-slate-900 leading-snug">${escapeHtmlGlobal(n.title)}</p>
+                ${n.body ? `<p class="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap leading-snug">${escapeHtmlGlobal(n.body)}</p>` : ''}
+                <p class="text-[10px] text-slate-400 font-bold mt-1">${timeAgoShort(n.created_at)}</p>
+              </div>
+              ${n.read ? '' : '<span class="w-2 h-2 rounded-full bg-brand-primary flex-shrink-0 mt-2"></span>'}
+            </button>`;
+          }).join('')}
+        </div>
+      </div>
+    </div>`;
+}
+
 window.dismissError = () => {
     state.error = null;
     updateUI();
@@ -172,7 +237,7 @@ window.setView = (view) => {
     const map = {
         dashboard: '#/home', list: '#/registry', kanban: '#/kanban',
         constitution: '#/constitution',
-        wizard: '#/wizard', learn: '#/learn', editors: '#/editors', bugs: '#/bugs',
+        wizard: '#/wizard', learn: '#/learn', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
     };
     if (map[view]) window.location.hash = map[view];
     updateUI();
@@ -238,6 +303,9 @@ window.handleRouting = async () => {
     } else if (hash === '#/editors') {
         state.view = 'editors';
         loadEditors();
+    } else if (hash === '#/moderation') {
+        state.view = 'moderation';
+        loadModerationCases();
     } else if (hash === '#/bugs') {
         state.view = 'bugs';
         loadBugReports();
@@ -260,6 +328,84 @@ async function loadEditors() {
     }
     updateUI();
 }
+
+async function loadModerationCases() {
+    if (!state.user?.is_admin) { state.moderationCases = []; updateUI(); return; }
+    state.loading = { ...state.loading, moderation: true };
+    updateUI();
+    try {
+        state.moderationCases = await fetchModerationCases(state.moderationFilter || 'open');
+    } catch (e) {
+        state.moderationCases = [];
+        state.error = e.message;
+    } finally {
+        state.loading = { ...state.loading, moderation: false };
+        updateUI();
+    }
+}
+
+window.setModerationFilter = (f) => {
+    state.moderationFilter = f;
+    loadModerationCases();
+};
+
+window.moderationResolve = (caseId, decision) => {
+    if (!state.user?.is_admin) return;
+    const isRemove = decision === 'remove';
+    openReasonModal({
+        title: isRemove ? 'Remove flagged content' : 'Reject removal request',
+        intro: isRemove
+            ? 'The content stays hidden (visible to admins only) and is not deleted. The author and the flagging editor are notified.'
+            : 'The content becomes visible again. The author and the flagging editor are notified.',
+        label: 'Your reasoning',
+        placeholder: isRemove ? 'Explain why this is being removed…' : 'Explain why this is being kept…',
+        confirmText: isRemove ? 'Remove' : 'Reject & Restore',
+        confirmClass: isRemove ? 'bg-red-600 hover:bg-red-700' : 'bg-green-600 hover:bg-green-700',
+        onSubmit: async (reason) => {
+            if (isRemove) await moderationRemove(caseId, reason);
+            else await moderationReject(caseId, reason);
+            await loadModerationCases();
+            refreshUnreadCount();
+        },
+    });
+};
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+async function refreshUnreadCount() {
+    if (!state.user) { state.unreadCount = 0; return; }
+    try {
+        const { count } = await fetchUnreadCount();
+        state.unreadCount = count;
+        updateUI();
+    } catch { /* ignore */ }
+}
+window.refreshUnreadCount = refreshUnreadCount;
+
+window.toggleNotifications = async () => {
+    state.notificationsOpen = !state.notificationsOpen;
+    updateUI();
+    if (state.notificationsOpen && state.user) {
+        try {
+            state.notifications = await fetchNotifications();
+            updateUI();
+            // Mark all read once opened.
+            if (state.unreadCount > 0) {
+                await markAllNotificationsRead();
+                state.unreadCount = 0;
+                state.notifications = state.notifications.map(n => ({ ...n, read: true }));
+                updateUI();
+            }
+        } catch (e) { state.error = e.message; updateUI(); }
+    }
+};
+
+window.notificationGoTo = async (id, proposalNumber) => {
+    state.notificationsOpen = false;
+    try { await markNotificationRead(id); } catch {}
+    if (proposalNumber != null) window.openProposal(proposalNumber);
+    else updateUI();
+};
 
 async function loadBugReports() {
     try {
@@ -412,7 +558,18 @@ window.openProposal = async (number, addToHistory = true) => {
         state.proposalVersions = versions;
         if (addToHistory) window.location.hash = `#/detail/${number}`;
     } catch (e) {
-        state.error = e.message;
+        // The proposal is missing or hidden (under review / removed) for this
+        // viewer. Clear any stale copy so it can't linger on screen, and send
+        // the user to the registry rather than an empty detail shell.
+        state.currentProposal = null;
+        state.comments = [];
+        state.auditEvents = [];
+        state.suggestions = [];
+        state.proposalVersions = [];
+        state.error = 'That proposal is not available.';
+        state.view = 'list';
+        history.replaceState(null, '', '#/registry');
+        if (!state.proposals.length) { loadProposals(); return; }
     } finally {
         state.loading.proposal = false;
         updateUI();
@@ -992,47 +1149,92 @@ window.editorCancelWithdraw = async () => {
     }
 };
 
-window.adminRemoveProposal = async () => {
-    const p = state.currentProposal;
-    if (!p || !state.user?.is_admin) return;
-    if (!confirm('Remove this proposal for moderation (spam/abuse)? It will be marked withdrawn immediately, with no editor confirmation required. This is logged in the audit trail.')) return;
-    try {
-        const updated = await removeProposal(p.number);
-        await applyWithdrawResult(p.number, updated);
-    } catch (e) {
-        state.error = e.message;
-        updateUI();
-    }
-};
+// ── Moderation: flag for removal (editor/admin) ───────────────────────────────
 
-window.adminDeleteComment = async (commentId) => {
-    const p = state.currentProposal;
-    if (!p || !state.user?.is_admin) return;
-    if (!confirm('Permanently remove this comment? This cannot be undone.')) return;
-    try {
-        await deleteComment(commentId);
-        state.comments = await fetchComments(p.number);
-        state.auditEvents = await fetchAudit(p.number);
-        updateUI();
-    } catch (e) {
-        state.error = e.message;
-        updateUI();
-    }
-};
+// Generic reason-required modal. onSubmit(reason) is called with the trimmed
+// text; the modal shows an error if the API rejects it.
+function openReasonModal({ title, intro, label, placeholder, confirmText, confirmClass, onSubmit }) {
+    document.getElementById('reason-modal-backdrop')?.remove();
+    const div = document.createElement('div');
+    div.innerHTML = `
+    <div id="reason-modal-backdrop"
+         onclick="if(event.target===this) document.getElementById('reason-modal-backdrop').remove()"
+         class="fixed inset-0 bg-black/60 backdrop-blur-sm z-[60] flex items-center justify-center p-4">
+      <div class="bg-white rounded-[2rem] border border-slate-100 shadow-2xl w-full max-w-md p-6 sm:p-8">
+        <div class="flex items-center justify-between mb-4">
+          <h2 class="text-lg font-black text-slate-900">${escapeHtmlGlobal(title)}</h2>
+          <button onclick="document.getElementById('reason-modal-backdrop').remove()"
+                  class="w-8 h-8 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+            <i data-lucide="x" class="w-4 h-4"></i>
+          </button>
+        </div>
+        ${intro ? `<p class="text-sm text-slate-500 mb-4">${escapeHtmlGlobal(intro)}</p>` : ''}
+        <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">${escapeHtmlGlobal(label)}</label>
+        <textarea id="reason-input" rows="4" placeholder="${escapeHtmlGlobal(placeholder || '')}"
+          class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white text-slate-900 text-sm focus:outline-none focus:border-blue-400 resize-none mb-3"></textarea>
+        <p id="reason-error" class="hidden text-red-500 text-xs font-bold mb-3"></p>
+        <div class="flex gap-3">
+          <button id="reason-submit"
+            class="flex-1 py-3 rounded-2xl ${confirmClass || 'bg-blue-600 hover:bg-blue-700'} text-white font-black transition-colors">${escapeHtmlGlobal(confirmText || 'Submit')}</button>
+          <button onclick="document.getElementById('reason-modal-backdrop').remove()"
+            class="px-6 py-3 rounded-2xl text-slate-500 hover:bg-slate-100 font-black transition-colors">Cancel</button>
+        </div>
+      </div>
+    </div>`;
+    document.body.appendChild(div.firstElementChild);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+    const input = document.getElementById('reason-input');
+    input?.focus();
+    document.getElementById('reason-submit').onclick = async () => {
+        const reason = input.value.trim();
+        const err = document.getElementById('reason-error');
+        if (!reason) { err.textContent = 'A written reason is required.'; err.classList.remove('hidden'); return; }
+        const btn = document.getElementById('reason-submit');
+        btn.disabled = true; btn.textContent = 'Working…';
+        try {
+            await onSubmit(reason);
+            document.getElementById('reason-modal-backdrop')?.remove();
+        } catch (e) {
+            err.textContent = e.message || 'Something went wrong.'; err.classList.remove('hidden');
+            btn.disabled = false; btn.textContent = confirmText || 'Submit';
+        }
+    };
+}
 
-window.editorToggleFlagComment = async (commentId, currentlyFlagged) => {
+window.flagProposalForRemoval = () => {
     const p = state.currentProposal;
     if (!p || !(state.user?.is_editor || state.user?.is_admin)) return;
-    try {
-        if (currentlyFlagged) await unflagComment(commentId);
-        else await flagComment(commentId);
-        state.comments = await fetchComments(p.number);
-        state.auditEvents = await fetchAudit(p.number);
-        updateUI();
-    } catch (e) {
-        state.error = e.message;
-        updateUI();
-    }
+    openReasonModal({
+        title: 'Flag proposal for removal',
+        intro: 'This hides the proposal and sends it to an admin to review. The author is notified it is under review.',
+        label: 'Why should this be removed?',
+        placeholder: 'Explain how this violates the Terms of Use…',
+        confirmText: 'Flag for removal',
+        confirmClass: 'bg-red-600 hover:bg-red-700',
+        onSubmit: async (reason) => {
+            await flagProposal(p.number, reason);
+            await window.openProposal(p.number, false);
+        },
+    });
+};
+
+window.flagCommentForRemoval = (commentId) => {
+    const p = state.currentProposal;
+    if (!p || !(state.user?.is_editor || state.user?.is_admin)) return;
+    openReasonModal({
+        title: 'Flag comment for removal',
+        intro: 'This hides the comment and sends it to an admin to review. The author is notified it is under review.',
+        label: 'Why should this be removed?',
+        placeholder: 'Explain how this violates the Terms of Use…',
+        confirmText: 'Flag for removal',
+        confirmClass: 'bg-red-600 hover:bg-red-700',
+        onSubmit: async (reason) => {
+            await flagComment(commentId, reason);
+            state.comments = await fetchComments(p.number);
+            state.auditEvents = await fetchAudit(p.number);
+            updateUI();
+        },
+    });
 };
 
 window.toggleAuditTrail = () => {
@@ -1223,16 +1425,10 @@ function showWalletModal() {
     document.body.appendChild(div.firstElementChild);
     lucide.createIcons();
 
-    window._walletModalPickWallet = async (walletId) => {
-        if (!localStorage.getItem('cap_alpha_agreed')) {
-            document.getElementById('wallet-modal-backdrop')?.remove();
-            await showAlphaAgreement();
-            // Re-open wallet modal and proceed straight to this wallet
-            showWalletModal();
-            window._walletModalSelect(walletId);
-        } else {
-            window._walletModalSelect(walletId);
-        }
+    window._walletModalPickWallet = (walletId) => {
+        // Alpha agreement is per account (not per browser) and is shown after we
+        // know the connecting wallet's stake address — see _walletModalSelect.
+        window._walletModalSelect(walletId);
     };
 
     window._walletModalBack = () => {
@@ -1246,8 +1442,16 @@ function showWalletModal() {
  if (body) body.innerHTML = `<div class="py-8 text-center"><div class="loading-spinner mx-auto mb-4"></div><p class="text-slate-500 font-bold">Connecting wallet…</p></div>`;
         try {
             const result = await connectAndAuth(walletId, savedName);
-            state.user = { stake_address: result.stake_address, display_name: result.display_name, is_editor: result.is_editor, is_admin: result.is_admin };
             document.getElementById('wallet-modal-backdrop')?.remove();
+
+            // Per-account alpha agreement: each wallet must accept the terms once.
+            if (!hasAgreedAlpha(result.stake_address)) {
+                await showAlphaAgreement();
+                markAgreedAlpha(result.stake_address);
+            }
+
+            state.user = { stake_address: result.stake_address, display_name: result.display_name, is_editor: result.is_editor, is_admin: result.is_admin };
+            refreshUnreadCount();
 
             // First-time user: no display name in the DB yet — ask for one after signing
             if (!result.display_name) {
@@ -1323,6 +1527,9 @@ window.loginWithWallet = showWalletModal;
 window.logoutWallet = () => {
     logout();
     state.user = null;
+    state.notifications = [];
+    state.notificationsOpen = false;
+    state.unreadCount = 0;
     updateUI();
 };
 
@@ -1759,6 +1966,15 @@ window.kanbanToggleTagPanel = () => { state.kanbanTagPanelOpen = !state.kanbanTa
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
 
+// Alpha agreement acceptance is tracked per stake address, so every account
+// accepts the terms once (not just the first account to use this browser).
+function hasAgreedAlpha(stake) {
+    return !!stake && localStorage.getItem('cap_alpha_agreed_' + stake) === '1';
+}
+function markAgreedAlpha(stake) {
+    if (stake) localStorage.setItem('cap_alpha_agreed_' + stake, '1');
+}
+
 function showAlphaAgreement() {
     return new Promise(resolve => {
         const overlay = document.createElement('div');
@@ -1803,7 +2019,8 @@ function showAlphaAgreement() {
             btn.style.cursor = checkbox.checked ? 'pointer' : 'not-allowed';
         });
         btn.addEventListener('click', () => {
-            localStorage.setItem('cap_alpha_agreed', '1');
+            // Per-account flag is set by the caller (markAgreedAlpha); the modal
+            // itself just resolves once the user accepts.
             overlay.remove();
             resolve();
         });
@@ -1835,6 +2052,15 @@ async function init() {
     state.loading.init = false;
     window.addEventListener('hashchange', window.handleRouting);
     await window.handleRouting();
+    if (state.user) {
+        // A restored session whose account never accepted the alpha terms
+        // (e.g. connected before this was per-account) still sees it once.
+        if (!hasAgreedAlpha(state.user.stake_address)) {
+            await showAlphaAgreement();
+            markAgreedAlpha(state.user.stake_address);
+        }
+        refreshUnreadCount();
+    }
 }
 
 init();
