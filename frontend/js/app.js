@@ -24,7 +24,6 @@ import { renderRegistry }     from './components/registry.js';
 import { renderKanban }       from './components/kanban.js';
 import { renderDetail }       from './components/detail.js';
 import { renderWizard, validateStep, isStepSkipped } from './components/wizard.js';
-import { renderCreate }       from './components/create.js';
 import { renderEdit }         from './components/edit.js';
 import { renderConstitution } from './components/constitution.js';
 import { renderLearnHub as renderLearn } from './components/learn.js';
@@ -65,8 +64,7 @@ export const state = {
     wizardData: {},
     wizardStep: 1,
     wizardError: null,
-    // Create / Edit
-    draftProposal: {},
+    // Edit
     editingProposal: null,
     // Learn
     activeGuide: null,
@@ -100,7 +98,6 @@ export function updateUI(rerender = false) {
         case 'kanban':       content = renderKanban(state); break;
         case 'detail':       content = renderDetail(state); break;
         case 'wizard':       content = renderWizard(state); break;
-        case 'create':       content = renderCreate(state); break;
         case 'edit':         content = renderEdit(state); break;
         case 'constitution': content = renderConstitution(state); break;
         case 'learn':        content = renderLearn(state); break;
@@ -174,7 +171,7 @@ window.setView = (view) => {
     state.mobileNavOpen = false;
     const map = {
         dashboard: '#/home', list: '#/registry', kanban: '#/kanban',
-        constitution: '#/constitution', create: '#/create',
+        constitution: '#/constitution',
         wizard: '#/wizard', learn: '#/learn', editors: '#/editors', bugs: '#/bugs',
     };
     if (map[view]) window.location.hash = map[view];
@@ -203,9 +200,6 @@ window.handleRouting = async () => {
     } else if (hash === '#/constitution') {
         state.view = 'constitution';
         loadConstitution();
-    } else if (hash === '#/create') {
-        state.view = 'create';
-        updateUI();
     } else if (hash === '#/wizard') {
         state.view = 'wizard';
         updateUI();
@@ -421,28 +415,6 @@ window.openProposal = async (number, addToHistory = true) => {
         state.error = e.message;
     } finally {
         state.loading.proposal = false;
-        updateUI();
-    }
-};
-
-window.submitProposal = async () => {
-    if (!state.user) { showWalletModal(); return; }
-    const draft = state.draftProposal;
-    if (!draft.title?.trim() || !draft.body?.trim()) {
-        state.error = 'Title and body are required';
-        updateUI();
-        return;
-    }
-    try {
-        const proposal = await createProposal({
-            title: draft.title,
-            body: draft.body,
-            type: draft.type || 'CAP',
-        });
-        state.draftProposal = {};
-        await window.openProposal(proposal.number);
-    } catch (e) {
-        state.error = e.message;
         updateUI();
     }
 };
@@ -1078,23 +1050,6 @@ window.toggleEventExpansion = (id) => {
     el.classList.toggle('expanded');
 };
 
-// ── Create form helpers ───────────────────────────────────────────────────────
-
-window.setCreateType = (type) => {
-    state.draftProposal = { ...state.draftProposal, type };
-    updateUI();
-};
-
-window.updateDraftField = (field, value) => {
-    state.draftProposal = { ...state.draftProposal, [field]: value };
-};
-
-window.removeReference = (id) => {
-    const refs = (state.draftProposal.references || []).filter(r => r.id !== id);
-    state.draftProposal = { ...state.draftProposal, references: refs };
-    updateUI();
-};
-
 // ── Preview overlay ───────────────────────────────────────────────────────────
 
 function buildPreviewHtml(title, structured, type) {
@@ -1169,30 +1124,6 @@ function buildPreviewHtml(title, structured, type) {
         </div>`;
 }
 
-window.previewCreate = () => {
-    const form = document.getElementById('create-form');
-    if (!form) return;
-    const fd = new FormData(form);
-    const draft = state.draftProposal || {};
-    const type = draft.type || 'CAP';
-    const refs = state.selectedReferences || [];
-    const structured = {
-        type,
-        category: fd.get('category') || '',
-        abstract: fd.get('abstract') || '',
-        motivation: fd.get('motivation') || '',
-        analysis: fd.get('analysis') || '',
-        impact: fd.get('impact') || '',
-        exhibits: fd.get('specification_extra') || '',
-        revisions: refs.map(ref => ({
-            original: ref.text,
-            section: ref.section,
-            proposed: fd.get(`ref-input-${ref.id}`) || '',
-        })),
-    };
-    showPreviewOverlay(fd.get('title') || '', structured, type);
-};
-
 window.previewEdit = () => {
     const form = document.getElementById('edit-form');
     if (!form) return;
@@ -1226,39 +1157,6 @@ function showPreviewOverlay(title, structured, type) {
 window.closePreview = () => {
     const overlay = document.getElementById('preview-overlay');
     if (overlay) overlay.remove();
-};
-
-window.handleForm = async (event) => {
-    event.preventDefault();
-    if (!state.user) { showWalletModal(); return; }
-    const fd = new FormData(event.target);
-    const draft = state.draftProposal;
-    const type = draft.type || 'CAP';
-    const title = fd.get('title') || '';
-    const abstract   = fd.get('abstract') || '';
-    const motivation = fd.get('motivation') || '';
-    const analysis   = fd.get('analysis') || '';
-    const impact     = fd.get('impact') || '';
-    const exhibits   = fd.get('specification_extra') || '';
-    const category   = fd.get('category') || '';
-
-    if (!title.trim()) { state.error = 'Title is required'; updateUI(); return; }
-
-    const structured = { type, category, abstract, motivation, analysis, impact, exhibits, revisions: [], co_authors: [] };
-
-    state.loading = { ...state.loading, submitting: true };
-    updateUI();
-    try {
-        const proposal = await createProposal({ title, type, structured });
-        await addLabel(proposal.number, type);
-        if (category) await addLabel(proposal.number, category);
-        state.draftProposal = {};
-        await window.openProposal(proposal.number);
-    } catch (e) {
-        state.error = e.message;
-        state.loading = { ...state.loading, submitting: false };
-        updateUI();
-    }
 };
 
 // ── Edit proposal ─────────────────────────────────────────────────────────────
@@ -1452,7 +1350,7 @@ window.openProfile = () => {
  <p class="text-xs font-mono text-slate-400 bg-slate-50 rounded-2xl px-4 py-3 mb-6 break-all">${addr}</p>
 
  <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Display name</label>
-            <input id="profile-name-input" type="text" value="${current}" placeholder="Your display name" maxlength="40"
+            <input id="profile-name-input" type="text" value="${escapeHtmlGlobal(current)}" placeholder="Your display name" maxlength="40"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-6 font-medium"
                 onkeydown="if(event.key==='Enter') window._saveProfile()">
 
@@ -1563,9 +1461,6 @@ window.removeWizardSelection = (idx) => {
 
 window.viewProposalDiff = async (proposalNumber) => {
     const draftFilename = `cap-${proposalNumber}-proposed.md`;
-    // Regenerate draft (also fixes any stale/corrupt file from prior runs)
-    try { await generateDraftConstitution(proposalNumber); } catch (_) {}
-    // Force reload so the newly generated draft file is in the list
     state.constitutionVersions = [];
     state.constitutionCurrentVersion = null;
     state.constitutionCompareVersion = null;
@@ -1578,16 +1473,24 @@ window.viewProposalDiff = async (proposalNumber) => {
     history.replaceState(null, '', '#/constitution');
     updateUI();
     try {
-        const raw = await fetchConstitutionVersions();
-        state.constitutionVersions = raw.map((v, i) => ({
+        const mapVersions = raw => raw.map((v, i) => ({
             name: v.display_name || v.filename.replace('.md', ''),
             filename: v.filename,
             isCurrent: i === 0,
             content: null,
         }));
+        let raw = await fetchConstitutionVersions();
+        // Viewing a diff is a read. Only if the draft doesn't exist yet do we
+        // attempt to generate it (a write that requires author/editor rights);
+        // for everyone else the existing draft simply loads.
+        if (!raw.some(v => v.filename === draftFilename)) {
+            try { await generateDraftConstitution(proposalNumber); raw = await fetchConstitutionVersions(); }
+            catch (_) { /* not permitted or nothing to generate — handled below */ }
+        }
+        state.constitutionVersions = mapVersions(raw);
         const base  = state.constitutionVersions.find(v => !v.filename.startsWith('cap-'));
         const draft = state.constitutionVersions.find(v => v.filename === draftFilename);
-        if (!base || !draft) { state.error = 'Draft constitution not found — submit the proposal first.'; updateUI(); return; }
+        if (!base || !draft) { state.error = 'This proposal has no proposed constitution changes to compare yet.'; updateUI(); return; }
         state.constitutionCurrentVersion = base.name;
         state.constitutionCompareVersion = draft.name;
         await Promise.all([loadConstitutionVersionByName(base.name), loadConstitutionVersionByName(draft.name)]);
@@ -1655,27 +1558,6 @@ window.returnToWizardFromConstitution = () => {
     if (banner) banner.remove();
     window.setView('wizard');
 };
-
-function buildWizardMarkdown(w) {
-    let md = `---\nCAP: "XXXX"\nTitle: "${w.title || ''}"\nCategory: "${w.category || ''}"\nType: "${w.type || 'CAP'}"\nAuthors:\n  - "${w.coAuthors || ''}"\n---\n\n`;
-    md += `## Summary\n${w.abstract || ''}\n\n`;
-    if (w.type === 'CAP') {
-        md += `## Why is this change needed?\n${w.motivation || ''}\n\n`;
-        md += `## Analysis & Test\n${w.analysis || ''}\n\n`;
-        if (w.selectedText?.length) {
-            md += `## Proposed Revisions\n`;
-            w.selectedText.forEach((sel, i) => {
-                md += `### Revision ${i + 1}\n**Original:** ${sel.text}\n\n**Proposed:** ${w.revisions?.[i] || ''}\n\n`;
-            });
-        }
-    } else {
-        md += `## Problem\n${w.motivation || ''}\n\n`;
-        md += `## Context\n${w.analysis || ''}\n\n`;
-        if (w.impact) md += `## Impact\n${w.impact}\n\n`;
-    }
-    if (w.exhibits) md += `## Links and Files\n${w.exhibits}\n\n`;
-    return md;
-}
 
 // ── Learn / guides ────────────────────────────────────────────────────────────
 
@@ -1844,24 +1726,6 @@ window.deleteGuide = async (slug) => {
         alert(e.message || 'Failed to delete guide.');
     }
 };
-
-// ── Theme ─────────────────────────────────────────────────────────────────────
-
-window.toggleTheme = () => {
-    const html = document.documentElement;
-    const isDark = html.classList.toggle('dark');
-    localStorage.setItem('cap_theme', isDark ? 'dark' : 'light');
-};
-
-// Apply saved theme on load
-(function applyTheme() {
-    const t = localStorage.getItem('cap_theme');
-    if (t === 'dark') document.documentElement.classList.add('dark');
-    else if (t === 'light') document.documentElement.classList.remove('dark');
-    else if (window.matchMedia?.('(prefers-color-scheme: dark)').matches) {
-        document.documentElement.classList.add('dark');
-    }
-})();
 
 // ── Apply markdown formatting (toolbar) ──────────────────────────────────────
 

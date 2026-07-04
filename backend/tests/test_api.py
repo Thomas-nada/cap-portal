@@ -258,6 +258,36 @@ def test_lifecycle_label_clears_author_ready(client, db):
     assert "ready" in label_names
 
 
+def test_withdrawn_label_cannot_be_removed(client, db):
+    """Removing the withdrawn label via the generic route is rejected — a
+    withdrawn proposal can't be silently reopened (finding #11)."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/withdraw", headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.delete("/proposals/1/labels/withdrawn", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert "withdrawn" in [l["name"] for l in client.get("/proposals/1").json()["labels"]]
+
+
+def test_editor_cannot_directly_edit_proposal(client, db):
+    """Editors influence proposals via suggestions, not direct edits (finding #12)."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.patch("/proposals/1",
+                     json={"title": "Editor rewrite", "structured": {}},
+                     headers=auth(EDITOR_ADDR))
+    assert r.status_code == 403
+
+
+def test_noop_update_creates_no_version(client, db):
+    """A PATCH with no fields must not create a spurious version (finding #10)."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.patch("/proposals/1", json={}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert len(client.get("/proposals/1/versions").json()) == 1
+
+
 def test_add_label_blocked_for_regular_user(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))

@@ -7,7 +7,7 @@ function getToken() {
 async function req(method, path, body = null, auth = false) {
     const headers = { 'Content-Type': 'application/json' };
     const token = getToken();
-    if (auth || token) headers['Authorization'] = `Bearer ${token}`;
+    if (token) headers['Authorization'] = `Bearer ${token}`;
 
     const res = await fetch(`${API_BASE}${path}`, {
         method,

@@ -19,7 +19,6 @@ class Proposal(Base):
     state = Column(String, nullable=False, default="open")  # open | closed
     author_stake_address = Column(String, nullable=False)
     author_display_name = Column(String, nullable=True)
-    structured_data = Column(Text, nullable=True)  # JSON: structured fields alongside markdown body
     # Two-person rule for editor-initiated withdrawal: set when one editor requests
     # withdrawal of someone else's proposal; a second, different editor must confirm.
     withdrawal_requested_by = Column(String, nullable=True)

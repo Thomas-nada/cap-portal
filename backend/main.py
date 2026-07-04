@@ -46,7 +46,6 @@ Base.metadata.create_all(bind=engine)
 # Lightweight migrations for columns added after initial schema creation
 with engine.connect() as _conn:
     for _stmt in [
-        "ALTER TABLE proposals ADD COLUMN structured_data TEXT",
         "ALTER TABLE proposal_versions ADD COLUMN previous_hash TEXT",
         "ALTER TABLE proposal_versions ADD COLUMN content_hash TEXT",
         "ALTER TABLE bug_reports ADD COLUMN screenshot TEXT",
@@ -186,7 +185,6 @@ All other endpoints are unrestricted.
         {"name": "labels",        "description": "Lifecycle labels applied by editors"},
         {"name": "suggestions",   "description": "Editor-suggested edits, approved or rejected by the author"},
         {"name": "versions",      "description": "Immutable version history with hash-chained integrity"},
-        {"name": "subscriptions", "description": "Email follow / unfollow for any proposal"},
         {"name": "audit",         "description": "Append-only event log for every proposal"},
         {"name": "constitution",  "description": "Published constitution document versions"},
         {"name": "editors",       "description": "Editor role management"},
@@ -615,20 +613,31 @@ class ProposalCreate(BaseModel):
 @limiter.limit("10/minute")
 def create_proposal(request: Request, req: ProposalCreate, user: dict = Depends(require_user),
                     db: Session = Depends(get_db)):
-    last = db.query(Proposal).order_by(Proposal.number.desc()).first()
-    next_number = (last.number + 1) if last else 1
+    # The proposal number is max+1 computed here, so two concurrent submissions
+    # can pick the same number and collide on the unique constraint. Retry on
+    # that specific failure instead of returning a 500.
+    from sqlalchemy.exc import IntegrityError
+    for _attempt in range(5):
+        last = db.query(Proposal).order_by(Proposal.number.desc()).first()
+        next_number = (last.number + 1) if last else 1
+        p = Proposal(
+            number=next_number,
+            title=req.title,
+            body=json.dumps(req.structured),
+            type=req.type,
+            state="open",
+            author_stake_address=user["sub"],
+            author_display_name=user.get("display_name"),
+        )
+        db.add(p)
+        try:
+            db.commit()
+            break
+        except IntegrityError:
+            db.rollback()  # someone else took this number — recompute and retry
+    else:
+        raise HTTPException(status_code=503, detail="Could not allocate a proposal number, please retry")
 
-    p = Proposal(
-        number=next_number,
-        title=req.title,
-        body=json.dumps(req.structured),
-        type=req.type,
-        state="open",
-        author_stake_address=user["sub"],
-        author_display_name=user.get("display_name"),
-    )
-    db.add(p)
-    db.commit()
     db.refresh(p)
     db.add(Label(proposal_number=p.number, name="consultation"))
     record_audit(db, p.number, "proposal_created", user, {"title": req.title, "type": req.type})
@@ -650,8 +659,11 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
     if not p:
         raise HTTPException(status_code=404, detail="Proposal not found")
 
-    if p.author_stake_address != user["sub"] and not is_editor(user["sub"], db):
-        raise HTTPException(status_code=403, detail="Only the author or an editor can edit this proposal")
+    # Author-only by design: editors influence a proposal through the suggestion
+    # workflow (suggest → author approves), never by silently rewriting it. The
+    # UI reflects this — only the author sees the edit control.
+    if p.author_stake_address != user["sub"]:
+        raise HTTPException(status_code=403, detail="Only the proposal author can edit this proposal")
 
     locked_stages = {"ready", "done", "withdrawn"}
     current_labels = {l.name for l in p.labels}
@@ -669,10 +681,14 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
         parts.append("Content updated")
         p.body = json.dumps(req.structured)
 
+    # Nothing supplied to change — don't touch updated_at, don't log an edit,
+    # don't create a spurious version.
+    if not parts:
+        return proposal_to_dict(p)
+
     p.updated_at = datetime.now(timezone.utc)
     record_audit(db, number, "proposal_edited", user, changes)
-    if parts:
-        create_version(db, p, user, ", ".join(parts))
+    create_version(db, p, user, ", ".join(parts))
     db.commit()
     db.refresh(p)
     return proposal_to_dict(p)
@@ -683,12 +699,6 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
 LIFECYCLE_LABELS = {"consultation", "ready", "done", "withdrawn"}
 CATEGORY_LABELS = {"Procedural", "Substantive", "Technical", "Interpretive", "Editorial", "Other"}
 AUTHOR_LABELS = {"author-ready", "CAP", "CIS"} | CATEGORY_LABELS
-EDITOR_ONLY_LABELS = {
-    "review", "revision", "finalizing", "onchain",
-    "editor-ok", "editor-concern", "editor-suggested",
-    "major", "minor", "bundle", "fast-track", "pause",
-    "CAP", "CIS",
-}
 
 
 @app.post("/proposals/{number}/labels", tags=["labels"], summary="Add a label to a proposal",
@@ -714,24 +724,21 @@ def add_label(number: int, body: dict, user: dict = Depends(require_user),
     if not editor and not (is_author and name in AUTHOR_LABELS):
         raise HTTPException(status_code=403, detail="Editors only")
 
-    # Remove conflicting lifecycle labels if adding a new lifecycle label
+    # Remove conflicting lifecycle labels if adding a new lifecycle label.
+    # ("withdrawn" never reaches here — it's rejected above and set only via the
+    # dedicated withdraw endpoint.)
     if name in LIFECYCLE_LABELS:
         db.query(Label).filter(
             Label.proposal_number == number,
             Label.name.in_(LIFECYCLE_LABELS | {"author-ready"})
         ).delete(synchronize_session=False)
-        if name == "done":
-            p.state = "closed"
-        elif name == "withdrawn":
-            p.state = "closed"
-        else:
-            p.state = "open"
+        p.state = "closed" if name == "done" else "open"
 
     existing = db.query(Label).filter(Label.proposal_number == number, Label.name == name).first()
     if not existing:
         db.add(Label(proposal_number=number, name=name))
+        record_audit(db, number, "label_added", user, {"label": name})
 
-    record_audit(db, number, "label_added", user, {"label": name})
     db.commit()
     db.refresh(p)
     return proposal_to_dict(p)
@@ -745,13 +752,20 @@ def remove_label(number: int, name: str, user: dict = Depends(require_user),
     if not p:
         raise HTTPException(status_code=404, detail="Proposal not found")
 
+    # "withdrawn" is a terminal state, not a free-standing label: removing it here
+    # would leave the proposal state="closed" with no lifecycle label (inconsistent).
+    # Reopening a withdrawal isn't a supported operation.
+    if name == "withdrawn":
+        raise HTTPException(status_code=400, detail="A withdrawn proposal cannot be reopened by removing the label")
+
     editor = is_editor(user["sub"], db)
     is_author = p.author_stake_address == user["sub"]
     if not editor and not (is_author and name in AUTHOR_LABELS):
         raise HTTPException(status_code=403, detail="Editors only")
 
-    db.query(Label).filter(Label.proposal_number == number, Label.name == name).delete()
-    record_audit(db, number, "label_removed", user, {"label": name})
+    removed = db.query(Label).filter(Label.proposal_number == number, Label.name == name).delete()
+    if removed:
+        record_audit(db, number, "label_removed", user, {"label": name})
     db.commit()
     db.refresh(p)
     return proposal_to_dict(p)
@@ -987,21 +1001,27 @@ def get_audit(number: int, db: Session = Depends(get_db)):
 def list_constitution(db: Session = Depends(get_db)):
     # Base constitution versions ship with the repo on disk; generated
     # proposed drafts live in the database (survives ephemeral filesystems).
-    names = set()
+    import re
+    base = set()
     if CONSTITUTION_DIR.exists():
-        names.update(f.name for f in CONSTITUTION_DIR.iterdir()
-                     if f.suffix == ".md" and not f.name.startswith("cap-"))
-    names.update(d.filename for d in db.query(ConstitutionDoc.filename).all())
-    files = sorted(names, reverse=True)
+        base.update(f.name for f in CONSTITUTION_DIR.iterdir()
+                    if f.suffix == ".md" and not f.name.startswith("cap-"))
+    drafts = {d.filename for d in db.query(ConstitutionDoc.filename).all()}
+
+    # Deterministic order independent of filename lexicography: the current base
+    # constitution(s) first, then proposed drafts by CAP number descending. (A
+    # plain reverse sort would place "cap-2" before "cap-10" and could rank a
+    # future base filename below a draft.)
+    def cap_num(f):
+        m = re.match(r"cap-(\d+)-proposed", f)
+        return int(m.group(1)) if m else -1
+
+    ordered = sorted(base, reverse=True) + sorted(drafts, key=cap_num, reverse=True)
 
     def display_name(f):
-        name = f.replace(".md", "")
-        import re
-        m = re.match(r"cap-(\d+)-proposed", name)
-        if m:
-            return f"CAP-{m.group(1)} Proposed Draft"
-        return name
-    return [{"filename": f, "display_name": display_name(f)} for f in files]
+        m = re.match(r"cap-(\d+)-proposed", f.replace(".md", ""))
+        return f"CAP-{m.group(1)} Proposed Draft" if m else f.replace(".md", "")
+    return [{"filename": f, "display_name": display_name(f)} for f in ordered]
 
 
 @app.get("/constitution/{filename}", tags=["constitution"], summary="Get constitution document content",

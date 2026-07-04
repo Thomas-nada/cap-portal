@@ -24,18 +24,6 @@ services:
         generateValue: true
       - key: ENVIRONMENT
         value: production
-      - key: SMTP_HOST
-        sync: false
-      - key: SMTP_PORT
-        sync: false
-      - key: SMTP_USERNAME
-        sync: false
-      - key: SMTP_PASSWORD
-        sync: false
-      - key: SMTP_FROM
-        sync: false
-      - key: APP_URL
-        sync: false
 
   # Frontend: create as a Static Site manually in the Render dashboard
   # Publish directory: frontend
