@@ -1,0 +1,14 @@
+{
+  "name": "cap-portal-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CAP Portal frontend — static site. Build step generates the Tailwind CSS.",
+  "scripts": {
+    "build:css": "tailwindcss -i ./src/input.css -o ./styles.tailwind.css --minify",
+    "watch:css": "tailwindcss -i ./src/input.css -o ./styles.tailwind.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.15",
+    "tailwindcss": "^3.4.17"
+  }
+}
