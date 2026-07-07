@@ -1336,7 +1336,10 @@ def list_constitution(db: Session = Depends(get_db)):
 
     def display_name(f):
         m = re.match(r"cap-(\d+)-proposed", f.replace(".md", ""))
-        return f"CAP-{m.group(1)} Proposed Draft" if m else f.replace(".md", "")
+        if m:
+            return f"CAP-{m.group(1)} Proposed Draft"
+        # The base constitution shipped in the repo is the ratified document.
+        return "Ratified Constitution"
     return [{"filename": f, "display_name": display_name(f)} for f in ordered]
 
 

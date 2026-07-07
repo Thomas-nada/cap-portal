@@ -19,6 +19,7 @@ import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          getAvailableWallets } from './wallet.js';
 
 import { DEV_MODE, API_BASE } from './config.js';
+import { computeStageCounts } from './lifecycle.js';
 
 import { renderNav }          from './components/nav.js';
 import { renderDashboard }    from './components/dashboard.js';
@@ -72,6 +73,7 @@ export const state = {
     wizardData: {},
     wizardStep: 1,
     wizardError: null,
+    wizardSubmitted: null,
     // Edit
     editingProposal: null,
     // Learn
@@ -115,7 +117,50 @@ export function updateUI(rerender = false) {
         default:             content = renderDashboard(state);
     }
 
-    root.innerHTML = nav + `
+    const alphaBanner = `
+        <div class="bg-red-600 text-white text-center text-xs sm:text-sm font-semibold px-4 py-2">
+            This is an alpha version currently in testing.
+            <button onclick="window.showAlphaInfo()" class="underline underline-offset-2 font-bold ml-1 hover:text-white/80">Read more</button>
+        </div>`;
+
+    const notif = state.notificationsOpen ? renderNotificationsPanel() : '';
+    const errorToast = state.error ? `
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
+ <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+ <p class="text-sm font-semibold leading-snug">${escapeHtmlGlobal(state.error)}</p>
+            <button onclick="window.dismissError()" class="flex-shrink-0 hover:bg-white/20 rounded-lg p-1 -m-1 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>` : '';
+
+    // The wizard is a focused, full-page flow: no app nav or footer — just the
+    // logo (→ home) and a Discard (step 1) / Back (later steps) control.
+    if (state.view === 'wizard') {
+        const step = state.wizardStep || 1;
+        const rightBtn = state.wizardSubmitted ? '' : (step > 1
+            ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
+            : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`);
+        root.innerHTML = alphaBanner + `
+            <div class="bg-white/90 border-b border-white/20">
+                <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
+                    <button onclick="window.wizardExit()" class="flex items-center gap-3">
+                        <img src="CAP.png" alt="CAP Portal" class="w-9 h-9 object-contain">
+                        <div class="text-left leading-none">
+                            <span class="block font-semibold text-slate-900">CAP Portal</span>
+                            <span class="block text-[9px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Constitutional Amendments</span>
+                        </div>
+                    </button>
+                    ${rightBtn}
+                </div>
+            </div>
+ <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
+        ` + notif + errorToast;
+        lucide.createIcons();
+        if (window.fixPreCode) window.fixPreCode();
+        return;
+    }
+
+    root.innerHTML = alphaBanner + nav + `
  <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             ${content}
         </main>
@@ -128,6 +173,7 @@ export function updateUI(rerender = false) {
                 <nav class="flex flex-col gap-1">
                     <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Links</p>
                     <a href="https://intersectmbo.org" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Home</a>
+                    <a onclick="window.setView('editors')" class="text-sm text-white/70 hover:text-white transition-colors cursor-pointer">Editors</a>
                     <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/terms-of-use" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Terms of Use</a>
                     <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/privacy-policy" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Privacy Policy</a>
                 </nav>
@@ -149,15 +195,8 @@ export function updateUI(rerender = false) {
  class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
  <i data-lucide="bug" class="w-6 h-6"></i>
         </button>` : ''}
-        ${state.notificationsOpen ? renderNotificationsPanel() : ''}
-        ${state.error ? `
-        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
- <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
- <p class="text-sm font-semibold leading-snug">${escapeHtmlGlobal(state.error)}</p>
-            <button onclick="window.dismissError()" class="flex-shrink-0 hover:bg-white/20 rounded-lg p-1 -m-1 transition-colors">
- <i data-lucide="x" class="w-4 h-4"></i>
-            </button>
-        </div>` : ''}`;
+        ${notif}
+        ${errorToast}`;
 
     lucide.createIcons();
     if (window.fixPreCode) window.fixPreCode();
@@ -234,6 +273,8 @@ window.dismissError = () => {
 window.setView = (view) => {
     state.view = view;
     state.mobileNavOpen = false;
+    state.wizardSubmitted = null;  // never leave a stale success screen
+    window.dismissWizardCommitToast?.();  // drop any wizard step-2 toast on navigation
     const map = {
         dashboard: '#/home', list: '#/registry', kanban: '#/kanban',
         constitution: '#/constitution',
@@ -443,18 +484,8 @@ async function loadProposals() {
 }
 
 function computeStats() {
-    const LIFECYCLE = ['consultation', 'ready', 'done', 'withdrawn'];
-    const stageOf = p => {
-        const lc = (p.labels || []).map(l => l.name.toLowerCase());
-        for (const s of LIFECYCLE) { if (lc.includes(s)) return s; }
-        return p.state === 'closed' ? 'done' : 'consultation';
-    };
-    const caps = state.proposals.filter(p => p.type !== 'CIS');
-    state.stats = {
-        consultation: caps.filter(p => stageOf(p) === 'consultation').length,
-        ready:        caps.filter(p => stageOf(p) === 'ready').length,
-        done:         caps.filter(p => stageOf(p) === 'done').length,
-    };
+    // Same staging + set (CAP and CIS) the board and registry use.
+    state.stats = computeStageCounts(state.proposals);
 }
 
 async function loadConstitution() {
@@ -494,6 +525,16 @@ async function loadConstitutionVersionByName(name) {
         v.content = data.content;
     }
 }
+
+// Loads the current constitution (once) for the reader embedded in wizard Step 2.
+window.ensureConstitutionForWizard = () => {
+    const cur = (state.constitutionVersions || []).find(v => v.name === state.constitutionCurrentVersion)
+              || (state.constitutionVersions || [])[0];
+    if (cur && cur.content) return;
+    if (state._wizardConstLoading) return;
+    state._wizardConstLoading = true;
+    loadConstitution().finally(() => { state._wizardConstLoading = false; });
+};
 
 window.switchConstitutionVersion = async (name) => {
     state.constitutionCurrentVersion = name;
@@ -595,6 +636,9 @@ window.submitWizard = async () => {
         ),
         co_authors: w.coAuthors ? [w.coAuthors] : [],
     };
+    // Disable the button + show a loader so a slow request can't be double-clicked.
+    state.loading = { ...state.loading, submitting: true };
+    updateUI();
     try {
         const proposal = await createProposal({ title, type: w.type || 'CAP', structured });
         await addLabel(proposal.number, proposal.type);
@@ -610,11 +654,26 @@ window.submitWizard = async () => {
         }
         state.wizardData = {};
         state.wizardStep = 1;
-        await window.openProposal(proposal.number);
+        state.loading = { ...state.loading, submitting: false };
+        state.wizardSubmitted = proposal.number;  // shows the success screen
+        updateUI();
     } catch (e) {
         state.error = e.message;
+        state.loading = { ...state.loading, submitting: false };
         updateUI();
     }
+};
+
+// Success-screen actions.
+window.wizardViewSubmitted = (number) => {
+    state.wizardSubmitted = null;
+    window.openProposal(number);
+};
+window.wizardCreateAnother = () => {
+    state.wizardSubmitted = null;
+    state.wizardData = {};
+    state.wizardStep = 1;
+    updateUI();
 };
 
 window.postComment = async (formOrNumber, bodyArg) => {
@@ -1307,24 +1366,30 @@ function buildPreviewHtml(title, structured, type) {
  sections.push(`<h2 class="text-2xl font-black text-slate-900 mt-10 mb-4">Links &amp; Files</h2><div class="prose max-w-none">${md(structured.exhibits)}</div>`);
 
     return `
- <div class="flex items-center justify-between mb-8 p-5 bg-amber-50 border border-amber-200 rounded-2xl sticky top-4 z-10 backdrop-blur-sm">
- <div class="flex items-center gap-3">
- <i data-lucide="eye" class="w-4 h-4 text-amber-600"></i>
- <span class="text-xs font-black uppercase tracking-widest text-amber-700 ">Preview — Not Yet Submitted</span>
-            </div>
- <button onclick="window.closePreview()" class="flex items-center gap-2 text-sm font-black text-slate-600 hover:text-slate-900 transition-colors px-4 py-2 rounded-xl hover:bg-white/60 ">
- <i data-lucide="x" class="w-4 h-4"></i> Close
-            </button>
-        </div>
- <div class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm">
+ <div class="bg-white/80 p-8 sm:p-16 rounded-[3rem] border border-slate-100 shadow-sm">
  <div class="flex flex-wrap gap-3 mb-8">
- <span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-slate-50 ">${esc(type)}</span>
- ${structured.category ? `<span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-slate-50 ">${esc(structured.category)}</span>` : ''}
+ <span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200 bg-blue-50 text-blue-700">${esc(type)}</span>
+ ${structured.category ? `<span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-slate-100 text-slate-600">${esc(structured.category)}</span>` : ''}
             </div>
- <h1 class="text-5xl font-black tracking-tight text-slate-900 mb-8">${esc(title || 'Untitled')}</h1>
+ <h1 class="text-4xl font-black tracking-tight text-slate-900 mb-8">${esc(title || 'Untitled')}</h1>
             ${sections.join('\n')}
         </div>`;
 }
+
+// Preview HTML for the current wizard data — used inline on Step 5 (Review).
+window.wizardPreviewHtml = () => {
+    const w = state.wizardData || {};
+    const type = w.type || 'CAP';
+    const structured = {
+        type, category: w.category || '', abstract: w.abstract || '',
+        motivation: w.motivation || '', analysis: w.analysis || '',
+        impact: w.impact || '', exhibits: w.exhibits || '',
+        revisions: (w.selectedText || []).map((sel, i) => sel.kind === 'add_after'
+            ? { type: 'addition', insert_after: sel.text || '', proposed: w.revisions?.[i] || '', section: sel.sectionId || '' }
+            : { original: sel.text || '', proposed: w.revisions?.[i] || '', section: sel.sectionId || '' }),
+    };
+    return buildPreviewHtml(w.title || '', structured, type);
+};
 
 window.previewEdit = () => {
     const form = document.getElementById('edit-form');
@@ -1350,7 +1415,17 @@ function showPreviewOverlay(title, structured, type) {
     const overlay = document.createElement('div');
     overlay.id = 'preview-overlay';
     overlay.className = 'fixed inset-0 z-[200] bg-slate-50 overflow-y-auto';
- overlay.innerHTML = `<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${buildPreviewHtml(title, structured, type)}</div>`;
+ overlay.innerHTML = `<div class="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <div class="flex items-center justify-between mb-8 p-5 bg-amber-50 border border-amber-200 rounded-2xl sticky top-4 z-10 backdrop-blur-sm">
+            <div class="flex items-center gap-3">
+                <i data-lucide="eye" class="w-4 h-4 text-amber-600"></i>
+                <span class="text-xs font-black uppercase tracking-widest text-amber-700">Preview — Not Yet Submitted</span>
+            </div>
+            <button onclick="window.closePreview()" class="flex items-center gap-2 text-sm font-black text-slate-600 hover:text-slate-900 transition-colors px-4 py-2 rounded-xl hover:bg-white/60">
+                <i data-lucide="x" class="w-4 h-4"></i> Close
+            </button>
+        </div>
+        ${buildPreviewHtml(title, structured, type)}</div>`;
     document.body.appendChild(overlay);
     lucide.createIcons();
     overlay.scrollTop = 0;
@@ -1611,8 +1686,8 @@ window.updateWizard = (data) => {
 // screens (2 & 3), so navigation jumps over them in both directions.
 const nextWizardStep = (step, wizard) => {
     let s = step + 1;
-    while (s < 6 && isStepSkipped(s, wizard)) s++;
-    return Math.min(s, 6);
+    while (s < 5 && isStepSkipped(s, wizard)) s++;
+    return Math.min(s, 5);
 };
 const prevWizardStep = (step, wizard) => {
     let s = step - 1;
@@ -1628,6 +1703,7 @@ window.wizardNext     = () => {
 };
 window.wizardBack     = () => {
     state.wizardError = null;
+    window.dismissWizardCommitToast?.();
     state.wizardStep = prevWizardStep(state.wizardStep, state.wizardData || {});
     updateUI();
 };
@@ -1640,6 +1716,25 @@ window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; sta
 window.wizardStartOver = () => {
     if (!confirm('Start over? This discards everything you\'ve entered in the wizard.')) return;
     window.wizardReset();
+};
+
+// True when the user has entered anything worth warning about before leaving.
+function wizardHasData() {
+    const w = state.wizardData || {};
+    return !!((w.title || '').trim() || (w.abstract || '').trim() || (w.motivation || '').trim() ||
+              (w.analysis || '').trim() || (w.impact || '').trim() || (w.exhibits || '').trim() ||
+              (w.selectedText && w.selectedText.length) ||
+              (w.revisions && Object.values(w.revisions).some(v => (v || '').trim())));
+}
+
+// Leave the wizard (logo / Discard). Warns first if there are unsaved edits.
+window.wizardExit = () => {
+    if (wizardHasData() && !confirm('Discard this proposal? Everything you\'ve entered will be lost.')) return;
+    state.wizardData = {};
+    state.wizardStep = 1;
+    state.wizardError = null;
+    state.wizardSubmitted = null;
+    window.setView('dashboard');
 };
 
 window.previewWizard = () => {
@@ -1966,6 +2061,36 @@ window.setRegistrySearch = (q) => { state.registrySearch = q; updateUI(); };
 window.kanbanToggleTagPanel = () => { state.kanbanTagPanelOpen = !state.kanbanTagPanelOpen; updateUI(); };
 
 // ── Bootstrap ─────────────────────────────────────────────────────────────────
+
+// Read-only "what does alpha mean" modal, opened from the banner's "Read more".
+window.showAlphaInfo = () => {
+    document.getElementById('alpha-info-backdrop')?.remove();
+    const div = document.createElement('div');
+    div.innerHTML = `
+    <div id="alpha-info-backdrop"
+         onclick="if(event.target===this) document.getElementById('alpha-info-backdrop').remove()"
+         style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:1rem;">
+      <div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;padding:2.5rem;box-shadow:0 25px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;font-family:'Poppins',sans-serif;">
+        <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;">
+          <span style="background:#dc2626;color:white;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
+          <h2 style="margin:0;font-size:1.25rem;font-weight:700;color:#0f172a;">This is an alpha release</h2>
+        </div>
+        <p style="margin:0 0 1rem;font-size:0.8125rem;color:#475569;">The CAP Portal is an early, in-testing version made available for feedback. Please keep in mind:</p>
+        <ul style="margin:0 0 1.25rem;padding-left:1.25rem;font-size:0.8125rem;color:#475569;line-height:1.7;">
+          <li>It may contain bugs, be unavailable, or experience interruptions or data loss.</li>
+          <li>We don't guarantee accuracy, reliability, or availability — use it at your own risk.</li>
+          <li>Don't rely on it for critical activities or store sensitive information in it.</li>
+          <li>Features may change or be removed at any time.</li>
+        </ul>
+        <p style="margin:0 0 1.5rem;font-size:0.8125rem;color:#475569;">See our
+          <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/terms-of-use" target="_blank" rel="noopener noreferrer" style="color:#0228aa;font-weight:600;text-decoration:underline;">Terms of Use</a> and
+          <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/privacy-policy" target="_blank" rel="noopener noreferrer" style="color:#0228aa;font-weight:600;text-decoration:underline;">Privacy Policy</a> for details.</p>
+        <button onclick="document.getElementById('alpha-info-backdrop').remove()"
+          style="width:100%;padding:0.875rem;border-radius:0.75rem;border:none;background:#0228aa;color:white;font-weight:700;font-size:0.9375rem;font-family:'Poppins',sans-serif;cursor:pointer;">Got it</button>
+      </div>
+    </div>`;
+    document.body.appendChild(div.firstElementChild);
+};
 
 // Alpha-agreement acceptance is recorded server-side per account (see
 // /alpha-agreement/accept); the auth responses expose `alpha_agreed` so the

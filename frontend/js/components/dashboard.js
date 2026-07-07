@@ -39,7 +39,7 @@ export function renderDashboard(state) {
  <i data-lucide="${c.icon}" class="w-6 h-6"></i>
                 </div>
  <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">${c.label}</p>
- <p class="text-4xl font-black italic tracking-tighter text-slate-900 ">${c.value ?? '—'}</p>
+ <p class="text-4xl font-black tracking-tighter text-slate-900 ">${c.value ?? '—'}</p>
             </div>
             `).join('')}
         </div>

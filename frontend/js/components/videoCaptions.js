@@ -228,17 +228,12 @@ const TEXTS = {
     },
 };
 
+// Only these language buttons are shown. The remaining translations stay in
+// TEXTS above (ready to re-enable) — add an entry here to surface one again.
 const LANGS = [
     { id: 'en', label: 'EN' },
     { id: 'ja', label: '日本語' },
     { id: 'es', label: 'ES' },
-    { id: 'de', label: 'DE' },
-    { id: 'vi', label: 'VI' },
-    { id: 'id', label: 'ID' },
-    { id: 'pt', label: 'PT' },
-    { id: 'fr', label: 'FR' },
-    { id: 'ko', label: '한국어' },
-    { id: 'zh', label: '中文' },
 ];
 
 let cues = null;
@@ -246,7 +241,8 @@ let cuesLoading = false;
 
 function getLang() {
     const saved = localStorage.getItem('cap_video_lang');
-    return TEXTS[saved] ? saved : 'en';
+    // Only honour a saved language that is currently shown; otherwise default EN.
+    return LANGS.some(l => l.id === saved) ? saved : 'en';
 }
 
 function loadCues() {

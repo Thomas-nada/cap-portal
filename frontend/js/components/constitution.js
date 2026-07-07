@@ -1,3 +1,173 @@
+export const CONSTITUTION_SECTIONS = [
+    { id: 'preamble', label: 'Preamble' },
+    { id: 'defined-terms', label: 'Defined Terms' },
+    { id: 'article-i-tenets-and-guardrails', label: 'Art I: Tenets' },
+    { id: 'article-ii-community-and-governance', label: 'Art II: Community' },
+    { id: 'article-iii-constitutional-committee', label: 'Art III: Committee' },
+    { id: 'article-iv-amendment-process', label: 'Art IV: Amendment' },
+    { id: 'appendix-i-guardrails', label: 'App I: Guardrails' },
+    { id: 'appendix-ii-supporting-guidance', label: 'App II: Guidance' },
+];
+
+// Global text-selection system for the constitution reader (idempotent). Works
+// both on the standalone Constitution page and embedded in wizard Step 2.
+export function initConstitutionSelection() {
+    if (window.selectionHandlerInitialized) return;
+    window.selectionHandlerInitialized = true;
+    window.stagedSelections = window.stagedSelections || [];
+    const inWizard = () => window.state?.view === 'wizard';
+
+    function renderSelectionBar() {
+        const col = document.getElementById('constitution-col');
+        if (!col) return;
+        let bar = document.getElementById('selection-bar');
+        if (!window.stagedSelections.length) { if (bar) bar.remove(); return; }
+        if (!bar) { bar = document.createElement('div'); bar.id = 'selection-bar'; col.insertBefore(bar, col.firstChild); }
+        bar.style.cssText = 'margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
+        bar.innerHTML = window.stagedSelections.map(s => {
+            const preview = s.text.length > 55 ? s.text.slice(0, 52).trimEnd() + '…' : s.text;
+            return `<span style="display:inline-flex;align-items:center;gap:8px;background:#2563eb;border-radius:999px;padding:6px 14px;max-width:100%;">
+                <span style="color:#fff;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0;opacity:.75">${s.type}</span>
+                <span style="color:#fff;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${preview}</span>
+                <button onclick="window.removeSelection('${s.id}')" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;font-size:11px;font-weight:900;padding:1px 5px;line-height:1;border-radius:999px;flex-shrink:0">✕</button>
+            </span>`;
+        }).join('');
+    }
+
+    // After a wizard selection is committed, offer "Add more" / "Next step" right
+    // where the user is looking, so they never have to scroll to the bottom Next.
+    function showWizardCommitToast() {
+        let toast = document.getElementById('wizard-commit-toast');
+        if (!toast) {
+            toast = document.createElement('div');
+            toast.id = 'wizard-commit-toast';
+            toast.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:9998;display:flex;align-items:center;gap:10px;background:#1e293b;border-radius:16px;padding:10px 12px 10px 16px;box-shadow:0 12px 40px rgba(0,0,0,0.35);';
+            document.body.appendChild(toast);
+        }
+        const n = window.state?.wizardData?.selectedText?.length || 0;
+        toast.innerHTML = `
+            <span style="display:inline-flex;align-items:center;gap:8px;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;">
+                <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:#22c55e;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;">✓</span>
+                ${n} passage${n === 1 ? '' : 's'} selected
+            </span>
+            <button onclick="window.dismissWizardCommitToast()" style="background:rgba(255,255,255,0.12);color:#fff;border:none;border-radius:11px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">+ Add more</button>
+            <button onclick="window.dismissWizardCommitToast();window.wizardNextStep?.();" style="background:#2563eb;color:#fff;border:none;border-radius:11px;padding:8px 16px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">Next step →</button>`;
+        toast.style.display = 'flex';
+    }
+    window.dismissWizardCommitToast = () => {
+        document.getElementById('wizard-commit-toast')?.remove();
+    };
+
+    function showSelectionPopup(rect) {
+        window.dismissWizardCommitToast?.();  // starting a new selection supersedes the toast
+        let popup = document.getElementById('selection-popup');
+        if (!popup) {
+            popup = document.createElement('div');
+            popup.id = 'selection-popup';
+            popup.style.cssText = 'position:fixed;z-index:9999;display:flex;align-items:center;gap:6px;background:#1e293b;border-radius:14px;padding:6px 10px;box-shadow:0 8px 32px rgba(0,0,0,0.35);pointer-events:auto;';
+            document.body.appendChild(popup);
+        }
+        const isLoggedIn = !!window.state?.user;
+        // In the wizard the type is already CAP, so only offer Replace / Add After.
+        popup.innerHTML = !isLoggedIn
+            ? `<span style="color:#94a3b8;font-size:11px;font-weight:700;padding:0 4px">Connect wallet to flag text</span>`
+            : inWizard()
+            ? `<button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
+               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>`
+            : `<span style="color:#64748b;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:0 2px">CAP</span>
+               <button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
+               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>
+               <button onclick="window.commitSelection('CIS','replace')" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap">+ CIS</button>`;
+        popup.style.top = '-9999px'; popup.style.left = '-9999px'; popup.style.display = 'flex';
+        requestAnimationFrame(() => {
+            const h = popup.offsetHeight, pw = popup.offsetWidth;
+            const topAbove = rect.top - h - 10, topBelow = rect.bottom + 10;
+            const top = topAbove >= 0 ? topAbove : topBelow;
+            const left = Math.max(8, Math.min(rect.left + rect.width / 2 - pw / 2, window.innerWidth - pw - 8));
+            popup.style.top = `${top}px`; popup.style.left = `${left}px`;
+        });
+    }
+
+    function hidePopup() {
+        const p = document.getElementById('selection-popup');
+        if (p) p.style.display = 'none';
+    }
+
+    window.commitSelection = (type, kind = 'replace') => {
+        if (!window.currentSelection?.text) return;
+        const { text, sectionId } = window.currentSelection;
+        window.currentSelection = null;
+        window.getSelection()?.removeAllRanges();
+        hidePopup();
+
+        // Embedded in wizard Step 2: add straight to the proposal and re-render inline.
+        if (inWizard()) {
+            const w = window.state.wizardData || {};
+            const list = (w.selectedText || []).slice();
+            if (!list.some(s => s.text === text && s.kind === kind)) {
+                list.push({ id: `sel-${Date.now()}`, text, sectionId, type: 'CAP', kind });
+            }
+            window.state.wizardData = { ...w, selectedText: list, type: 'CAP' };
+            window.stagedSelections = [];
+            window.updateUI(true);
+            showWizardCommitToast();
+            return;
+        }
+
+        // Standalone Constitution page: keep the "start a CAP here" flow.
+        if (!window.stagedSelections.some(s => s.text === text && s.type === type && s.kind === kind)) {
+            window.stagedSelections.push({ id: `sel-${Date.now()}`, text, sectionId, type, kind });
+        }
+        if (type === 'CAP') window.addTextToCAP?.();
+        else window.addTextToCIS?.();
+        renderSelectionBar();
+    };
+
+    window.removeSelection = (id) => {
+        window.stagedSelections = window.stagedSelections.filter(s => s.id !== id);
+        renderSelectionBar();
+    };
+
+    window.clearConstitutionSelection = () => {
+        window.currentSelection = null; window.stagedSelections = [];
+        window.getSelection()?.removeAllRanges(); hidePopup(); renderSelectionBar();
+        window.dismissWizardCommitToast?.();
+    };
+
+    document.addEventListener('mouseup', (e) => {
+        if (document.getElementById('selection-popup')?.contains(e.target)) return;
+        try {
+            const selection = window.getSelection();
+            const text = selection.toString().trim();
+            if (text.length > 3 && !window.state?.constitutionCompareVersion) {
+                let node = selection.anchorNode, inside = false;
+                while (node && node !== document.body) {
+                    const el = node.nodeType === 1 ? node : node.parentElement;
+                    if (!el) break;
+                    if (el.id === 'constitution-content') { inside = true; break; }
+                    node = el.parentElement;
+                }
+                if (!inside) return;
+                node = selection.anchorNode;
+                let contextId = 'General';
+                while (node && node !== document.body) {
+                    const target = node.nodeType === 1 ? node : node.parentElement;
+                    if (target?.id) { contextId = target.id; break; }
+                    let sib = target?.previousElementSibling;
+                    while (sib) { if (sib.id) { contextId = sib.id; break; } sib = sib.previousElementSibling; }
+                    if (contextId !== 'General') break;
+                    node = target?.parentElement;
+                }
+                const sectionId = contextId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
+                window.currentSelection = { text, sectionId };
+                showSelectionPopup(selection.getRangeAt(0).getBoundingClientRect());
+            } else { hidePopup(); }
+        } catch (err) { console.warn('Selection handler error:', err); }
+    });
+
+    document.addEventListener('keydown', e => { if (e.key === 'Escape') window.clearConstitutionSelection?.(); });
+}
+
 export function renderConstitution(state) {
     if (state.loading?.constitution) {
         return `
@@ -27,129 +197,8 @@ export function renderConstitution(state) {
     const currentVersion = state.constitutionVersions.find(v => v.name === state.constitutionCurrentVersion);
     const compareVersion = isDiffMode ? state.constitutionVersions.find(v => v.name === state.constitutionCompareVersion) : null;
 
-    // Text selection system
-    if (!window.selectionHandlerInitialized) {
-        window.selectionHandlerInitialized = true;
-        window.stagedSelections = window.stagedSelections || [];
-
-        function renderSelectionBar() {
-            const col = document.getElementById('constitution-col');
-            if (!col) return;
-            let bar = document.getElementById('selection-bar');
-            if (!window.stagedSelections.length) { if (bar) bar.remove(); return; }
-            if (!bar) { bar = document.createElement('div'); bar.id = 'selection-bar'; col.insertBefore(bar, col.firstChild); }
-            bar.style.cssText = 'margin-bottom:16px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;';
-            bar.innerHTML = window.stagedSelections.map(s => {
-                const preview = s.text.length > 55 ? s.text.slice(0, 52).trimEnd() + '…' : s.text;
-                return `<span style="display:inline-flex;align-items:center;gap:8px;background:#2563eb;border-radius:999px;padding:6px 14px;max-width:100%;">
-                    <span style="color:#fff;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0;opacity:.75">${s.type}</span>
-                    <span style="color:#fff;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${preview}</span>
-                    <button onclick="window.removeSelection('${s.id}')" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;font-size:11px;font-weight:900;padding:1px 5px;line-height:1;border-radius:999px;flex-shrink:0">✕</button>
-                </span>`;
-            }).join('');
-        }
-
-        function showSelectionPopup(rect) {
-            let popup = document.getElementById('selection-popup');
-            if (!popup) {
-                popup = document.createElement('div');
-                popup.id = 'selection-popup';
-                popup.style.cssText = 'position:fixed;z-index:9999;display:flex;align-items:center;gap:6px;background:#1e293b;border-radius:14px;padding:6px 10px;box-shadow:0 8px 32px rgba(0,0,0,0.35);pointer-events:auto;';
-                document.body.appendChild(popup);
-            }
-            const isLoggedIn = !!window.state?.user;
-            popup.innerHTML = isLoggedIn
-                ? `<span style="color:#64748b;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:0 2px">CAP</span>
-                   <button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
-                   <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>
-                   <button onclick="window.commitSelection('CIS','replace')" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap">+ CIS</button>`
-                : `<span style="color:#94a3b8;font-size:11px;font-weight:700;padding:0 4px">Connect wallet to flag text</span>`;
-            popup.style.top = '-9999px'; popup.style.left = '-9999px'; popup.style.display = 'flex';
-            requestAnimationFrame(() => {
-                const h = popup.offsetHeight, pw = popup.offsetWidth;
-                const topAbove = rect.top - h - 10, topBelow = rect.bottom + 10;
-                const top = topAbove >= 0 ? topAbove : topBelow;
-                const left = Math.max(8, Math.min(rect.left + rect.width / 2 - pw / 2, window.innerWidth - pw - 8));
-                popup.style.top = `${top}px`; popup.style.left = `${left}px`;
-            });
-        }
-
-        function hidePopup() {
-            const p = document.getElementById('selection-popup');
-            if (p) p.style.display = 'none';
-        }
-
-        window.commitSelection = (type, kind = 'replace') => {
-            if (!window.currentSelection?.text) return;
-            const { text, sectionId } = window.currentSelection;
-            if (!window.stagedSelections.some(s => s.text === text && s.type === type && s.kind === kind)) {
-                window.stagedSelections.push({ id: `sel-${Date.now()}`, text, sectionId, type, kind });
-            }
-            if (type === 'CAP') window.addTextToCAP?.();
-            else window.addTextToCIS?.();
-            window.currentSelection = null;
-            window.getSelection()?.removeAllRanges();
-            hidePopup();
-            renderSelectionBar();
-        };
-
-        window.removeSelection = (id) => {
-            window.stagedSelections = window.stagedSelections.filter(s => s.id !== id);
-            renderSelectionBar();
-        };
-
-        window.clearConstitutionSelection = () => {
-            window.currentSelection = null; window.stagedSelections = [];
-            window.getSelection()?.removeAllRanges(); hidePopup(); renderSelectionBar();
-        };
-
-        document.addEventListener('mouseup', (e) => {
-            if (document.getElementById('selection-popup')?.contains(e.target)) return;
-            try {
-                const selection = window.getSelection();
-                const text = selection.toString().trim();
-                if (text.length > 3 && !window.state?.constitutionCompareVersion) {
-                    let node = selection.anchorNode, inside = false;
-                    while (node && node !== document.body) {
-                        const el = node.nodeType === 1 ? node : node.parentElement;
-                        if (!el) break;
-                        if (el.id === 'constitution-content') { inside = true; break; }
-                        node = el.parentElement;
-                    }
-                    if (!inside) return;
-                    node = selection.anchorNode;
-                    let contextId = 'General';
-                    while (node && node !== document.body) {
-                        const target = node.nodeType === 1 ? node : node.parentElement;
-                        if (target?.id) { contextId = target.id; break; }
-                        let sib = target?.previousElementSibling;
-                        while (sib) { if (sib.id) { contextId = sib.id; break; } sib = sib.previousElementSibling; }
-                        if (contextId !== 'General') break;
-                        node = target?.parentElement;
-                    }
-                    const sectionId = contextId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                    window.currentSelection = { text, sectionId };
-                    showSelectionPopup(selection.getRangeAt(0).getBoundingClientRect());
-                } else { hidePopup(); }
-            } catch (err) { console.warn('Selection handler error:', err); }
-        });
-
-        document.addEventListener('keydown', e => { if (e.key === 'Escape') window.clearConstitutionSelection?.(); });
-    }
-
-    const sections = [
-        { id: 'preamble', label: 'Preamble' },
-        { id: 'article-i-cardano-blockchain-tenets-and-guardrails', label: 'Art I: Tenets' },
-        { id: 'article-ii-the-cardano-blockchain-community', label: 'Art II: Community' },
-        { id: 'article-iii-participatory-and-decentralized-governance', label: 'Art III: Governance' },
-        { id: 'article-iv-the-cardano-blockchain-ecosystem-budget', label: 'Art IV: Budget' },
-        { id: 'article-v-delegated-representatives', label: 'Art V: DReps' },
-        { id: 'article-vi-stake-pool-operators', label: 'Art VI: SPOs' },
-        { id: 'article-vii-constitutional-committee', label: 'Art VII: Committee' },
-        { id: 'article-viii-amendment-process', label: 'Art VIII: Amendment' },
-        { id: 'appendix-i-cardano-blockchain-guardrails', label: 'App I: Guardrails' },
-        { id: 'appendix-ii-supporting-guidance', label: 'App II: Guidance' }
-    ];
+    initConstitutionSelection();
+    const sections = CONSTITUTION_SECTIONS;
 
     return `
  <div class="max-w-7xl mx-auto pb-20 fade-in text-left relative">
@@ -250,23 +299,20 @@ export function renderConstitution(state) {
     </div>`;
 }
 
-function renderSingleView(version) {
+export function renderSingleView(version, embedded = false) {
  if (!version?.content) return '<p class="text-slate-400">Constitution content not available.</p>';
     let content = version.content;
     content = content.replace(/<!--[\s\S]*?-->/g, '').trimStart();
 
     const sectionMappings = [
         { id: 'preamble', patterns: [/preamble/i] },
-        { id: 'article-i-cardano-blockchain-tenets-and-guardrails', patterns: [/article\s+i(?:[^v]|$)/i] },
-        { id: 'article-ii-the-cardano-blockchain-community', patterns: [/article\s+ii(?:[^i]|$)/i] },
-        { id: 'article-iii-participatory-and-decentralized-governance', patterns: [/article\s+iii(?:[^i]|$)/i] },
-        { id: 'article-iv-the-cardano-blockchain-ecosystem-budget', patterns: [/article\s+iv(?:[^v]|$)/i] },
-        { id: 'article-v-delegated-representatives', patterns: [/article\s+v(?:[^i]|$)/i] },
-        { id: 'article-vi-stake-pool-operators', patterns: [/article\s+vi(?:[^i]|$)/i] },
-        { id: 'article-vii-constitutional-committee', patterns: [/article\s+vii(?:[^i]|$)/i] },
-        { id: 'article-viii-amendment-process', patterns: [/article\s+viii(?:[^i]|$)/i] },
-        { id: 'appendix-i-cardano-blockchain-guardrails', patterns: [/appendix\s+i(?:[^i]|$)/i] },
-        { id: 'appendix-ii-supporting-guidance', patterns: [/appendix\s+ii(?:[^i]|$)/i] }
+        { id: 'defined-terms', patterns: [/defined\s+terms/i] },
+        { id: 'article-i-tenets-and-guardrails', patterns: [/article\s+i(?:[^iv]|$)/i] },
+        { id: 'article-ii-community-and-governance', patterns: [/article\s+ii(?:[^i]|$)/i] },
+        { id: 'article-iii-constitutional-committee', patterns: [/article\s+iii(?:[^i]|$)/i] },
+        { id: 'article-iv-amendment-process', patterns: [/article\s+iv/i] },
+        { id: 'appendix-i-guardrails', patterns: [/appendix\s+i(?:[^i]|$)/i] },
+        { id: 'appendix-ii-supporting-guidance', patterns: [/appendix\s+ii/i] }
     ];
 
     let html = window.safeMarkdown(content) || `<pre>${escapeHtml(content)}</pre>`;
@@ -282,8 +328,13 @@ function renderSingleView(version) {
  return `<h2 id="${defaultId}" class="scroll-mt-32 font-black italic tracking-tighter text-3xl uppercase text-slate-900 mt-16 mb-8 border-b border-slate-100 pb-4">${headerText}</h2>`;
     });
 
+    // Embedded (wizard Step 2) sits flush inside its own scroll container, so it
+    // drops the big rounded card chrome to avoid a card-in-a-card corner clash.
+    const cls = embedded
+        ? 'bg-white p-6 sm:p-10 prose max-w-none text-left leading-relaxed selection:bg-blue-600 selection:text-white'
+        : 'bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed selection:bg-blue-600 selection:text-white';
     return `
- <article id="constitution-content" class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed selection:bg-blue-600 selection:text-white">
+ <article id="constitution-content" class="${cls}">
         ${html}
     </article>`;
 }

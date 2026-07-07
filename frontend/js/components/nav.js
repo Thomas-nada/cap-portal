@@ -6,11 +6,10 @@ export function renderNav(state) {
 
     const menu = [
         { id: 'dashboard',    label: 'Home',         icon: 'home' },
-        { id: 'list',         label: 'Registry',     icon: 'database' },
+        { id: 'list',         label: 'Proposals',    icon: 'database' },
         { id: 'kanban',       label: 'Board',        icon: 'layout-dashboard' },
         { id: 'constitution', label: 'Constitution', icon: 'book-open' },
         { id: 'learn',        label: 'Guides',       icon: 'book' },
-        { id: 'editors',      label: 'Editors',      icon: 'shield' },
         ...(state.user?.is_admin ? [{ id: 'moderation', label: 'Moderation', icon: 'gavel' }] : []),
         ...(state.user?.is_admin ? [{ id: 'bugs', label: 'Bugs', icon: 'bug' }] : []),
         ...(isLoggedIn ? [{ id: 'wizard', label: 'New CAP', icon: 'plus-square' }] : [])

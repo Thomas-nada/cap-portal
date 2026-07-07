@@ -1,10 +1,4 @@
-const LIFECYCLE = ['consultation', 'ready', 'done', 'withdrawn'];
-
-function getStage(p) {
-    const lc = (p.labels || []).map(l => l.name.toLowerCase());
-    for (const s of LIFECYCLE) { if (lc.includes(s)) return s; }
-    return p.state === 'closed' ? 'done' : 'consultation';
-}
+import { LIFECYCLE, getStage } from '../lifecycle.js';
 
 const COLUMNS = [
     { id: 'consultation', label: 'In Consultation', icon: 'message-circle', color: 'text-purple-600', bg: 'bg-purple-50 ', border: 'border-purple-200 ' },

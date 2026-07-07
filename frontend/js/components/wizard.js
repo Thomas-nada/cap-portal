@@ -1,29 +1,27 @@
+import { renderSingleView, initConstitutionSelection, CONSTITUTION_SECTIONS } from './constitution.js';
+
 export function renderWizard(state) {
+    if (state.wizardSubmitted) return renderSuccess(state.wizardSubmitted);
     const step = state.wizardStep || 1;
-    const wizard = state.wizardData || {
+    // Default type to CAP so a radio shows selected on entry; user choices override.
+    const wizard = {
         type: 'CAP', category: '', title: '', abstract: '',
         motivation: '', analysis: '', impact: '', selectedText: [],
-        revisions: {}, exhibits: '', coAuthors: []
+        revisions: {}, exhibits: '', coAuthors: [],
+        ...(state.wizardData || {}),
     };
 
     return `
  <div class="max-w-5xl mx-auto pb-20 fade-in text-left">
  <header class="mb-12">
- <div class="flex items-center gap-4 mb-4">
- <div class="w-12 h-12 bg-gradient-to-br from-blue-600 to-purple-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
- <i data-lucide="wand-2" class="w-6 h-6"></i>
-                </div>
-                <div>
- <h1 class="text-3xl sm:text-4xl lg:text-5xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Amendment Wizard</h1>
- <p class="text-on-surface-variant text-lg font-medium mt-2">Step-by-step CAP creation</p>
-                </div>
-            </div>
+ <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">Amendment wizard</h1>
+ <p class="text-on-surface-variant text-lg font-medium mt-3">Guided process to create a Constitutional Amendment Proposal</p>
         </header>
 
         <!-- Progress -->
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-4 sm:p-8 mb-12">
  <div class="flex items-center justify-between mb-6">
-                ${[1,2,3,4,5,6].map(i => {
+                ${[1,2,3,4,5].map(i => {
                     const skipped = isStepSkipped(i, wizard);
                     const connMuted = wizard.type === 'CIS' && (i === 1 || i === 2 || i === 3);
                     return `
@@ -37,10 +35,10 @@ export function renderWizard(state) {
  ${skipped ? '<i data-lucide="minus" class="w-3.5 h-3.5 sm:w-4 sm:h-4"></i>' : i < step ? '<i data-lucide="check" class="w-4 h-4 sm:w-5 sm:h-5"></i>' : i}
                         </div>
  <span class="text-[9px] font-black uppercase tracking-widest ${skipped ? 'text-slate-200 ' : i === step ? 'text-blue-600' : 'text-slate-400'} hidden sm:block">
-                            ${['Type','Select','Propose','Explain','Review','Submit'][i-1]}
+                            ${['Type','Select','Propose','Explain','Review'][i-1]}
                         </span>
                     </div>
- ${i < 6 ? `<div class="h-0.5 flex-1 ${connMuted ? 'bg-slate-100 ' : i < step ? 'bg-green-500' : 'bg-slate-200 '} mx-1 sm:mx-2"></div>` : ''}
+ ${i < 5 ? `<div class="h-0.5 flex-1 ${connMuted ? 'bg-slate-100 ' : i < step ? 'bg-green-500' : 'bg-slate-200 '} mx-1 sm:mx-2"></div>` : ''}
                     `;
                 }).join('')}
             </div>
@@ -54,24 +52,43 @@ export function renderWizard(state) {
  <span class="text-sm font-bold">${escapeHtml(state.wizardError)}</span>
         </div>` : ''}
 
- <div class="flex items-center justify-between gap-3 ${state.wizardError ? 'mt-6' : 'mt-12'}">
-            ${step > 1 ? `
-            <button onclick="window.wizardPrevStep()"
- class="px-4 sm:px-8 py-4 rounded-2xl bg-slate-200 text-slate-900 font-black text-sm uppercase tracking-widest hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-2">
- <i data-lucide="arrow-left" class="w-4 h-4"></i> <span class="hidden sm:inline">Back</span>
-            </button>
-            ` : '<div></div>'}
-            ${step < 6 ? `
+ <div class="flex items-center justify-end gap-3 ${state.wizardError ? 'mt-6' : 'mt-12'}">
+            ${step < 5 ? `
             <button onclick="window.wizardNextStep()"
  class="px-4 sm:px-8 py-4 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase tracking-widest hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-2 shadow-xl">
  Next <i data-lucide="arrow-right" class="w-4 h-4"></i>
             </button>
             ` : `
-            <button onclick="window.wizardSubmit()"
- class="px-6 sm:px-12 py-4 rounded-2xl bg-gradient-to-r from-blue-600 to-purple-600 text-white font-black text-sm uppercase tracking-widest hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-3 shadow-xl">
- <i data-lucide="send" class="w-5 h-5"></i> Submit Proposal
+            <button onclick="window.wizardSubmit()" ${state.loading?.submitting ? 'disabled' : ''}
+ class="px-6 sm:px-12 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center gap-3 shadow-xl disabled:opacity-60 disabled:cursor-not-allowed">
+                ${state.loading?.submitting
+                    ? '<span class="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Submitting…'
+                    : '<i data-lucide="send" class="w-5 h-5"></i> Submit Proposal'}
             </button>
             `}
+        </div>
+    </div>`;
+}
+
+function renderSuccess(number) {
+    return `
+ <div class="max-w-2xl mx-auto py-12 fade-in text-center">
+ <div class="bg-white/90 rounded-[3rem] border border-slate-100 shadow-sm p-10 sm:p-16">
+ <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
+ <i data-lucide="check" class="w-10 h-10 text-white"></i>
+            </div>
+ <h2 class="text-3xl font-black tracking-tight text-slate-900 mb-3">Proposal submitted</h2>
+ <p class="text-slate-500 mb-10">Your proposal is now live in the registry and open for consultation.</p>
+ <div class="flex flex-col sm:flex-row items-center justify-center gap-3">
+                <button onclick="window.wizardViewSubmitted(${number})"
+ class="w-full sm:w-auto px-8 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors flex items-center justify-center gap-2">
+ <i data-lucide="file-text" class="w-4 h-4"></i> View your proposal
+                </button>
+                <button onclick="window.wizardCreateAnother()"
+ class="w-full sm:w-auto px-8 py-4 rounded-2xl border-2 border-slate-200 text-slate-600 font-bold hover:border-slate-400 transition-colors">
+                    Create another
+                </button>
+            </div>
         </div>
     </div>`;
 }
@@ -83,7 +100,6 @@ function renderStep(step, wizard, state) {
         case 3: return wizard.type === 'CIS' ? renderStep4(wizard) : renderStep3(wizard);
         case 4: return renderStep4(wizard);
         case 5: return renderStep5(wizard);
-        case 6: return renderStep6(wizard);
         default: return '';
     }
 }
@@ -100,25 +116,27 @@ const CATEGORIES = [
 function renderStep1(wizard) {
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
- <h2 class="text-3xl font-black italic tracking-tighter text-slate-900 uppercase mb-8">Step 1: Choose Type</h2>
+ <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-8">Step 1: Choose type</h2>
 
  <div class="mb-12">
- <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 block">Proposal Type</label>
- <div class="flex p-2 bg-slate-100 rounded-2xl max-w-md">
-                <button onclick="window.updateWizard({type:'CAP'}); window.updateUI(true);"
- class="flex-1 py-4 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${wizard.type === 'CAP' ? 'bg-blue-600 text-white shadow-lg' : 'text-slate-400 hover:text-slate-900 '}">
-                    CAP
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 block">Proposal type</label>
+ <div class="space-y-3">
+                ${[
+                    { id: 'CAP', name: 'Constitutional Amendment Proposal', desc: 'Proposes specific changes to the Constitution text.' },
+                    { id: 'CIS', name: 'Constitutional Issue Statement', desc: 'Identifies a constitutional problem without proposing specific changes.' },
+                ].map(t => `
+                <button onclick="window.updateWizard({type:'${t.id}'}); window.updateUI(true);"
+ class="w-full p-5 rounded-2xl border-2 text-left transition-all flex items-start gap-4 ${wizard.type === t.id ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}">
+ <span class="mt-1 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${wizard.type === t.id ? 'border-blue-600' : 'border-slate-300'}">
+                        ${wizard.type === t.id ? '<span class="w-2.5 h-2.5 rounded-full bg-blue-600 block"></span>' : ''}
+                    </span>
+                    <span>
+ <span class="block font-bold text-slate-900">${t.name} <span class="text-slate-400 font-medium">(${t.id})</span></span>
+ <span class="block text-sm text-slate-500 mt-0.5">${t.desc}</span>
+                    </span>
                 </button>
-                <button onclick="window.updateWizard({type:'CIS'}); window.updateUI(true);"
- class="flex-1 py-4 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${wizard.type === 'CIS' ? 'bg-amber-500 text-white shadow-lg' : 'text-slate-400 hover:text-slate-900 '}">
-                    CIS
-                </button>
+                `).join('')}
             </div>
- <p class="text-sm text-slate-500 mt-3">
-                ${wizard.type === 'CAP' ?
-                    '<strong>CAP:</strong> Proposes specific changes to the constitution text.' :
-                    '<strong>CIS:</strong> Identifies a constitutional problem without proposing specific changes.'}
-            </p>
         </div>
 
         <div>
@@ -153,32 +171,45 @@ function renderStep1(wizard) {
 }
 
 function renderStep2(wizard, state) {
+    // Enable the constitution text-selection popup inside this embedded reader.
+    initConstitutionSelection();
+
+    // The reader needs the current constitution content. Load it on demand.
+    const cur = (state.constitutionVersions || []).find(v => v.name === state.constitutionCurrentVersion)
+              || (state.constitutionVersions || [])[0];
+    const contentReady = cur && cur.content;
+    if (!contentReady) {
+        window.ensureConstitutionForWizard?.();
+    }
+
+    const selected = wizard.selectedText || [];
+
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
- <h2 class="text-3xl font-black italic tracking-tighter text-slate-900 uppercase mb-4">Step 2: Select Text</h2>
- <p class="text-slate-500 mb-8">Choose the exact text from the constitution you want to change</p>
+ <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-4">Step 2: Select text you propose to change</h2>
 
  <div class="bg-blue-50 p-6 rounded-2xl border border-blue-100 mb-8">
  <div class="flex items-start gap-3">
- <i data-lucide="lightbulb" class="w-5 h-5 text-blue-600 mt-1 flex-shrink-0"></i>
+ <i data-lucide="mouse-pointer-2" class="w-5 h-5 text-blue-600 mt-1 flex-shrink-0"></i>
                 <div>
- <p class="font-bold text-slate-900 mb-2">How to select text:</p>
- <ol class="text-sm text-slate-600 space-y-1 list-decimal list-inside">
-                        <li>Click "Browse Constitution" below</li>
-                        <li>Highlight the text you want to change</li>
-                        <li>Click "+ CAP" in the popup that appears</li>
-                        <li>Repeat to add more selections</li>
-                    </ol>
+ <p class="font-bold text-slate-900 mb-2">Highlight the exact text you want to change in the Constitution below.</p>
+ <p class="text-sm text-slate-600">When you release, choose <span class="font-black">Replace</span> to swap the wording, or <span class="font-black">Add After</span> to insert new text after it. Repeat to add more selections.</p>
                 </div>
             </div>
         </div>
 
-        ${wizard.selectedText?.length > 0 ? `
- <div class="space-y-4 mb-8">
- <label class="text-sm font-black text-slate-400 uppercase tracking-widest block">Selected (${wizard.selectedText.length})</label>
-            ${wizard.selectedText.map((sel, idx) => `
- <div class="p-6 rounded-2xl bg-slate-50 border border-slate-200 ">
- <div class="flex items-start justify-between gap-4 mb-3">
+        ${selected.length > 0 ? `
+ <div class="space-y-3 mb-8">
+ <div class="flex items-center justify-between gap-4">
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest block">Selected (${selected.length})</label>
+ <button onclick="window.wizardNextStep()"
+ class="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-xs font-black uppercase tracking-widest transition-all shadow">
+ Continue <i data-lucide="arrow-right" class="w-4 h-4"></i>
+ </button>
+ </div>
+            ${selected.map((sel, idx) => `
+ <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 ">
+ <div class="flex items-start justify-between gap-4 mb-2">
  <div class="flex items-center gap-2">
  <span class="text-xs font-black px-3 py-1 bg-blue-100 text-blue-600 rounded-full uppercase tracking-wider">Selection ${idx+1}</span>
                         ${sel.kind === 'add_after'
@@ -193,18 +224,23 @@ function renderStep2(wizard, state) {
             </div>
             `).join('')}
         </div>
+        ` : ''}
+
+        ${!contentReady ? `
+ <div class="flex items-center justify-center py-24">
+ <div class="w-12 h-12 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
+        </div>
         ` : `
- <div class="text-center py-12 border-2 border-dashed border-slate-200 rounded-2xl mb-8">
- <i data-lucide="mouse-pointer-click" class="w-16 h-16 text-slate-300 mx-auto mb-4"></i>
- <p class="text-slate-400 font-bold mb-4">No text selected yet</p>
+ <div class="mb-4 flex flex-wrap items-center gap-2">
+ <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mr-1">Jump to</span>
+            ${CONSTITUTION_SECTIONS.map(s => `
+ <a href="#${s.id}" class="px-3 py-1.5 rounded-lg text-[11px] font-bold text-slate-600 bg-slate-50 border border-slate-100 hover:bg-slate-100 transition-all">${s.label}</a>
+            `).join('')}
+        </div>
+ <div id="constitution-col" class="max-h-[65vh] overflow-y-auto rounded-[2rem] border border-slate-100 bg-white">
+            ${renderSingleView(cur, true)}
         </div>
         `}
-
-        <button onclick="window.openConstitutionForWizard()"
- class="w-full px-8 py-5 rounded-2xl bg-blue-600 text-white font-black uppercase text-sm tracking-widest hover:-translate-y-1 active:scale-95 transition-all shadow-xl flex items-center justify-center gap-3">
- <i data-lucide="book-open" class="w-5 h-5"></i>
-            Browse Constitution
-        </button>
     </div>`;
 }
 
@@ -212,8 +248,8 @@ function renderStep3(wizard) {
     if (wizard.type === 'CIS') return renderStep4(wizard);
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
- <h2 class="text-3xl font-black italic tracking-tighter text-slate-900 uppercase mb-4">Step 3: Propose Changes</h2>
- <p class="text-slate-500 mb-8">Write your proposed text for each selection</p>
+ <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-4">Step 3: Propose changes</h2>
+ <p class="text-slate-500 mb-8">Write your proposed text for each selection.</p>
         ${wizard.selectedText?.length > 0 ? `
  <div class="space-y-8">
             ${wizard.selectedText.map((sel, idx) => sel.kind === 'add_after' ? `
@@ -262,11 +298,12 @@ function renderStep4(wizard) {
     const stepNum = wizard.type === 'CIS' ? '2' : '4';
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
- <h2 class="text-3xl font-black italic tracking-tighter text-slate-900 uppercase mb-4">Step ${stepNum}: Explain</h2>
- <p class="text-slate-500 mb-8">Provide context and reasoning</p>
+ <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-4">Step ${stepNum}: Explain</h2>
+ <p class="text-slate-500 mb-8">Provide context and reasoning.</p>
  <div class="space-y-8">
             <div>
- <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-3 block">Summary</label>
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1 block">Summary</label>
+ <p class="text-xs text-slate-400 mb-3">A short, plain-language summary of the core idea.</p>
                 <textarea oninput="state.wizardData.abstract = this.value;"
                     placeholder="Summarize the core idea..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-32"
@@ -274,16 +311,17 @@ function renderStep4(wizard) {
             </div>
             ${wizard.type === 'CAP' ? `
  <div class="space-y-6 p-6 bg-slate-50 rounded-2xl border border-slate-200 ">
- <h3 class="text-xs font-black uppercase tracking-widest text-blue-600">Why?</h3>
                 <div>
- <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2 block">Why is this change needed?</label>
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1 block">Why is this change needed?</label>
+ <p class="text-xs text-slate-400 mb-3">Explain the problem this solves and why the Constitution should change.</p>
                     <textarea oninput="state.wizardData.motivation = this.value;"
                         placeholder="Explain why the constitution should be changed..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-40"
                     >${escapeHtml(wizard.motivation || '')}</textarea>
                 </div>
                 <div>
- <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2 block">Analysis &amp; Test</label>
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1 block">Analysis &amp; Test</label>
+ <p class="text-xs text-slate-400 mb-3">Describe the expected impact and consequences, and how you'll know the change worked (measurable success criteria).</p>
                     <textarea oninput="state.wizardData.analysis = this.value;"
                         placeholder="Describe expected impact, consequences, and measurable success criteria..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-48"
@@ -330,44 +368,9 @@ function renderStep5(wizard) {
     const stepNum = wizard.type === 'CIS' ? '3' : '5';
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
- <h2 class="text-3xl font-black italic tracking-tighter text-slate-900 uppercase mb-4">Step ${stepNum}: Review</h2>
- <p class="text-slate-500 mb-8">Check everything before submitting</p>
- <div class="grid grid-cols-2 gap-6 mb-8">
- <div class="p-6 rounded-2xl bg-slate-50 ">
- <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Type</p>
- <p class="text-xl font-black text-slate-900 ">${wizard.type}</p>
-            </div>
- <div class="p-6 rounded-2xl bg-slate-50 ">
- <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-2">Category</p>
- <p class="text-xl font-black text-slate-900 ">${wizard.category || '—'}</p>
-            </div>
-        </div>
- <div class="mb-10">
- <p class="text-xs font-black uppercase tracking-widest text-slate-400 mb-3">Title</p>
- <p class="text-2xl font-black text-slate-900 ">${escapeHtml(wizard.title)}</p>
-        </div>
-        <button type="button" onclick="window.previewWizard()"
- class="w-full flex items-center justify-center gap-3 p-6 rounded-2xl border-2 border-blue-200 hover:border-blue-600 hover:bg-blue-50 transition-all text-blue-600 font-black text-lg uppercase tracking-widest">
- <i data-lucide="eye" class="w-6 h-6"></i> Preview Full Proposal
-        </button>
-    </div>`;
-}
-
-function renderStep6(wizard) {
-    const stepNum = wizard.type === 'CIS' ? '4' : '6';
-    return `
- <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12 text-center">
- <div class="w-20 h-20 bg-green-500 rounded-full flex items-center justify-center mx-auto mb-6">
- <i data-lucide="check" class="w-10 h-10 text-white"></i>
-        </div>
- <h2 class="text-4xl font-black italic tracking-tighter text-slate-900 uppercase mb-4">Ready to Submit!</h2>
- <p class="text-slate-500 text-lg mb-8 max-w-2xl mx-auto">Your ${wizard.type} is ready. Click submit to create the proposal.</p>
- <div class="flex items-center justify-center gap-4">
-            <button onclick="window.wizardStartOver()"
- class="px-8 py-4 rounded-2xl border-2 border-slate-200 text-slate-900 font-black uppercase text-sm tracking-widest hover:-translate-y-1 active:scale-95 transition-all">
-                Start Over
-            </button>
-        </div>
+ <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-4">Step ${stepNum}: Review</h2>
+ <p class="text-slate-500 mb-8">This is exactly how your proposal will look once published. Review it, then submit below.</p>
+        ${window.wizardPreviewHtml ? window.wizardPreviewHtml() : ''}
     </div>`;
 }
 
