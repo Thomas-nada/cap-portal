@@ -276,9 +276,9 @@ window.setView = (view) => {
     state.wizardSubmitted = null;  // never leave a stale success screen
     window.dismissWizardCommitToast?.();  // drop any wizard step-2 toast on navigation
     const map = {
-        dashboard: '#/home', list: '#/registry', kanban: '#/kanban',
+        dashboard: '#/home', list: '#/proposals', kanban: '#/board',
         constitution: '#/constitution',
-        wizard: '#/wizard', learn: '#/learn', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
+        wizard: '#/wizard', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
     };
     if (map[view]) window.location.hash = map[view];
     updateUI();
@@ -297,10 +297,10 @@ window.handleRouting = async () => {
     if (hash === '#/home' || hash === '#/') {
         state.view = 'dashboard';
         loadProposals();
-    } else if (hash === '#/registry') {
+    } else if (hash === '#/proposals' || hash === '#/registry') {
         state.view = 'list';
         loadProposals();
-    } else if (hash === '#/kanban') {
+    } else if (hash === '#/board' || hash === '#/kanban') {
         state.view = 'kanban';
         loadProposals();
     } else if (hash === '#/constitution') {
@@ -322,8 +322,8 @@ window.handleRouting = async () => {
                 updateUI();
             });
         }
-    } else if (hash.startsWith('#/learn/')) {
-        const slug = hash.replace('#/learn/', '');
+    } else if (hash.startsWith('#/guides/') || hash.startsWith('#/learn/')) {
+        const slug = hash.replace('#/guides/', '').replace('#/learn/', '');
         state.view = 'learn';
         if (slug) {
             if (!state.guidesLoaded) loadGuides().then(() => window.openGuide(slug));
@@ -332,7 +332,7 @@ window.handleRouting = async () => {
             if (!state.guidesLoaded) loadGuides();
             else updateUI();
         }
-    } else if (hash === '#/learn') {
+    } else if (hash === '#/guides' || hash === '#/learn') {
         state.view = 'learn';
         state.activeGuide = null;
         state.guideHtml = null;
@@ -609,7 +609,7 @@ window.openProposal = async (number, addToHistory = true) => {
         state.proposalVersions = [];
         state.error = 'That proposal is not available.';
         state.view = 'list';
-        history.replaceState(null, '', '#/registry');
+        history.replaceState(null, '', '#/proposals');
         if (!state.proposals.length) { loadProposals(); return; }
     } finally {
         state.loading.proposal = false;
@@ -1868,7 +1868,7 @@ window.openGuide = async (slug) => {
     state.activeGuide = slug;
     state.guideHtml = null;
     state.view = 'learn';
-    window.location.hash = `#/learn/${slug}`;
+    window.location.hash = `#/guides/${slug}`;
     updateUI();
 
     // Try API first (editor-saved version), fall back to static file if the API has no content yet
@@ -1905,7 +1905,7 @@ window.closeGuide = () => {
     state.guideRawContent = null;
     state.guideLastEditor = null;
     state.guideLastUpdated = null;
-    window.location.hash = '#/learn';
+    window.location.hash = '#/guides';
     updateUI();
 };
 
@@ -2023,7 +2023,7 @@ window.deleteGuide = async (slug) => {
         state.guidesLoaded = false;
         state.activeGuide = null;
         state.guideHtml = null;
-        window.location.hash = '#/learn';
+        window.location.hash = '#/guides';
         await loadGuides();
     } catch (e) {
         alert(e.message || 'Failed to delete guide.');
