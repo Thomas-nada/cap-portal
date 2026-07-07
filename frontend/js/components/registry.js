@@ -45,10 +45,10 @@ export function renderRegistry(state) {
                     <input type="text" placeholder="Search by title, author, label…" value="${escapeHtml(state.registrySearch || '')}"
                         oninput="window.setRegistrySearch(this.value)"
  class="px-4 py-2 rounded-xl border border-slate-200 bg-white/80 text-sm text-slate-900 outline-none focus:border-blue-400 w-full sm:w-64">
-                    <button onclick="window.setView('wizard')"
+                    ${state.user ? `<button onclick="window.setView('wizard')"
  class="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
  <i data-lucide="plus" class="w-4 h-4"></i> New CAP
-                    </button>
+                    </button>` : ''}
                 </div>
             </div>
  <div class="flex flex-wrap gap-2">
