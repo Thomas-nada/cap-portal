@@ -27,39 +27,14 @@ export function initConstitutionSelection() {
         bar.innerHTML = window.stagedSelections.map(s => {
             const preview = s.text.length > 55 ? s.text.slice(0, 52).trimEnd() + '…' : s.text;
             return `<span style="display:inline-flex;align-items:center;gap:8px;background:#2563eb;border-radius:999px;padding:6px 14px;max-width:100%;">
-                <span style="color:#fff;font-size:10px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0;opacity:.75">${s.type}</span>
-                <span style="color:#fff;font-size:11px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${preview}</span>
-                <button onclick="window.removeSelection('${s.id}')" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;font-size:11px;font-weight:900;padding:1px 5px;line-height:1;border-radius:999px;flex-shrink:0">✕</button>
+                <span style="color:#fff;font-size:14px;font-weight:900;letter-spacing:.08em;text-transform:uppercase;flex-shrink:0;opacity:.75">${s.type}</span>
+                <span style="color:#fff;font-size:14px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:300px">${preview}</span>
+                <button onclick="window.removeSelection('${s.id}')" style="background:rgba(255,255,255,0.2);border:none;color:#fff;cursor:pointer;font-size:14px;font-weight:900;padding:1px 5px;line-height:1;border-radius:999px;flex-shrink:0">✕</button>
             </span>`;
         }).join('');
     }
 
-    // After a wizard selection is committed, offer "Add more" / "Next step" right
-    // where the user is looking, so they never have to scroll to the bottom Next.
-    function showWizardCommitToast() {
-        let toast = document.getElementById('wizard-commit-toast');
-        if (!toast) {
-            toast = document.createElement('div');
-            toast.id = 'wizard-commit-toast';
-            toast.style.cssText = 'position:fixed;left:50%;bottom:28px;transform:translateX(-50%);z-index:9998;display:flex;align-items:center;gap:10px;background:#1e293b;border-radius:16px;padding:10px 12px 10px 16px;box-shadow:0 12px 40px rgba(0,0,0,0.35);';
-            document.body.appendChild(toast);
-        }
-        const n = window.state?.wizardData?.selectedText?.length || 0;
-        toast.innerHTML = `
-            <span style="display:inline-flex;align-items:center;gap:8px;color:#fff;font-size:13px;font-weight:700;white-space:nowrap;">
-                <span style="display:inline-flex;width:22px;height:22px;border-radius:999px;background:#22c55e;align-items:center;justify-content:center;color:#fff;font-size:13px;font-weight:900;">✓</span>
-                ${n} passage${n === 1 ? '' : 's'} selected
-            </span>
-            <button onclick="window.dismissWizardCommitToast()" style="background:rgba(255,255,255,0.12);color:#fff;border:none;border-radius:11px;padding:8px 14px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">+ Add more</button>
-            <button onclick="window.dismissWizardCommitToast();window.wizardNextStep?.();" style="background:#2563eb;color:#fff;border:none;border-radius:11px;padding:8px 16px;font-size:12px;font-weight:800;cursor:pointer;white-space:nowrap;">Next step →</button>`;
-        toast.style.display = 'flex';
-    }
-    window.dismissWizardCommitToast = () => {
-        document.getElementById('wizard-commit-toast')?.remove();
-    };
-
     function showSelectionPopup(rect) {
-        window.dismissWizardCommitToast?.();  // starting a new selection supersedes the toast
         let popup = document.getElementById('selection-popup');
         if (!popup) {
             popup = document.createElement('div');
@@ -70,14 +45,14 @@ export function initConstitutionSelection() {
         const isLoggedIn = !!window.state?.user;
         // In the wizard the type is already CAP, so only offer Replace / Add After.
         popup.innerHTML = !isLoggedIn
-            ? `<span style="color:#94a3b8;font-size:11px;font-weight:700;padding:0 4px">Connect wallet to flag text</span>`
+            ? `<span style="color:#94a3b8;font-size:14px;font-weight:700;padding:0 4px">Connect wallet to flag text</span>`
             : inWizard()
-            ? `<button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
-               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>`
-            : `<span style="color:#64748b;font-size:9px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:0 2px">CAP</span>
-               <button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
-               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>
-               <button onclick="window.commitSelection('CIS','replace')" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:11px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap">+ CIS</button>`;
+            ? `<button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
+               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>`
+            : `<span style="color:#64748b;font-size:14px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:0 2px">CAP</span>
+               <button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
+               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>
+               <button onclick="window.commitSelection('CIS','replace')" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap">+ CIS</button>`;
         popup.style.top = '-9999px'; popup.style.left = '-9999px'; popup.style.display = 'flex';
         requestAnimationFrame(() => {
             const h = popup.offsetHeight, pw = popup.offsetWidth;
@@ -110,7 +85,6 @@ export function initConstitutionSelection() {
             window.state.wizardData = { ...w, selectedText: list, type: 'CAP' };
             window.stagedSelections = [];
             window.updateUI(true);
-            showWizardCommitToast();
             return;
         }
 
@@ -131,7 +105,6 @@ export function initConstitutionSelection() {
     window.clearConstitutionSelection = () => {
         window.currentSelection = null; window.stagedSelections = [];
         window.getSelection()?.removeAllRanges(); hidePopup(); renderSelectionBar();
-        window.dismissWizardCommitToast?.();
     };
 
     document.addEventListener('mouseup', (e) => {
@@ -174,7 +147,7 @@ export function renderConstitution(state) {
  <div class="flex items-center justify-center py-40">
  <div class="flex flex-col items-center gap-6">
  <div class="w-16 h-16 border-4 border-blue-600/20 border-t-blue-600 rounded-full animate-spin"></div>
- <p class="text-slate-400 font-bold uppercase tracking-widest text-xs text-center">Loading Constitution…</p>
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-sm text-center">Loading Constitution…</p>
             </div>
         </div>`;
     }
@@ -184,9 +157,9 @@ export function renderConstitution(state) {
  <div class="max-w-7xl mx-auto pb-20 fade-in text-center">
  <div class="bg-white/80 p-20 rounded-[4rem] border border-dashed border-slate-200 ">
  <i data-lucide="alert-circle" class="w-16 h-16 text-slate-400 mx-auto mb-6"></i>
- <p class="text-slate-400 font-bold uppercase tracking-widest text-xs mb-4">No Constitution Versions Available</p>
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-sm mb-4">No Constitution Versions Available</p>
                 <button onclick="window.reloadConstitution()"
- class="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl text-xs font-bold hover:bg-blue-700 transition-all">
+ class="mt-6 px-6 py-3 bg-blue-600 text-white rounded-xl text-sm font-bold hover:bg-blue-700 transition-all">
                     Retry
                 </button>
             </div>
@@ -208,7 +181,7 @@ export function renderConstitution(state) {
  <i data-lucide="book-open" class="w-6 h-6"></i>
                 </div>
                 <div>
- <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Constitution</h1>
+ <h1 class="text-3xl sm:text-4xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Constitution</h1>
  <p class="text-on-surface-variant text-xl font-medium mt-2">Foundational governance document</p>
                 </div>
             </div>
@@ -227,7 +200,7 @@ export function renderConstitution(state) {
  <aside class="lg:col-span-1 space-y-6 lg:sticky lg:top-8 h-fit">
                 <!-- Version Selector -->
  <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
- <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Version</h3>
+ <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Version</h3>
                     <select onchange="window.switchConstitutionVersion(this.value)"
  class="w-full p-3 rounded-xl border border-slate-200 bg-white/80 text-slate-900 font-bold text-sm focus:outline-none focus:ring-2 focus:ring-blue-600 transition-all">
                         ${state.constitutionVersions.map(v => `
@@ -247,7 +220,7 @@ export function renderConstitution(state) {
 
                 <!-- Diff Mode -->
  <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
- <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Compare Mode</h3>
+ <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Compare Mode</h3>
                     ${!isDiffMode ? `
                     <button onclick="window.enableDiffMode()"
  class="w-full px-4 py-3 rounded-xl bg-blue-50 border-2 border-blue-200 text-blue-600 font-bold text-sm hover:-translate-y-0.5 transition-all flex items-center justify-center gap-2">
@@ -262,7 +235,7 @@ export function renderConstitution(state) {
                         `).join('')}
                     </select>
                     <button onclick="window.disableDiffMode()"
- class="w-full px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-xs hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
+ class="w-full px-4 py-3 rounded-xl bg-slate-100 text-slate-600 font-bold text-sm hover:bg-slate-200 transition-all flex items-center justify-center gap-2">
  <i data-lucide="x" class="w-4 h-4"></i> Exit Diff Mode
                     </button>
                     `}
@@ -270,10 +243,10 @@ export function renderConstitution(state) {
 
                 <!-- Navigation -->
  <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
- <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Jump To</h3>
+ <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Jump To</h3>
  <div class="space-y-1 max-h-96 overflow-y-auto">
                         ${sections.map(s => `
- <a href="#${s.id}" class="block px-3 py-2 rounded-lg text-xs font-bold text-slate-600 hover:bg-slate-50 transition-all">
+ <a href="#${s.id}" class="block px-3 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all">
                             ${s.label}
                         </a>
                         `).join('')}
@@ -282,8 +255,8 @@ export function renderConstitution(state) {
 
                 ${isDiffMode ? `
  <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
- <h3 class="text-xs font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Legend</h3>
- <div class="space-y-2 text-xs font-bold text-slate-600 ">
+ <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Legend</h3>
+ <div class="space-y-2 text-sm font-bold text-slate-600 ">
  <div class="flex items-center gap-2"><div class="w-4 h-4 bg-red-400 rounded"></div><span>Removed</span></div>
  <div class="flex items-center gap-2"><div class="w-4 h-4 bg-green-400 rounded"></div><span>Added</span></div>
  <div class="flex items-center gap-2"><div class="w-4 h-4 bg-blue-400 rounded"></div><span>Modified</span></div>
@@ -394,7 +367,7 @@ function renderDiffView(currentVersion, compareVersion) {
  <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-6">
  <i data-lucide="check-circle" class="w-8 h-8 text-green-500"></i>
             </div>
- <p class="text-slate-400 font-bold uppercase tracking-widest text-xs mb-2">No Differences Found</p>
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-sm mb-2">No Differences Found</p>
  <p class="text-slate-500 text-sm">These two versions appear to be identical.</p>
         </div>`;
     }
@@ -446,11 +419,11 @@ function renderDiffView(currentVersion, compareVersion) {
             k++;
         }
         const { oH, nH } = applyLineGroup(delLines, insLines);
- const none = '<span class="text-slate-300 italic text-xs">nothing</span>';
+ const none = '<span class="text-slate-300 italic text-sm">nothing</span>';
  changeCards += `<div class="bg-white/80 rounded-[2rem] border border-slate-100 shadow-sm overflow-hidden">
  <div class="grid grid-cols-1 lg:grid-cols-2 divide-y lg:divide-y-0 lg:divide-x divide-slate-100 ">
- <div class="p-6"><p class="text-[9px] font-black uppercase tracking-widest text-red-400 mb-3">Before</p><p class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">${oH.trim() || none}</p></div>
- <div class="p-6"><p class="text-[9px] font-black uppercase tracking-widest text-green-500 mb-3">After</p><p class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">${nH.trim() || none}</p></div>
+ <div class="p-6"><p class="text-sm font-black uppercase tracking-widest text-red-400 mb-3">Before</p><p class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">${oH.trim() || none}</p></div>
+ <div class="p-6"><p class="text-sm font-black uppercase tracking-widest text-green-500 mb-3">After</p><p class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap">${nH.trim() || none}</p></div>
             </div>
         </div>`;
       }
@@ -461,13 +434,13 @@ function renderDiffView(currentVersion, compareVersion) {
  <div class="bg-white/80 p-6 sm:p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
  <div class="flex flex-wrap items-center gap-4">
                 <div>
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Comparing versions</p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Comparing versions</p>
  <p class="text-lg font-black text-slate-900 ">
  ${escapeHtml(currentVersion.name)} <span class="text-slate-400 font-normal mx-2">→</span> ${escapeHtml(compareVersion.name)}
                     </p>
                 </div>
  <div class="ml-auto flex items-center gap-3 flex-wrap">
- <div class="flex items-center gap-2 text-[11px] font-bold">
+ <div class="flex items-center gap-2 text-sm font-bold">
  <mark class="diff-del rounded px-2 py-0.5">removed</mark>
  <mark class="diff-ins rounded px-2 py-0.5">added</mark>
  <mark class="diff-rep rounded px-2 py-0.5">replaced</mark>
@@ -479,7 +452,7 @@ function renderDiffView(currentVersion, compareVersion) {
                         full.classList.toggle('hidden',showingFull);
                         changes.classList.toggle('hidden',!showingFull);
                         document.getElementById('diff-toggle-label').textContent=showingFull?'Show Full Text':'Show Changes Only';
- " class="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-xs font-bold hover:bg-slate-100 transition-colors">
+ " class="flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-sm font-bold hover:bg-slate-100 transition-colors">
  <i data-lucide="layers" class="w-3.5 h-3.5"></i>
                         <span id="diff-toggle-label">Show Changes Only</span>
                     </button>
@@ -489,7 +462,7 @@ function renderDiffView(currentVersion, compareVersion) {
  <div id="diff-view-full" class="grid grid-cols-1 lg:grid-cols-2 gap-4">
  <div class="bg-white/80 rounded-[2.5rem] border border-red-100 shadow-sm overflow-hidden flex flex-col">
  <div class="px-8 py-4 border-b border-red-100 bg-red-50 shrink-0">
- <p class="text-[10px] font-black uppercase tracking-widest text-red-500">Before — ${escapeHtml(currentVersion.name)}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-red-500">Before — ${escapeHtml(currentVersion.name)}</p>
                 </div>
  <div class="p-8 overflow-auto max-h-[75vh]">
  <pre class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap font-sans m-0">${oldHtml}</pre>
@@ -497,7 +470,7 @@ function renderDiffView(currentVersion, compareVersion) {
             </div>
  <div class="bg-white/80 rounded-[2.5rem] border border-green-100 shadow-sm overflow-hidden flex flex-col">
  <div class="px-8 py-4 border-b border-green-100 bg-green-50 shrink-0">
- <p class="text-[10px] font-black uppercase tracking-widest text-green-600">After — ${escapeHtml(compareVersion.name)}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-green-600">After — ${escapeHtml(compareVersion.name)}</p>
                 </div>
  <div class="p-8 overflow-auto max-h-[75vh]">
  <pre class="text-sm leading-relaxed text-slate-700 whitespace-pre-wrap font-sans m-0">${newHtml}</pre>

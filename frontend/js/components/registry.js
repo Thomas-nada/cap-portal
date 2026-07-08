@@ -40,7 +40,7 @@ export function renderRegistry(state) {
  <div class="fade-in space-y-6">
  <div class="flex flex-col gap-4">
  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
- <h1 class="text-3xl font-black tracking-tighter text-on-surface ">Proposals</h1>
+ <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface ">Proposals</h1>
  <div class="flex items-center gap-2 w-full sm:w-auto">
                     <input type="text" placeholder="Search by title, author, label…" value="${escapeHtml(state.registrySearch || '')}"
                         oninput="window.setRegistrySearch(this.value)"
@@ -54,21 +54,21 @@ export function renderRegistry(state) {
  <div class="flex flex-wrap gap-2">
                 ${STAGES.map(s => `
                 <button onclick="state.stageFilter='${s}'; window.updateUI()"
- class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-all
+ class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                     ${(state.stageFilter||'all')===s ? STAGE_ACTIVE[s] : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
                     ${s}
                 </button>`).join('')}
  <div class="w-px bg-slate-200 mx-1"></div>
                 ${['ALL','CAP','CIS'].map(t => `
                 <button onclick="state.docTypeFilter='${t}'; window.updateUI()"
- class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-all
+ class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                     ${(state.docTypeFilter||'ALL')===t ? 'bg-slate-900 text-white ' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
                     ${t}
                 </button>`).join('')}
             </div>
         </div>
 
- <p class="text-xs text-on-surface-variant font-bold">${proposals.length} proposal${proposals.length !== 1 ? 's' : ''}</p>
+ <p class="text-sm text-on-surface-variant font-bold">${proposals.length} proposal${proposals.length !== 1 ? 's' : ''}</p>
 
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
             ${proposals.length === 0
@@ -92,20 +92,20 @@ function renderRow(p) {
     <div onclick="window.openProposal(${p.number})"
  class="flex items-center gap-4 px-4 sm:px-8 py-5 border-b border-slate-50 last:border-0 hover:bg-slate-50 cursor-pointer transition-colors">
  <div class="flex-shrink-0 w-10 text-right">
- <span class="text-xs font-black text-slate-300 ">#${p.number}</span>
+ <span class="text-sm font-black text-slate-300 ">#${p.number}</span>
         </div>
  <div class="min-w-0 flex-1">
  <div class="flex items-center gap-2 mb-1 flex-wrap">
- <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 uppercase">${p.type}</span>
- <span class="text-[10px] font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${stageBg}">${stage}</span>
+ <span class="text-sm font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 uppercase">${p.type}</span>
+ <span class="text-sm font-black px-2 py-0.5 rounded-full uppercase tracking-wide ${stageBg}">${stage}</span>
                 ${nonLifecycleLabels.slice(0, 3).map(l =>
- `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${escapeHtml(l.name)}</span>`
+ `<span class="text-sm font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${escapeHtml(l.name)}</span>`
                 ).join('')}
             </div>
  <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(p.title)}</p>
- <p class="text-xs text-slate-400 mt-0.5">${timeAgo(p.updated_at)}</p>
+ <p class="text-sm text-slate-400 mt-0.5">${timeAgo(p.updated_at)}</p>
         </div>
- <div class="flex items-center gap-3 flex-shrink-0 text-xs text-slate-400 font-bold">
+ <div class="flex items-center gap-3 flex-shrink-0 text-sm text-slate-400 font-bold">
  <span class="flex items-center gap-1"><i data-lucide="message-circle" class="w-3.5 h-3.5"></i> ${p.comments}</span>
  <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
         </div>

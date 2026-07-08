@@ -30,7 +30,7 @@ export function renderEdit(state) {
     return `
  <div class="max-w-4xl mx-auto pb-20 text-left fade-in">
  <header class="mb-16">
- <button onclick="window.setView('detail')" class="group flex items-center gap-2 text-on-surface-variant hover:text-brand-primary transition-colors mb-6 font-bold uppercase text-xs tracking-widest">
+ <button onclick="window.setView('detail')" class="group flex items-center gap-2 text-on-surface-variant hover:text-brand-primary transition-colors mb-6 font-bold uppercase text-sm tracking-widest">
  <i data-lucide="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition-transform"></i>
                 Discard Changes
             </button>
@@ -38,7 +38,7 @@ export function renderEdit(state) {
  <div class="w-12 h-12 bg-brand-primary rounded-2xl flex items-center justify-center shadow-lg text-white">
  <i data-lucide="edit-3" class="w-6 h-6"></i>
                 </div>
- <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Edit</h1>
+ <h1 class="text-3xl sm:text-4xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Edit</h1>
             </div>
  <p class="text-on-surface-variant text-xl font-medium">Modifying <span class="text-brand-primary font-bold">${type} #${p.number}</span>.</p>
         </header>
@@ -48,13 +48,13 @@ export function renderEdit(state) {
             <!-- Core Meta -->
  <div class="bg-white/80 p-10 sm:p-14 rounded-[4rem] border border-slate-100 shadow-sm space-y-10">
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600 ml-4">Title</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-blue-600 ml-4">Title</label>
                     <input name="title" required value="${escapeHtml(p.title)}"
  class="w-full bg-slate-50 p-6 rounded-3xl text-2xl font-black outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 ">
                 </div>
 
  <div class="space-y-6">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Category</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Category</label>
  <div class="relative">
                         <select id="category-select" name="category" required
                             onchange="var o=this.options[this.selectedIndex]; document.getElementById('cat-desc').innerHTML=o.dataset.desc+'<span class=&quot;block mt-2 font-black not-italic text-blue-600&quot;>Recommended: '+o.dataset.consultation+'</span>';"
@@ -64,14 +64,14 @@ export function renderEdit(state) {
  <i data-lucide="chevron-down" class="absolute right-6 top-1/2 -translate-y-1/2 w-5 h-5 text-slate-400 pointer-events-none"></i>
                     </div>
  <div class="mx-4 p-4 bg-slate-50 rounded-2xl border border-slate-100 ">
- <p id="cat-desc" class="text-xs font-medium text-slate-400 italic leading-relaxed">
+ <p id="cat-desc" class="text-sm font-medium text-slate-400 italic leading-relaxed">
  ${currentCatLabel ? (() => { const c = CATEGORIES.find(c => c.id === currentCatLabel); return c ? `${c.desc}<span class="block mt-2 font-black not-italic text-blue-600">Recommended: ${c.consultation}</span>` : ''; })() : 'Select a category to see its description.'}
                         </p>
                     </div>
                 </div>
 
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Summary</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Summary</label>
                     <textarea name="abstract" id="edit-abstract" required
  class="w-full bg-slate-50 p-6 rounded-3xl min-h-[120px] font-medium text-lg outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 resize-none">${escapeHtml(getSection('abstract'))}</textarea>
                 </div>
@@ -82,32 +82,32 @@ export function renderEdit(state) {
                 ${isCIS ? `
  <div class="space-y-8">
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Problem</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Problem</label>
                         <textarea name="motivation" id="edit-motivation" required
  class="w-full bg-slate-50 p-8 rounded-3xl min-h-[160px] font-medium text-lg outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 ">${escapeHtml(getSection('motivation'))}</textarea>
                     </div>
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Context</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Context</label>
                         <textarea name="analysis" id="edit-analysis"
  class="w-full bg-slate-50 p-8 rounded-3xl min-h-[160px] font-medium text-lg outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 ">${escapeHtml(getSection('analysis'))}</textarea>
                     </div>
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Impact</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Impact</label>
                         <textarea name="impact" id="edit-impact"
  class="w-full bg-slate-50 p-8 rounded-3xl min-h-[160px] font-medium text-lg outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 ">${escapeHtml(getSection('impact'))}</textarea>
                     </div>
                 </div>
                 ` : `
  <div class="space-y-2">
- <h3 class="text-[10px] font-black uppercase tracking-[0.3em] text-blue-600 ml-4">Why?</h3>
+ <h3 class="text-sm font-black uppercase tracking-[0.3em] text-blue-600 ml-4">Why?</h3>
  <div class="space-y-8 pt-2">
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Why is this change needed?</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Why is this change needed?</label>
                             <textarea name="motivation" id="edit-motivation" required
  class="w-full bg-slate-50 p-8 rounded-3xl min-h-[180px] font-medium text-lg outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 ">${escapeHtml(getSection('motivation'))}</textarea>
                         </div>
  <div class="space-y-3">
- <label class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Analysis &amp; Test</label>
+ <label class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 ml-4">Analysis &amp; Test</label>
                             <textarea name="analysis" id="edit-analysis"
  class="w-full bg-slate-50 p-8 rounded-3xl min-h-[200px] font-medium text-lg outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 ">${escapeHtml(getSection('analysis'))}</textarea>
                         </div>
@@ -118,7 +118,7 @@ export function renderEdit(state) {
  <div class="pt-10 border-t border-slate-50 space-y-6">
  <div class="flex items-center gap-3">
  <i data-lucide="paperclip" class="w-4 h-4 text-blue-600"></i>
- <h3 class="text-[10px] font-black uppercase tracking-[0.4em] text-slate-400">Links and Files</h3>
+ <h3 class="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Links and Files</h3>
                     </div>
  <div class="space-y-3">
                         <textarea name="specification_extra" id="edit-exhibits"
@@ -130,7 +130,7 @@ export function renderEdit(state) {
 
             <!-- Verification -->
  <div class="bg-blue-50/50 p-10 sm:p-14 rounded-[4rem] border border-blue-100 space-y-8">
- <h3 class="text-[10px] font-black uppercase tracking-[0.4em] text-blue-600 ml-4 mb-4">Governance Verification</h3>
+ <h3 class="text-sm font-black uppercase tracking-[0.4em] text-blue-600 ml-4 mb-4">Governance Verification</h3>
  <label class="flex items-start gap-4 cursor-pointer group">
  <div class="relative flex items-center justify-center mt-1">
  <input type="checkbox" required class="peer appearance-none w-6 h-6 border-2 border-blue-200 rounded-lg checked:bg-blue-600 transition-all">

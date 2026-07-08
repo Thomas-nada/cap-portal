@@ -9,7 +9,7 @@ function statusBadge(status) {
         resolved:    { label: 'Resolved',    cls: 'bg-green-100 text-green-700 ' },
     };
     const s = map[status] || map.open;
- return `<span class="px-3 py-1 rounded-full text-xs font-black uppercase tracking-widest ${s.cls}">${s.label}</span>`;
+ return `<span class="px-3 py-1 rounded-full text-sm font-black uppercase tracking-widest ${s.cls}">${s.label}</span>`;
 }
 
 function formatDate(iso) {
@@ -44,16 +44,16 @@ export function renderBugs(state) {
  <div class="flex-1 min-w-0">
  <div class="flex items-center gap-3 mb-1">
                         ${statusBadge(r.status)}
- <span class="text-xs text-slate-400">#${r.id} · ${formatDate(r.created_at)}</span>
+ <span class="text-sm text-slate-400">#${r.id} · ${formatDate(r.created_at)}</span>
                     </div>
  <h3 class="font-black text-lg text-slate-900 ">${escapeHtml(r.title)}</h3>
- <p class="text-xs text-slate-400 mt-0.5">Reported by ${escapeHtml(r.reporter_display_name || r.reporter_stake_address.slice(0,20) + '…')}</p>
+ <p class="text-sm text-slate-400 mt-0.5">Reported by ${escapeHtml(r.reporter_display_name || r.reporter_stake_address.slice(0,20) + '…')}</p>
                 </div>
             </div>
  <p class="text-slate-600 text-sm whitespace-pre-wrap mb-4">${escapeHtml(r.description)}</p>
             ${r.environment ? `
- <div class="bg-slate-50 rounded-2xl px-5 py-4 mb-4 text-xs font-mono space-y-1">
- <p class="text-xs font-black text-slate-500 uppercase tracking-widest mb-2 font-sans">Environment</p>
+ <div class="bg-slate-50 rounded-2xl px-5 py-4 mb-4 text-sm font-mono space-y-1">
+ <p class="text-sm font-black text-slate-500 uppercase tracking-widest mb-2 font-sans">Environment</p>
  ${r.environment.page ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Page</span><span class="text-slate-700 break-all">${escapeHtml(r.environment.page)}</span></div>` : ''}
  ${r.environment.viewport ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Viewport</span><span class="text-slate-700 ">${escapeHtml(r.environment.viewport)}</span></div>` : ''}
  ${r.environment.user_agent ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">User-Agent</span><span class="text-slate-700 break-all">${escapeHtml(r.environment.user_agent)}</span></div>` : ''}
@@ -65,17 +65,17 @@ export function renderBugs(state) {
  <div class="flex flex-wrap gap-2">
                 ${r.status !== 'open' ? `
                 <button onclick="window.updateBugStatus(${r.id}, 'open')"
- class="px-4 py-2 rounded-2xl text-xs font-black border-2 border-slate-200 hover:border-red-300 hover:text-red-600 transition-all">
+ class="px-4 py-2 rounded-2xl text-sm font-black border-2 border-slate-200 hover:border-red-300 hover:text-red-600 transition-all">
                     Mark Open
                 </button>` : ''}
                 ${r.status !== 'in_progress' ? `
                 <button onclick="window.updateBugStatus(${r.id}, 'in_progress')"
- class="px-4 py-2 rounded-2xl text-xs font-black border-2 border-slate-200 hover:border-amber-300 hover:text-amber-600 transition-all">
+ class="px-4 py-2 rounded-2xl text-sm font-black border-2 border-slate-200 hover:border-amber-300 hover:text-amber-600 transition-all">
                     In Progress
                 </button>` : ''}
                 ${r.status !== 'resolved' ? `
                 <button onclick="window.updateBugStatus(${r.id}, 'resolved')"
- class="px-4 py-2 rounded-2xl text-xs font-black border-2 border-slate-200 hover:border-green-300 hover:text-green-600 transition-all">
+ class="px-4 py-2 rounded-2xl text-sm font-black border-2 border-slate-200 hover:border-green-300 hover:text-green-600 transition-all">
                     Mark Resolved
                 </button>` : ''}
             </div>
@@ -93,15 +93,15 @@ export function renderBugs(state) {
  <div class="grid grid-cols-3 gap-4">
  <div class="bg-red-50 rounded-[2rem] p-6 text-center">
  <p class="text-3xl font-black text-red-600 ">${open}</p>
- <p class="text-xs font-black text-red-500 uppercase tracking-widest mt-1">Open</p>
+ <p class="text-sm font-black text-red-500 uppercase tracking-widest mt-1">Open</p>
             </div>
  <div class="bg-amber-50 rounded-[2rem] p-6 text-center">
  <p class="text-3xl font-black text-amber-600 ">${inProgress}</p>
- <p class="text-xs font-black text-amber-500 uppercase tracking-widest mt-1">In Progress</p>
+ <p class="text-sm font-black text-amber-500 uppercase tracking-widest mt-1">In Progress</p>
             </div>
  <div class="bg-green-50 rounded-[2rem] p-6 text-center">
  <p class="text-3xl font-black text-green-600 ">${resolved}</p>
- <p class="text-xs font-black text-green-500 uppercase tracking-widest mt-1">Resolved</p>
+ <p class="text-sm font-black text-green-500 uppercase tracking-widest mt-1">Resolved</p>
             </div>
         </div>
 

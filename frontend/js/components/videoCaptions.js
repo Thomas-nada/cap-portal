@@ -260,10 +260,10 @@ export function renderCaptionedVideo(videoUrl) {
     const lang = getLang();
     return `
     <div class="flex items-center justify-end gap-1 mb-3 flex-wrap">
-        <span class="text-[10px] font-black uppercase tracking-widest text-slate-400 mr-2">Captions</span>
+        <span class="text-sm font-black uppercase tracking-widest text-slate-400 mr-2">Captions</span>
         ${LANGS.map(l => `
         <button data-vidlang="${l.id}" onclick="window.setVideoCaptionLang('${l.id}')"
-            class="px-3 py-1.5 rounded-lg text-xs font-black transition-all ${lang === l.id ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}">
+            class="px-3 py-1.5 rounded-lg text-sm font-black transition-all ${lang === l.id ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}">
             ${l.label}
         </button>`).join('')}
     </div>
@@ -290,7 +290,7 @@ window.setVideoCaptionLang = (lang) => {
     localStorage.setItem('cap_video_lang', lang);
     document.querySelectorAll('[data-vidlang]').forEach(btn => {
         const active = btn.getAttribute('data-vidlang') === lang;
-        btn.className = `px-3 py-1.5 rounded-lg text-xs font-black transition-all ${active ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}`;
+        btn.className = `px-3 py-1.5 rounded-lg text-sm font-black transition-all ${active ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}`;
     });
     const video = document.querySelector('[data-vid-overlay]')?.parentElement?.querySelector('video');
     if (video) window.__vidCaptionTick(video);

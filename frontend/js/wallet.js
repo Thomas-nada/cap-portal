@@ -126,7 +126,7 @@ export function renderWalletModal() {
  ? `<div class="text-center py-8">
  <i data-lucide="wallet" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
  <p class="text-slate-500 font-bold mb-2">No wallet detected</p>
- <p class="text-slate-400 text-xs">Install a Cardano wallet extension (Eternl, Vespr, Lace…) and refresh.</p>
+ <p class="text-slate-400 text-sm">Install a Cardano wallet extension (Eternl, Vespr, Lace…) and refresh.</p>
            </div>`
  : `<div class="space-y-2 mb-2" id="wallet-list">
                ${available.map(w => `
@@ -134,7 +134,7 @@ export function renderWalletModal() {
  class="w-full flex items-center gap-3 p-4 rounded-2xl border-2 border-slate-100 hover:border-blue-400 transition-all text-left group">
                    ${w.icon
  ? `<img src="${w.icon}" class="w-8 h-8 rounded-xl flex-shrink-0" alt="${w.label}">`
- : `<div class="w-8 h-8 rounded-xl flex-shrink-0 bg-slate-100 flex items-center justify-center text-xs font-black text-slate-500">${w.label.charAt(0)}</div>`}
+ : `<div class="w-8 h-8 rounded-xl flex-shrink-0 bg-slate-100 flex items-center justify-center text-sm font-black text-slate-500">${w.label.charAt(0)}</div>`}
  <span class="font-black text-slate-900 group-hover:text-blue-600 transition-colors">${w.label}</span>
  <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300 ml-auto group-hover:text-blue-400 transition-colors"></i>
                </button>`).join('')}
@@ -143,7 +143,7 @@ export function renderWalletModal() {
     const devSection = DEV_MODE
  ? `<div class="pt-4 border-t border-slate-100 mt-4">
                <button onclick="window._walletModalDevLogin()"
- class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
+ class="w-full py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
                    Dev Login (no wallet)
                </button>
            </div>`
@@ -191,7 +191,7 @@ export function showDisplayNameStep(walletId, walletLabel) {
             Sign in with ${walletLabel}
         </button>
         <button onclick="window._walletModalBack()"
- class="w-full mt-2 py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
+ class="w-full mt-2 py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
             Back
         </button>`;
 

@@ -38,7 +38,7 @@ export function renderDashboard(state) {
  <div class="w-12 h-12 ${c.bg} ${c.color} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
  <i data-lucide="${c.icon}" class="w-6 h-6"></i>
                 </div>
- <p class="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 mb-1">${c.label}</p>
+ <p class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-1">${c.label}</p>
  <p class="text-4xl font-black tracking-tighter text-slate-900 ">${c.value ?? '—'}</p>
             </div>
             `).join('')}
@@ -47,15 +47,15 @@ export function renderDashboard(state) {
         <!-- Actions -->
  <div class="flex flex-wrap gap-4">
             <button onclick="window.setView('wizard')"
- class="bg-brand-primary hover:bg-brand-primary-fixed-dim active:bg-brand-primary-active active:scale-[0.98] text-brand-on-primary px-10 h-12 rounded-full font-semibold uppercase text-xs tracking-widest transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)] flex items-center gap-3">
+ class="bg-brand-primary hover:bg-brand-primary-fixed-dim active:bg-brand-primary-active active:scale-[0.98] text-brand-on-primary px-10 h-12 rounded-full font-semibold uppercase text-sm tracking-widest transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)] flex items-center gap-3">
  <i data-lucide="wand-2" class="w-4 h-4"></i> Amendment Wizard
             </button>
             <button onclick="window.setView('constitution')"
- class="bg-transparent text-on-surface border-2 border-on-surface/40 hover:bg-white/10 px-10 h-12 rounded-full font-semibold uppercase text-xs tracking-widest transition-all flex items-center gap-3">
+ class="bg-transparent text-on-surface border-2 border-on-surface/40 hover:bg-white/10 px-10 h-12 rounded-full font-semibold uppercase text-sm tracking-widest transition-all flex items-center gap-3">
  <i data-lucide="book-open" class="w-4 h-4"></i> Read Constitution
             </button>
             <button onclick="window.setView('learn')"
- class="bg-transparent text-on-surface border-2 border-on-surface/40 hover:bg-white/10 px-10 h-12 rounded-full font-semibold uppercase text-xs tracking-widest transition-all flex items-center gap-3">
+ class="bg-transparent text-on-surface border-2 border-on-surface/40 hover:bg-white/10 px-10 h-12 rounded-full font-semibold uppercase text-sm tracking-widest transition-all flex items-center gap-3">
  <i data-lucide="graduation-cap" class="w-4 h-4"></i> Learn & Guide
             </button>
         </div>
@@ -66,7 +66,7 @@ export function renderDashboard(state) {
  <h2 class="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
  <i data-lucide="map" class="w-4 h-4 text-blue-500"></i> How It Works
                 </h2>
- <button onclick="window.setView('learn')" class="text-xs font-black text-blue-600 uppercase tracking-widest hover:underline">Learn More →</button>
+ <button onclick="window.setView('learn')" class="text-sm font-black text-blue-600 uppercase tracking-widest hover:underline">Learn More →</button>
             </div>
  <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                 ${PROCESS_STEPS.map(step => `
@@ -76,7 +76,7 @@ export function renderDashboard(state) {
  <i data-lucide="${step.icon}" class="w-4 h-4 ${step.text}"></i>
  <p class="text-sm font-black text-slate-900 ">${step.label}</p>
                     </div>
- <p class="text-xs text-slate-400 leading-relaxed">${step.desc}</p>
+ <p class="text-sm text-slate-400 leading-relaxed">${step.desc}</p>
                 </div>
                 `).join('')}
             </div>
@@ -104,11 +104,11 @@ export function renderDashboard(state) {
                     <div onclick="window.openProposal(${p.number})"
  class="px-8 py-4 hover:bg-slate-50 cursor-pointer transition-colors">
  <div class="flex items-center gap-2 mb-1">
- <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 uppercase">${p.type}</span>
- <span class="text-xs font-black text-slate-400">#${p.number}</span>
+ <span class="text-sm font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 uppercase">${p.type}</span>
+ <span class="text-sm font-black text-slate-400">#${p.number}</span>
                         </div>
  <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(p.title)}</p>
- <p class="text-xs text-slate-400 mt-0.5">${timeAgo(p.updated_at)}</p>
+ <p class="text-sm text-slate-400 mt-0.5">${timeAgo(p.updated_at)}</p>
                     </div>
                     `).join('')}
                 </div>
@@ -127,9 +127,9 @@ export function renderDashboard(state) {
  class="px-8 py-4 hover:bg-slate-50 cursor-pointer transition-colors flex items-center justify-between gap-4">
  <div class="min-w-0">
  <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(p.title)}</p>
- <p class="text-xs text-slate-400">#${p.number}</p>
+ <p class="text-sm text-slate-400">#${p.number}</p>
                         </div>
- <div class="flex items-center gap-1 text-slate-400 flex-shrink-0 text-xs font-bold">
+ <div class="flex items-center gap-1 text-slate-400 flex-shrink-0 text-sm font-bold">
  <i data-lucide="message-circle" class="w-3.5 h-3.5"></i> ${p.comments}
                         </div>
                     </div>

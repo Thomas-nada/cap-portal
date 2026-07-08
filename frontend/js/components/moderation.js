@@ -38,7 +38,7 @@ export function renderModeration(state) {
  <div class="flex flex-wrap gap-2">
             ${STATUS_TABS.map(t => `
             <button onclick="window.setModerationFilter('${t.id}')"
- class="px-4 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-all ${filter === t.id ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}">
+ class="px-4 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all ${filter === t.id ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}">
                 ${t.label}
             </button>`).join('')}
         </div>
@@ -47,7 +47,7 @@ export function renderModeration(state) {
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 p-16 text-center">
  <i data-lucide="shield-check" class="w-12 h-12 mx-auto mb-4 text-slate-300"></i>
  <p class="font-black text-slate-500">Nothing here.</p>
- <p class="text-xs text-slate-400 mt-1">No ${filter === 'all' ? '' : filter} moderation cases.</p>
+ <p class="text-sm text-slate-400 mt-1">No ${filter === 'all' ? '' : filter} moderation cases.</p>
         </div>` : `
  <div class="space-y-5">
             ${cases.map(c => renderCase(c)).join('')}
@@ -71,36 +71,36 @@ function renderCase(c) {
     return `
  <div class="bg-white/90 rounded-[2rem] border border-slate-100 shadow-sm p-6 sm:p-8 space-y-4">
  <div class="flex items-center gap-3 flex-wrap">
- <span class="text-[10px] font-black px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 uppercase tracking-wider">${kindLabel}</span>
- <span class="text-[10px] font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${statusPill}">${escapeHtml(c.status)}</span>
- <a onclick="window.openProposal(${c.proposal_number})" class="text-[11px] font-black text-blue-600 hover:underline cursor-pointer">CAP #${c.proposal_number}</a>
- <span class="text-[10px] text-slate-400 font-bold ml-auto">${timeAgo(c.created_at)}</span>
+ <span class="text-sm font-black px-2.5 py-1 rounded-full bg-blue-100 text-blue-700 uppercase tracking-wider">${kindLabel}</span>
+ <span class="text-sm font-black px-2.5 py-1 rounded-full uppercase tracking-wider ${statusPill}">${escapeHtml(c.status)}</span>
+ <a onclick="window.openProposal(${c.proposal_number})" class="text-sm font-black text-blue-600 hover:underline cursor-pointer">CAP #${c.proposal_number}</a>
+ <span class="text-sm text-slate-400 font-bold ml-auto">${timeAgo(c.created_at)}</span>
         </div>
 
  <div>
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Flagged content — by ${escapeHtml(c.target_author || 'unknown')}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Flagged content — by ${escapeHtml(c.target_author || 'unknown')}</p>
             ${targetBlock}
         </div>
 
  <div>
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Editor's reason — ${escapeHtml(c.flagged_by_name || 'an editor')}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Editor's reason — ${escapeHtml(c.flagged_by_name || 'an editor')}</p>
  <p class="text-sm text-slate-700 italic">"${escapeHtml(c.flag_reason)}"</p>
         </div>
 
         ${c.status !== 'open' && c.resolution_reason ? `
  <div class="pt-2 border-t border-slate-100">
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-1">Admin decision — ${escapeHtml(c.resolved_by_name || 'admin')}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Admin decision — ${escapeHtml(c.resolved_by_name || 'admin')}</p>
  <p class="text-sm text-slate-700 italic">"${escapeHtml(c.resolution_reason)}"</p>
         </div>` : ''}
 
         ${isOpen ? `
  <div class="flex gap-3 pt-2">
             <button onclick="window.moderationResolve(${c.id}, 'remove')"
- class="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-xs uppercase tracking-wider transition-colors">
+ class="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-red-600 hover:bg-red-700 text-white font-black text-sm uppercase tracking-wider transition-colors">
  <i data-lucide="ban" class="w-4 h-4"></i> Remove
             </button>
             <button onclick="window.moderationResolve(${c.id}, 'reject')"
- class="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-black text-xs uppercase tracking-wider transition-colors">
+ class="flex-1 flex items-center justify-center gap-2 py-3 rounded-2xl bg-green-600 hover:bg-green-700 text-white font-black text-sm uppercase tracking-wider transition-colors">
  <i data-lucide="rotate-ccw" class="w-4 h-4"></i> Reject &amp; Restore
             </button>
         </div>` : ''}

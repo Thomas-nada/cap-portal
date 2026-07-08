@@ -15,25 +15,25 @@ export function renderLearnHub(state) {
     if (state.activeGuide) {
         const canEdit = state.user?.is_editor || state.user?.is_admin;
         const lastEdit = state.guideLastEditor
- ? `<span class="text-xs text-slate-400 mt-4 block">Last edited by ${state.guideLastEditor}</span>`
+ ? `<span class="text-sm text-slate-400 mt-4 block">Last edited by ${state.guideLastEditor}</span>`
             : '';
 
         return `
  <div class="max-w-6xl mx-auto pb-20 fade-in text-left">
  <div class="flex items-center justify-between mb-8">
- <button onclick="window.closeGuide()" class="group flex items-center gap-2 text-slate-400 hover:text-blue-600 transition-colors font-bold uppercase text-xs tracking-widest">
+ <button onclick="window.closeGuide()" class="group flex items-center gap-2 text-slate-400 hover:text-blue-600 transition-colors font-bold uppercase text-sm tracking-widest">
  <i data-lucide="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition-transform"></i>
                     Back to Guides
                 </button>
                 ${canEdit ? `
  <div class="flex items-center gap-2">
                     <button onclick="window.openGuideEditor()"
- class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 text-xs font-black uppercase tracking-widest hover:bg-amber-100 transition-colors">
+ class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-amber-50 border border-amber-200 text-amber-700 text-sm font-black uppercase tracking-widest hover:bg-amber-100 transition-colors">
  <i data-lucide="pencil" class="w-3 h-3"></i>
                         Edit
                     </button>
                     <button onclick="window.deleteGuide('${state.activeGuide}')"
- class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-xs font-black uppercase tracking-widest hover:bg-red-100 transition-colors">
+ class="flex items-center gap-2 px-4 py-2 rounded-2xl bg-red-50 border border-red-200 text-red-600 text-sm font-black uppercase tracking-widest hover:bg-red-100 transition-colors">
  <i data-lucide="trash-2" class="w-3 h-3"></i>
                         Delete
                     </button>
@@ -160,7 +160,7 @@ export function renderLearnHub(state) {
  <i data-lucide="graduation-cap" class="w-6 h-6"></i>
                     </div>
                     <div>
- <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Learn &amp; Guide</h1>
+ <h1 class="text-3xl sm:text-4xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Learn &amp; Guide</h1>
  <p class="text-on-surface-variant text-xl font-medium mt-2">Master the governance process</p>
                     </div>
                 </div>

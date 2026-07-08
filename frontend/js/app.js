@@ -118,7 +118,7 @@ export function updateUI(rerender = false) {
     }
 
     const alphaBanner = `
-        <div class="bg-red-600 text-white text-center text-xs sm:text-sm font-semibold px-4 py-2">
+        <div class="bg-red-600 text-white text-center text-sm font-semibold px-4 py-2">
             This is an alpha version currently in testing.
             <button onclick="window.showAlphaInfo()" class="underline underline-offset-2 font-bold ml-1 hover:text-white/80">Read more</button>
         </div>`;
@@ -140,19 +140,20 @@ export function updateUI(rerender = false) {
         const rightBtn = state.wizardSubmitted ? '' : (step > 1
             ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
             : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`);
-        root.innerHTML = alphaBanner + `
-            <div class="bg-white/90 border-b border-white/20">
+        root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}
+            <div class="bg-white/90 border-b border-slate-200 backdrop-blur">
                 <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
                     <button onclick="window.wizardExit()" class="flex items-center gap-3">
-                        <img src="CAP.png" alt="CAP Portal" class="w-9 h-9 object-contain">
+                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-9 h-9 object-contain">
                         <div class="text-left leading-none">
-                            <span class="block font-semibold text-slate-900">CAP Portal</span>
-                            <span class="block text-[9px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Constitutional Amendments</span>
+                            <span class="block font-semibold text-slate-900">Constitutional Amendment Portal</span>
+                            <span class="block text-sm font-semibold text-slate-400 uppercase tracking-[0.2em]">Cardano Constitution</span>
                         </div>
                     </button>
                     ${rightBtn}
                 </div>
             </div>
+        </div>
  <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
         ` + notif + errorToast;
         lucide.createIcons();
@@ -160,25 +161,25 @@ export function updateUI(rerender = false) {
         return;
     }
 
-    root.innerHTML = alphaBanner + nav + `
- <main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}${nav}</div>` + `
+ <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             ${content}
         </main>
-        <footer class="mt-16 bg-[#0228aa] border-t border-white/10">
+        <footer class="bg-[#0228aa] border-t border-white/10">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
                 <div class="flex flex-col gap-0">
                     <img src="intersect-logo.png" alt="Intersect" class="w-48 h-auto -ml-5">
-                    <p class="text-xs text-white/50 -mt-3">&copy; ${new Date().getFullYear()} Intersect. All Rights Reserved.</p>
+                    <p class="text-sm text-white/50 -mt-3">&copy; ${new Date().getFullYear()} Intersect. All Rights Reserved.</p>
                 </div>
                 <nav class="flex flex-col gap-1">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Links</p>
+                    <p class="text-sm font-black uppercase tracking-widest text-white/40 mb-1">Links</p>
                     <a href="https://intersectmbo.org" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Home</a>
                     <a onclick="window.setView('editors')" class="text-sm text-white/70 hover:text-white transition-colors cursor-pointer">Editors</a>
                     <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/terms-of-use" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Terms of Use</a>
                     <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/privacy-policy" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Privacy Policy</a>
                 </nav>
                 <div class="flex flex-col gap-2">
-                    <p class="text-[10px] font-black uppercase tracking-widest text-white/40 mb-1">Follow us</p>
+                    <p class="text-sm font-black uppercase tracking-widest text-white/40 mb-1">Follow us</p>
                     <a href="https://x.com/intersectmbo" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors">
                         <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24H16.17l-4.714-6.231-5.401 6.231H2.746l7.73-8.835L1.254 2.25H8.08l4.253 5.622zm-1.161 17.52h1.833L7.084 4.126H5.117z"/></svg>
                         X
@@ -241,7 +242,7 @@ function renderNotificationsPanel() {
           ${list.length === 0 ? `
           <div class="p-10 text-center text-slate-400">
             <i data-lucide="bell-off" class="w-8 h-8 mx-auto mb-3 opacity-40"></i>
-            <p class="text-xs font-bold">No notifications yet.</p>
+            <p class="text-sm font-bold">No notifications yet.</p>
           </div>` : list.map(n => {
             const ic = NOTIF_ICON[n.type] || { icon: 'bell', color: 'text-slate-500 bg-slate-100' };
             return `
@@ -252,8 +253,8 @@ function renderNotificationsPanel() {
               </div>
               <div class="min-w-0 flex-1">
                 <p class="text-sm font-bold text-slate-900 leading-snug">${escapeHtmlGlobal(n.title)}</p>
-                ${n.body ? `<p class="text-xs text-slate-500 mt-0.5 whitespace-pre-wrap leading-snug">${escapeHtmlGlobal(n.body)}</p>` : ''}
-                <p class="text-[10px] text-slate-400 font-bold mt-1">${timeAgoShort(n.created_at)}</p>
+                ${n.body ? `<p class="text-sm text-slate-500 mt-0.5 whitespace-pre-wrap leading-snug">${escapeHtmlGlobal(n.body)}</p>` : ''}
+                <p class="text-sm text-slate-400 font-bold mt-1">${timeAgoShort(n.created_at)}</p>
               </div>
               ${n.read ? '' : '<span class="w-2 h-2 rounded-full bg-brand-primary flex-shrink-0 mt-2"></span>'}
             </button>`;
@@ -274,7 +275,6 @@ window.setView = (view) => {
     state.view = view;
     state.mobileNavOpen = false;
     state.wizardSubmitted = null;  // never leave a stale success screen
-    window.dismissWizardCommitToast?.();  // drop any wizard step-2 toast on navigation
     const map = {
         dashboard: '#/home', list: '#/proposals', kanban: '#/board',
         constitution: '#/constitution',
@@ -819,20 +819,20 @@ window.openVersionModal = async (number, version) => {
             if (!revisions?.length) return '';
             return revisions.map(r => r.type === 'addition' ? `
  <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
- ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-xs font-black text-cyan-500 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
+ ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
- <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
+ <div class="p-5"><div class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
  <div class="text-sm text-slate-600 font-mono leading-relaxed italic">${esc(r.insert_after || '')}</div></div>
- <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
+ <div class="p-5"><div class="text-sm font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
  <div class="text-sm text-slate-900 font-mono leading-relaxed">${esc(r.proposed || '')}</div></div>
                 </div>
             </div>` : `
  <div class="rounded-2xl border border-slate-100 overflow-hidden mb-4">
- ${r.section ? `<div class="px-5 py-2 bg-slate-50 text-xs font-black text-slate-400 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
+ ${r.section ? `<div class="px-5 py-2 bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 ">
- <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
+ <div class="p-5"><div class="text-sm font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
  <div class="text-sm text-slate-600 font-mono leading-relaxed">${esc(r.original || '')}</div></div>
- <div class="p-5"><div class="text-[10px] font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
+ <div class="p-5"><div class="text-sm font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
  <div class="text-sm text-slate-900 font-mono leading-relaxed">${esc(r.proposed || '')}</div></div>
                 </div>
             </div>`).join('');
@@ -864,8 +864,8 @@ window.openVersionModal = async (number, version) => {
             return `
  <div class="${!changed ? 'opacity-40' : ''}">
  <div class="flex items-center gap-2 mb-2">
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400">${esc(f.label)}</p>
- ${changed ? `<span class="text-[8px] font-black uppercase tracking-widest text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Changed</span>` : `<span class="text-[8px] text-slate-300 font-bold">Unchanged</span>`}
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400">${esc(f.label)}</p>
+ ${changed ? `<span class="text-sm font-black uppercase tracking-widest text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Changed</span>` : `<span class="text-sm text-slate-300 font-bold">Unchanged</span>`}
                 </div>
  <div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100 ">${diffHtml}</div>
             </div>`;
@@ -884,12 +884,12 @@ window.openVersionModal = async (number, version) => {
  <div class="flex items-start justify-between p-8 border-b border-slate-100 flex-shrink-0">
                     <div>
  <div class="flex items-center gap-3 mb-1">
- <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-[10px] font-black uppercase tracking-widest">V${v.version}</span>
- <span class="text-[10px] text-slate-400 font-bold">${when}</span>
- <span class="text-[10px] text-slate-400">· ${esc(v.created_by_name || v.created_by)}</span>
+ <span class="px-3 py-1 rounded-full bg-blue-100 text-blue-700 text-sm font-black uppercase tracking-widest">V${v.version}</span>
+ <span class="text-sm text-slate-400 font-bold">${when}</span>
+ <span class="text-sm text-slate-400">· ${esc(v.created_by_name || v.created_by)}</span>
                         </div>
  <p class="text-sm font-black text-slate-900 mt-1">${esc(v.title)}</p>
- <p class="text-[10px] text-slate-400 mt-0.5 italic">${esc(v.change_summary || '')}</p>
+ <p class="text-sm text-slate-400 mt-0.5 italic">${esc(v.change_summary || '')}</p>
                     </div>
                     <button onclick="document.getElementById('version-modal-backdrop').remove()"
  class="flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-all ml-4">
@@ -900,12 +900,12 @@ window.openVersionModal = async (number, version) => {
                 <!-- Tabs -->
  <div class="flex gap-1 px-8 pt-4 flex-shrink-0">
                     <button id="ver-tab-full" onclick="window._verTab('full')"
- class="px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all bg-blue-600 text-white">
+ class="px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all bg-blue-600 text-white">
                         Full View
                     </button>
                     ${hasPrev ? `
                     <button id="ver-tab-diff" onclick="window._verTab('diff')"
- class="px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all text-slate-500 hover:bg-slate-100 ">
+ class="px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all text-slate-500 hover:bg-slate-100 ">
                         Changes vs V${v.version - 1}
                     </button>` : ''}
                 </div>
@@ -923,9 +923,9 @@ window.openVersionModal = async (number, version) => {
         window._verTab = (tab) => {
             document.getElementById('ver-panel-full').classList.toggle('hidden', tab !== 'full');
             document.getElementById('ver-panel-diff')?.classList.toggle('hidden', tab !== 'diff');
-            document.getElementById('ver-tab-full').className = `px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'full' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 '}`;
+            document.getElementById('ver-tab-full').className = `px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${tab === 'full' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 '}`;
             const diffBtn = document.getElementById('ver-tab-diff');
-            if (diffBtn) diffBtn.className = `px-5 py-2 rounded-2xl text-[10px] font-black uppercase tracking-widest transition-all ${tab === 'diff' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 '}`;
+            if (diffBtn) diffBtn.className = `px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${tab === 'diff' ? 'bg-blue-600 text-white' : 'text-slate-500 hover:bg-slate-100 '}`;
         };
     } catch (e) {
         alert(e.message);
@@ -962,7 +962,7 @@ window.openSuggestModal = (field) => {
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-2xl p-6 sm:p-8">
  <div class="flex items-center justify-between mb-6">
                 <div>
- <p class="text-[10px] font-black uppercase tracking-widest text-blue-500 mb-1">Suggest Change</p>
+ <p class="text-sm font-black uppercase tracking-widest text-blue-500 mb-1">Suggest Change</p>
  <h2 class="text-xl font-black text-slate-900 ">${label}</h2>
                 </div>
                 <button onclick="document.getElementById('suggest-modal-backdrop').remove()"
@@ -972,20 +972,20 @@ window.openSuggestModal = (field) => {
             </div>
             ${current ? `
  <div class="mb-4">
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Current</p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Current</p>
  <div class="bg-slate-50 rounded-2xl p-4 text-sm text-slate-500 max-h-32 overflow-y-auto font-mono whitespace-pre-wrap">${escHtml(current)}</div>
             </div>` : ''}
  <div class="mb-4">
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Suggested Value</p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Suggested Value</p>
                 <textarea id="suggest-value" rows="6" placeholder="Enter your suggested text…"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none resize-none transition-all">${escHtml(current)}</textarea>
             </div>
  <div class="mb-6">
- <p class="text-[10px] font-black uppercase tracking-widest text-slate-400 mb-2">Reason <span class="text-slate-300">(optional)</span></p>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Reason <span class="text-slate-300">(optional)</span></p>
                 <input id="suggest-reason" type="text" placeholder="Why are you suggesting this change?"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none transition-all">
             </div>
- <p id="suggest-error" class="text-red-500 text-xs font-bold mb-3 hidden"></p>
+ <p id="suggest-error" class="text-red-500 text-sm font-bold mb-3 hidden"></p>
  <div class="flex gap-3">
                 <button onclick="window.submitSuggestion('${field}')"
  class="flex-1 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black transition-colors">
@@ -1228,10 +1228,10 @@ function openReasonModal({ title, intro, label, placeholder, confirmText, confir
           </button>
         </div>
         ${intro ? `<p class="text-sm text-slate-500 mb-4">${escapeHtmlGlobal(intro)}</p>` : ''}
-        <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">${escapeHtmlGlobal(label)}</label>
+        <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">${escapeHtmlGlobal(label)}</label>
         <textarea id="reason-input" rows="4" placeholder="${escapeHtmlGlobal(placeholder || '')}"
           class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white text-slate-900 text-sm focus:outline-none focus:border-blue-400 resize-none mb-3"></textarea>
-        <p id="reason-error" class="hidden text-red-500 text-xs font-bold mb-3"></p>
+        <p id="reason-error" class="hidden text-red-500 text-sm font-bold mb-3"></p>
         <div class="flex gap-3">
           <button id="reason-submit"
             class="flex-1 py-3 rounded-2xl ${confirmClass || 'bg-blue-600 hover:bg-blue-700'} text-white font-black transition-colors">${escapeHtmlGlobal(confirmText || 'Submit')}</button>
@@ -1341,21 +1341,21 @@ function buildPreviewHtml(title, structured, type) {
             r.type === 'addition' ? `
  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
  <div class="bg-cyan-50 border border-cyan-200 rounded-2xl p-5">
- <p class="text-[10px] font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After — ${esc(r.section || '')}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After — ${esc(r.section || '')}</p>
  <p class="text-sm text-slate-600 italic leading-relaxed">${esc(r.insert_after)}</p>
                 </div>
  <div class="bg-cyan-50 border border-cyan-200 rounded-2xl p-5">
- <p class="text-[10px] font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</p>
+ <p class="text-sm font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</p>
  <div class="text-sm text-slate-700 leading-relaxed prose max-w-none">${md(r.proposed)}</div>
                 </div>
             </div>` : `
  <div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
  <div class="bg-red-50 border border-red-200 rounded-2xl p-5">
- <p class="text-[10px] font-black uppercase tracking-widest text-red-500 mb-2">Original — ${esc(r.section || '')}</p>
+ <p class="text-sm font-black uppercase tracking-widest text-red-500 mb-2">Original — ${esc(r.section || '')}</p>
  <p class="text-sm text-slate-600 italic leading-relaxed">${esc(r.original)}</p>
                 </div>
  <div class="bg-green-50 border border-green-200 rounded-2xl p-5">
- <p class="text-[10px] font-black uppercase tracking-widest text-green-600 mb-2">Proposed</p>
+ <p class="text-sm font-black uppercase tracking-widest text-green-600 mb-2">Proposed</p>
  <div class="text-sm text-slate-700 leading-relaxed prose max-w-none">${md(r.proposed)}</div>
                 </div>
             </div>`).join('');
@@ -1368,8 +1368,8 @@ function buildPreviewHtml(title, structured, type) {
     return `
  <div class="bg-white/80 p-8 sm:p-16 rounded-[3rem] border border-slate-100 shadow-sm">
  <div class="flex flex-wrap gap-3 mb-8">
- <span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-blue-200 bg-blue-50 text-blue-700">${esc(type)}</span>
- ${structured.category ? `<span class="px-5 py-2 rounded-full text-[10px] font-black uppercase tracking-widest border border-slate-200 bg-slate-100 text-slate-600">${esc(structured.category)}</span>` : ''}
+ <span class="px-5 py-2 rounded-full text-sm font-black uppercase tracking-widest border border-blue-200 bg-blue-50 text-blue-700">${esc(type)}</span>
+ ${structured.category ? `<span class="px-5 py-2 rounded-full text-sm font-black uppercase tracking-widest border border-slate-200 bg-slate-100 text-slate-600">${esc(structured.category)}</span>` : ''}
             </div>
  <h1 class="text-4xl font-black tracking-tight text-slate-900 mb-8">${esc(title || 'Untitled')}</h1>
             ${sections.join('\n')}
@@ -1419,7 +1419,7 @@ function showPreviewOverlay(title, structured, type) {
         <div class="flex items-center justify-between mb-8 p-5 bg-amber-50 border border-amber-200 rounded-2xl sticky top-4 z-10 backdrop-blur-sm">
             <div class="flex items-center gap-3">
                 <i data-lucide="eye" class="w-4 h-4 text-amber-600"></i>
-                <span class="text-xs font-black uppercase tracking-widest text-amber-700">Preview — Not Yet Submitted</span>
+                <span class="text-sm font-black uppercase tracking-widest text-amber-700">Preview — Not Yet Submitted</span>
             </div>
             <button onclick="window.closePreview()" class="flex items-center gap-2 text-sm font-black text-slate-600 hover:text-slate-900 transition-colors px-4 py-2 rounded-xl hover:bg-white/60">
                 <i data-lucide="x" class="w-4 h-4"></i> Close
@@ -1559,7 +1559,7 @@ function showWalletModal() {
                     Save name
                 </button>
                 <button onclick="window._skipSetName()"
- class="w-full py-3 rounded-2xl text-xs font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
+ class="w-full py-3 rounded-2xl text-sm font-black uppercase tracking-widest text-slate-400 hover:text-slate-600 hover:bg-slate-50 transition-all">
                     Skip for now
                 </button>
             </div>
@@ -1630,9 +1630,9 @@ window.openProfile = () => {
                 </button>
             </div>
 
- <p class="text-xs font-mono text-slate-400 bg-slate-50 rounded-2xl px-4 py-3 mb-6 break-all">${addr}</p>
+ <p class="text-sm font-mono text-slate-400 bg-slate-50 rounded-2xl px-4 py-3 mb-6 break-all">${addr}</p>
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Display name</label>
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Display name</label>
             <input id="profile-name-input" type="text" value="${escapeHtmlGlobal(current)}" placeholder="Your display name" maxlength="40"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-blue-400 mb-6 font-medium"
                 onkeydown="if(event.key==='Enter') window._saveProfile()">
@@ -1703,7 +1703,6 @@ window.wizardNext     = () => {
 };
 window.wizardBack     = () => {
     state.wizardError = null;
-    window.dismissWizardCommitToast?.();
     state.wizardStep = prevWizardStep(state.wizardStep, state.wizardData || {});
     updateUI();
 };
@@ -1759,6 +1758,13 @@ window.previewWizard = () => {
 window.removeWizardSelection = (idx) => {
     const sel = (state.wizardData.selectedText || []).filter((_, i) => i !== idx);
     state.wizardData = { ...state.wizardData, selectedText: sel };
+    if (!sel.length) state.wizardSelPanelOpen = false;  // nothing left to list
+    updateUI();
+};
+
+// Toggle the selections panel that pops up from the wizard step-2 bottom bar.
+window.toggleWizardSelPanel = () => {
+    state.wizardSelPanelOpen = !state.wizardSelPanelOpen;
     updateUI();
 };
 
@@ -1840,16 +1846,16 @@ function showSelectionAddedBanner() {
     banner.style.cssText = 'position:fixed;bottom:28px;left:50%;transform:translateX(-50%);z-index:9999;white-space:nowrap;';
     banner.innerHTML = `
         <div style="display:flex;align-items:center;gap:12px;background:#0f172a;color:#fff;padding:14px 20px;border-radius:20px;box-shadow:0 8px 40px rgba(0,0,0,0.4);border:1px solid rgba(255,255,255,0.08);">
-            <span style="display:flex;align-items:center;gap:8px;font-size:13px;font-weight:700;">
+            <span style="display:flex;align-items:center;gap:8px;font-size:14px;font-weight:700;">
                 <span style="display:inline-block;width:8px;height:8px;border-radius:50%;background:#22c55e;flex-shrink:0;"></span>
                 ${count} selection${count !== 1 ? 's' : ''} added
             </span>
             <button onclick="document.getElementById('selection-added-banner').remove()"
-                style="background:rgba(255,255,255,0.1);border:none;color:#fff;cursor:pointer;padding:7px 16px;border-radius:12px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;">
+                style="background:rgba(255,255,255,0.1);border:none;color:#fff;cursor:pointer;padding:7px 16px;border-radius:12px;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;">
                 Add More
             </button>
             <button onclick="window.returnToWizardFromConstitution()"
-                style="background:#2563eb;border:none;color:#fff;cursor:pointer;padding:7px 16px;border-radius:12px;font-size:12px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;">
+                style="background:#2563eb;border:none;color:#fff;cursor:pointer;padding:7px 16px;border-radius:12px;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;">
                 Back to Wizard
             </button>
         </div>`;
@@ -1941,16 +1947,16 @@ window.openNewGuideModal = () => {
                 </button>
             </div>
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
             <input id="ng-title" type="text" placeholder="Guide title" maxlength="120"
                 oninput="window._ngSlugFromTitle()"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 mb-4 font-medium">
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Slug <span class="font-normal normal-case tracking-normal text-slate-400">— URL identifier</span></label>
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Slug <span class="font-normal normal-case tracking-normal text-slate-400">— URL identifier</span></label>
             <input id="ng-slug" type="text" placeholder="my-guide-slug" maxlength="80"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 mb-4 font-mono text-sm">
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Section</label>
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Section</label>
             <select id="ng-section" onchange="window._ngToggleNewSection()"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 focus:outline-none focus:border-blue-400 mb-3 font-medium">
                 ${sectionOptions}
@@ -2072,7 +2078,7 @@ window.showAlphaInfo = () => {
          style="position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:1rem;">
       <div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;padding:2.5rem;box-shadow:0 25px 60px rgba(0,0,0,0.3);max-height:90vh;overflow-y:auto;font-family:'Poppins',sans-serif;">
         <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;">
-          <span style="background:#dc2626;color:white;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
+          <span style="background:#dc2626;color:white;font-size:14px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
           <h2 style="margin:0;font-size:1.25rem;font-weight:700;color:#0f172a;">This is an alpha release</h2>
         </div>
         <p style="margin:0 0 1rem;font-size:0.8125rem;color:#475569;">The CAP Portal is an early, in-testing version made available for feedback. Please keep in mind:</p>
@@ -2104,7 +2110,7 @@ function showAlphaAgreement() {
         overlay.innerHTML = `
             <div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;padding:2.5rem;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;">
-                    <span style="background:#ff5722;color:white;font-size:10px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
+                    <span style="background:#ff5722;color:white;font-size:14px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
                     <h2 style="margin:0;font-size:1.25rem;font-weight:700;color:#0f172a;font-family:'Poppins',sans-serif;">User Agreement</h2>
                 </div>
                 <p style="margin:0 0 1rem;font-size:0.875rem;font-weight:600;color:#334155;font-family:'Poppins',sans-serif;">Alpha Release Acknowledgement</p>
@@ -2222,20 +2228,20 @@ window.openBugReportModal = () => {
                 </button>
             </div>
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
             <input id="bug-title" type="text" placeholder="Short summary of the issue" maxlength="120"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium">
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
             <textarea id="bug-description" rows="4" placeholder="What happened? What did you expect? Steps to reproduce…"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium resize-none"></textarea>
 
- <label class="block text-xs font-black text-slate-500 uppercase tracking-widest mb-2">
+ <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">
  Screenshot <span class="text-slate-400 font-normal normal-case tracking-normal">— optional</span>
             </label>
  <label class="flex flex-col items-center justify-center w-full h-24 rounded-2xl border-2 border-dashed border-slate-200 hover:border-red-300 cursor-pointer transition-colors mb-1" id="bug-screenshot-label">
  <i data-lucide="image-plus" class="w-6 h-6 text-slate-400 mb-1"></i>
- <span class="text-xs text-slate-400">Click to attach or paste an image</span>
+ <span class="text-sm text-slate-400">Click to attach or paste an image</span>
  <input id="bug-screenshot-input" type="file" accept="image/*" class="hidden" onchange="window._bugScreenshotPicked(this)">
             </label>
  <div id="bug-screenshot-preview" class="hidden mb-4 relative">
@@ -2392,7 +2398,7 @@ window.openGuideEditor = () => {
     const toolbarHtml = _guideToolbar.map(btn => {
  if (btn.label === '|') return `<span class="w-px h-5 bg-slate-200 mx-1 shrink-0"></span>`;
         return `<button type="button" title="${btn.title}" onclick="window._guideTbAction('${btn.title}')"
- class="px-2 py-1 rounded-lg text-xs font-black text-slate-600 hover:bg-amber-100 hover:text-amber-700 transition-colors shrink-0">${btn.label}</button>`;
+ class="px-2 py-1 rounded-lg text-sm font-black text-slate-600 hover:bg-amber-100 hover:text-amber-700 transition-colors shrink-0">${btn.label}</button>`;
     }).join('');
 
     const div = document.createElement('div');
@@ -2409,7 +2415,7 @@ window.openGuideEditor = () => {
                     </div>
                     <div>
  <h2 class="text-xl font-black text-slate-900 ">Edit Guide</h2>
- <p class="text-xs text-slate-400 font-mono">${slug}</p>
+ <p class="text-sm text-slate-400 font-mono">${slug}</p>
                     </div>
                 </div>
                 <button onclick="document.getElementById('guide-editor-modal').remove()"
@@ -2435,14 +2441,14 @@ window.openGuideEditor = () => {
             <!-- Split pane -->
  <div class="px-8 flex-1 overflow-hidden grid grid-cols-1 lg:grid-cols-2 gap-4 min-h-0 pb-2">
  <div class="flex flex-col min-h-0">
- <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Write</p>
+ <p class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Write</p>
                     <textarea id="guide-editor-content"
                         oninput="window._guideUpdatePreview()"
  class="flex-1 w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 font-mono text-sm focus:outline-none focus:border-amber-400 resize-none"
                         placeholder="Start writing…">${currentContent.replace(/</g, '&lt;').replace(/>/g, '&gt;')}</textarea>
                 </div>
  <div class="flex flex-col min-h-0">
- <p class="text-xs font-black text-slate-400 uppercase tracking-widest mb-1">Preview</p>
+ <p class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1">Preview</p>
                     <div id="guide-editor-preview"
  class="flex-1 overflow-y-auto px-4 py-3 rounded-2xl border-2 border-slate-100 bg-slate-50 prose max-w-none text-sm">
                     </div>

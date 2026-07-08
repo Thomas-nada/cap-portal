@@ -13,8 +13,8 @@ function personCard({ person, user, isAdmin, onRemove, accentFrom, accentTo, ico
         </div>
  <div class="min-w-0 flex-1">
  <p class="font-black text-slate-900 truncate">${escapeHtml(person.display_name || shortAddress(person.stake_address))}</p>
- <p class="text-xs text-slate-400 font-mono truncate">(${shortAddress(person.stake_address)})</p>
- ${isSelf ? `<span class="text-[9px] font-black text-blue-500 uppercase tracking-widest">You</span>` : ''}
+ <p class="text-sm text-slate-400 font-mono truncate">(${shortAddress(person.stake_address)})</p>
+ ${isSelf ? `<span class="text-sm font-black text-blue-500 uppercase tracking-widest">You</span>` : ''}
         </div>
         ${isAdmin && !isSelf ? `
         <button onclick="${onRemove}('${escapeHtml(person.stake_address)}', '${escapeHtml(person.display_name || person.stake_address)}')"
@@ -58,11 +58,11 @@ export function renderEditors(state) {
  class="flex-1 px-5 py-3 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-900 text-sm font-mono focus:border-violet-500 outline-none transition-all"
                 onkeydown="if(event.key==='Enter') window.submitAddAdmin()">
             <button onclick="window.submitAddAdmin()"
- class="flex items-center justify-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-700 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all">
+ class="flex items-center justify-center gap-2 px-8 py-3 bg-violet-600 hover:bg-violet-700 text-white font-black uppercase tracking-widest text-sm rounded-2xl shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all">
  <i data-lucide="user-plus" class="w-4 h-4"></i> Add
             </button>
         </div>
- <p id="add-admin-error" class="text-red-500 text-xs font-bold mt-3 hidden"></p>
+ <p id="add-admin-error" class="text-red-500 text-sm font-bold mt-3 hidden"></p>
     </div>` : '';
 
     const adminCards = realAdmins.length ? `
@@ -87,11 +87,11 @@ export function renderEditors(state) {
  class="flex-1 px-5 py-3 rounded-2xl border-2 border-slate-200 bg-slate-50 text-slate-900 text-sm font-mono focus:border-blue-500 outline-none transition-all"
                 onkeydown="if(event.key==='Enter') window.submitAddEditor()">
             <button onclick="window.submitAddEditor()"
- class="flex items-center justify-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-xs rounded-2xl shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all">
+ class="flex items-center justify-center gap-2 px-8 py-3 bg-blue-600 hover:bg-blue-700 text-white font-black uppercase tracking-widest text-sm rounded-2xl shadow-lg hover:-translate-y-0.5 active:scale-95 transition-all">
  <i data-lucide="user-plus" class="w-4 h-4"></i> Add
             </button>
         </div>
- <p id="add-editor-error" class="text-red-500 text-xs font-bold mt-3 hidden"></p>
+ <p id="add-editor-error" class="text-red-500 text-sm font-bold mt-3 hidden"></p>
     </div>` : '';
 
     const editorCards = realEditors.length ? `
@@ -115,7 +115,7 @@ export function renderEditors(state) {
  <i data-lucide="shield" class="w-6 h-6"></i>
                 </div>
                 <div>
- <h1 class="text-3xl sm:text-5xl lg:text-6xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Roles</h1>
+ <h1 class="text-3xl sm:text-4xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Roles</h1>
  <p class="text-on-surface-variant text-sm font-bold mt-1">${realAdmins.length} admin${realAdmins.length !== 1 ? 's' : ''} · ${realEditors.length} editor${realEditors.length !== 1 ? 's' : ''}</p>
                 </div>
             </div>
@@ -130,7 +130,7 @@ export function renderEditors(state) {
  <i data-lucide="shield-check" class="w-4 h-4 text-white"></i>
                 </div>
  <h2 class="text-2xl font-black italic tracking-tighter text-on-surface uppercase">Admins</h2>
- <span class="text-xs text-on-surface-variant font-bold ml-auto">Manage editors &amp; admins</span>
+ <span class="text-sm text-on-surface-variant font-bold ml-auto">Manage editors &amp; admins</span>
             </div>
             ${addAdminForm}
             ${adminCards}
@@ -143,7 +143,7 @@ export function renderEditors(state) {
  <i data-lucide="pen-square" class="w-4 h-4 text-white"></i>
                 </div>
  <h2 class="text-2xl font-black italic tracking-tighter text-on-surface uppercase">Editors</h2>
- <span class="text-xs text-on-surface-variant font-bold ml-auto">Review &amp; moderate proposals</span>
+ <span class="text-sm text-on-surface-variant font-bold ml-auto">Review &amp; moderate proposals</span>
             </div>
             ${addEditorForm}
             ${editorCards}

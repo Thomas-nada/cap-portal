@@ -23,7 +23,7 @@ export function renderKanban(state) {
  <div class="flex items-center gap-2">
                 ${['ALL','CAP','CIS'].map(t => `
                 <button onclick="state.docTypeFilter='${t}'; window.updateUI()"
- class="px-3 py-2 rounded-xl text-xs font-black uppercase tracking-wide transition-all
+ class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                     ${(state.docTypeFilter||'ALL')===t ? 'bg-brand-primary text-white ' : 'bg-white/10 border border-white/20 text-on-surface-variant hover:text-on-surface '}">
                     ${t}
                 </button>`).join('')}
@@ -37,11 +37,11 @@ export function renderKanban(state) {
  <div class="w-7 h-7 ${col.bg} ${col.color} rounded-lg flex items-center justify-center flex-shrink-0">
  <i data-lucide="${col.icon}" class="w-3.5 h-3.5"></i>
                     </div>
- <span class="text-xs font-black uppercase tracking-widest text-on-surface-variant ">${col.label}</span>
- <span class="ml-auto text-xs font-black text-on-surface-variant/70 ">${byStage[col.id].length}</span>
+ <span class="text-sm font-black uppercase tracking-widest text-on-surface-variant ">${col.label}</span>
+ <span class="ml-auto text-sm font-black text-on-surface-variant/70 ">${byStage[col.id].length}</span>
                 </div>
                 ${byStage[col.id].length === 0
- ? `<div class="rounded-[2rem] border-2 border-dashed border-white/20 p-8 text-center text-on-surface-variant/70 text-xs font-bold">Empty</div>`
+ ? `<div class="rounded-[2rem] border-2 border-dashed border-white/20 p-8 text-center text-on-surface-variant/70 text-sm font-bold">Empty</div>`
                     : byStage[col.id].map(p => renderCard(p)).join('')
                 }
             </div>
@@ -57,14 +57,14 @@ function renderCard(p) {
     <div onclick="window.openProposal(${p.number})"
  class="bg-white/80 rounded-[1.5rem] border border-slate-100 p-5 cursor-pointer hover:border-blue-200 hover:shadow-md transition-all group">
  <div class="flex items-center gap-2 mb-3 flex-wrap">
- <span class="text-[9px] font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 uppercase">${p.type}</span>
- <span class="text-[9px] font-black text-slate-300 ">#${p.number}</span>
+ <span class="text-sm font-black px-1.5 py-0.5 rounded bg-blue-100 text-blue-600 uppercase">${p.type}</span>
+ <span class="text-sm font-black text-slate-300 ">#${p.number}</span>
             ${nonLifecycle.slice(0, 2).map(l =>
- `<span class="text-[9px] font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${escapeHtml(l.name)}</span>`
+ `<span class="text-sm font-bold px-1.5 py-0.5 rounded bg-slate-100 text-slate-500">${escapeHtml(l.name)}</span>`
             ).join('')}
         </div>
  <p class="text-sm font-bold text-slate-900 leading-snug group-hover:text-blue-600 transition-colors line-clamp-2">${escapeHtml(p.title)}</p>
- <div class="flex items-center gap-3 mt-3 text-xs text-slate-400 font-bold">
+ <div class="flex items-center gap-3 mt-3 text-sm text-slate-400 font-bold">
             <span>${timeAgo(p.updated_at)}</span>
  <span class="flex items-center gap-1 ml-auto"><i data-lucide="message-circle" class="w-3 h-3"></i>${p.comments}</span>
         </div>

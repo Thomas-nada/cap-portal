@@ -17,76 +17,77 @@ export function renderNav(state) {
 
     const bell = isLoggedIn ? `
         <button onclick="window.toggleNotifications()" title="Notifications"
- class="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-slate-100 transition-colors text-slate-600">
+ class="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-white">
  <i data-lucide="bell" class="w-5 h-5"></i>
-            ${state.unreadCount > 0 ? `<span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-primary text-white text-[10px] font-black flex items-center justify-center">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>` : ''}
+            ${state.unreadCount > 0 ? `<span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-secondary text-white text-sm font-black flex items-center justify-center">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>` : ''}
         </button>
     ` : '';
 
     const sessionControls = isLoggedIn ? `
  <div class="flex items-center gap-2">
             <button onclick="window.openProfile()"
- class="hidden lg:block text-right px-3 py-1.5 rounded-md hover:bg-slate-100 transition-colors">
- <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest leading-none">
+ class="hidden lg:block text-right px-3 py-1.5 rounded-md hover:bg-white/10 transition-colors">
+ <p class="text-sm font-semibold text-white uppercase tracking-widest leading-none">
                     ${state.user.display_name || shortAddress(state.user.stake_address)}
                 </p>
- <p class="text-[9px] text-slate-400/80 font-mono leading-none mt-0.5">(${shortAddress(state.user.stake_address)})</p>
- ${state.user.is_admin ? `<p class="text-[9px] font-semibold text-amber-600 uppercase tracking-widest">Admin</p>` : state.user.is_editor ? `<p class="text-[9px] font-semibold text-brand-secondary uppercase tracking-widest">Editor</p>` : ''}
+ <p class="text-sm text-white/60 font-mono leading-none mt-0.5">(${shortAddress(state.user.stake_address)})</p>
+ ${state.user.is_admin ? `<p class="text-sm font-semibold text-brand-tertiary uppercase tracking-widest">Admin</p>` : state.user.is_editor ? `<p class="text-sm font-semibold text-brand-secondary-container uppercase tracking-widest">Editor</p>` : ''}
             </button>
             <button onclick="window.logoutWallet()"
- class="flex items-center gap-2 px-3 sm:px-4 py-2 hover:bg-slate-100 rounded-full transition-all group text-sm font-semibold text-slate-600 border-2 border-slate-200">
+ class="flex items-center gap-2 px-3 sm:px-4 py-2 hover:bg-white/10 rounded-full transition-all group text-sm font-semibold text-white border-2 border-white/30">
  <i data-lucide="log-out" class="w-4 h-4"></i>
  <span class="hidden md:inline">Logout</span>
             </button>
         </div>
     ` : `
         <button onclick="window.loginWithWallet()"
- class="flex items-center gap-2 px-5 sm:px-8 h-11 sm:h-12 bg-brand-primary hover:bg-brand-primary-fixed-dim active:bg-brand-primary-active active:scale-[0.98] text-brand-on-primary rounded-full text-sm font-semibold transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)]">
+ class="flex items-center gap-2 px-5 sm:px-8 h-11 sm:h-12 bg-white hover:bg-brand-primary-container active:scale-[0.98] text-brand-primary rounded-full text-sm font-semibold transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)]">
  <i data-lucide="wallet" class="w-4 h-4"></i>
  <span class="hidden md:inline">Connect Wallet</span>
         </button>
     `;
 
     const mobilePanel = mobileOpen ? `
- <div class="lg:hidden mx-6 mt-2 bg-white/95 backdrop-blur-xl border border-white/40 rounded-[2rem] shadow-xl p-4 space-y-1">
+ <div class="lg:hidden bg-[#021d80] border-t border-white/10 px-4 py-3 space-y-1">
             ${menu.map(item => `
             <button onclick="window.setView('${item.id}')"
  class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all
-                    ${state.view === item.id ? 'bg-brand-primary/10 text-brand-primary' : 'text-slate-600 hover:bg-slate-100'}">
+                    ${state.view === item.id ? 'bg-white/15 text-white' : 'text-white/75 hover:bg-white/10'}">
  <i data-lucide="${item.icon}" class="w-4 h-4"></i>
                 ${item.label}
             </button>
             `).join('')}
             ${isLoggedIn ? `
- <div class="pt-3 mt-2 border-t border-slate-100 px-4 py-2">
- <p class="text-[10px] font-semibold text-slate-400 uppercase tracking-widest leading-none">
+ <div class="pt-3 mt-2 border-t border-white/10 px-4 py-2">
+ <p class="text-sm font-semibold text-white/80 uppercase tracking-widest leading-none">
                     ${state.user.display_name || shortAddress(state.user.stake_address)}
                 </p>
- <p class="text-[9px] text-slate-400/80 font-mono leading-none mt-0.5">(${shortAddress(state.user.stake_address)})</p>
+ <p class="text-sm text-white/50 font-mono leading-none mt-0.5">(${shortAddress(state.user.stake_address)})</p>
             </div>
             ` : ''}
         </div>
     ` : '';
 
     return `
- <nav class="sticky top-6 z-50 mx-6 bg-white/80 backdrop-blur-xl border border-white/40 p-3 rounded-[2.5rem] shadow-xl flex justify-between items-center transition-all duration-300">
- <div class="flex items-center gap-4 px-2 sm:px-4 cursor-pointer" onclick="window.setView('dashboard')">
- <div class="w-10 h-10 flex items-center justify-center flex-shrink-0">
- <img src="CAP.png" alt="CAP Logo" class="w-10 h-10 object-contain">
+ <nav class="bg-[#0228aa] shadow-md">
+ <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+ <div class="flex items-center gap-3 cursor-pointer" onclick="window.setView('dashboard')">
+ <div class="w-11 h-11 flex items-center justify-center flex-shrink-0">
+ <img src="CAP-white.png" alt="CAP Logo" class="w-11 h-11 object-contain">
                 </div>
  <div class="hidden sm:block text-left">
- <h1 class="font-semibold text-lg leading-none tracking-tight text-slate-900">CAP Portal</h1>
- <p class="text-[9px] font-semibold text-slate-400 uppercase tracking-[0.2em]">Constitutional Amendments</p>
+ <h1 class="font-semibold text-base leading-none tracking-tight text-white">Constitutional Amendment Portal</h1>
+ <p class="text-sm font-semibold text-white/60 uppercase tracking-[0.2em] mt-1">Cardano Constitution</p>
                 </div>
             </div>
 
  <div class="hidden lg:flex items-center gap-1">
                 ${menu.map(item => `
                     <button onclick="window.setView('${item.id}')"
- class="flex items-center gap-2 px-4 py-2 mx-0.5 text-sm font-medium transition-all border-b-2
+ class="flex items-center gap-2 px-3 py-2 mx-0.5 text-sm font-medium rounded-lg transition-all
                         ${state.view === item.id
-                            ? 'text-brand-primary border-brand-primary'
-                            : 'text-slate-600 border-transparent hover:text-brand-primary'}">
+                            ? 'text-white bg-white/15'
+                            : 'text-white/70 hover:text-white hover:bg-white/10'}">
  <i data-lucide="${item.icon}" class="w-4 h-4"></i>
  <span class="hidden md:inline">${item.label}</span>
                     </button>
@@ -97,10 +98,11 @@ export function renderNav(state) {
                 ${bell}
                 ${sessionControls}
                 <button onclick="window.toggleMobileNav()"
- class="lg:hidden w-10 h-10 flex items-center justify-center rounded-2xl text-slate-600 hover:bg-slate-100 transition-colors">
+ class="lg:hidden w-10 h-10 flex items-center justify-center rounded-2xl text-white hover:bg-white/10 transition-colors">
  <i data-lucide="${mobileOpen ? 'x' : 'menu'}" class="w-5 h-5"></i>
                 </button>
             </div>
-        </nav>
-        ${mobilePanel}`;
+        </div>
+        ${mobilePanel}
+    </nav>`;
 }
