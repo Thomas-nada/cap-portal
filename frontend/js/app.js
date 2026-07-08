@@ -269,6 +269,13 @@ window.dismissError = () => {
     updateUI();
 };
 
+// Live "X / Y characters" counter — call from a field's oninput with the id of
+// the <span> holding the current count. The Y part is static in the markup.
+window._cc = (el, id) => {
+    const c = document.getElementById(id);
+    if (c) c.textContent = el.value.length.toLocaleString();
+};
+
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 window.setView = (view) => {
@@ -977,13 +984,15 @@ window.openSuggestModal = (field) => {
             </div>` : ''}
  <div class="mb-4">
  <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Suggested Value</p>
-                <textarea id="suggest-value" rows="6" placeholder="Enter your suggested text…"
+                <textarea id="suggest-value" rows="6" placeholder="Enter your suggested text…" maxlength="20000" oninput="window._cc(this, 'cc-suggest-value')"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none resize-none transition-all">${escHtml(current)}</textarea>
+ <p class="text-sm text-slate-400 text-right mt-1"><span id="cc-suggest-value">${String(current || '').length.toLocaleString()}</span> / 20,000 characters</p>
             </div>
  <div class="mb-6">
  <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Reason <span class="text-slate-300">(optional)</span></p>
-                <input id="suggest-reason" type="text" placeholder="Why are you suggesting this change?"
+                <input id="suggest-reason" type="text" placeholder="Why are you suggesting this change?" maxlength="2000" oninput="window._cc(this, 'cc-suggest-reason')"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none transition-all">
+ <p class="text-sm text-slate-400 text-right mt-1"><span id="cc-suggest-reason">0</span> / 2,000 characters</p>
             </div>
  <p id="suggest-error" class="text-red-500 text-sm font-bold mb-3 hidden"></p>
  <div class="flex gap-3">
@@ -1229,8 +1238,9 @@ function openReasonModal({ title, intro, label, placeholder, confirmText, confir
         </div>
         ${intro ? `<p class="text-sm text-slate-500 mb-4">${escapeHtmlGlobal(intro)}</p>` : ''}
         <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">${escapeHtmlGlobal(label)}</label>
-        <textarea id="reason-input" rows="4" placeholder="${escapeHtmlGlobal(placeholder || '')}"
-          class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white text-slate-900 text-sm focus:outline-none focus:border-blue-400 resize-none mb-3"></textarea>
+        <textarea id="reason-input" rows="4" placeholder="${escapeHtmlGlobal(placeholder || '')}" maxlength="2000" oninput="window._cc(this, 'cc-reason')"
+          class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white text-slate-900 text-sm focus:outline-none focus:border-blue-400 resize-none"></textarea>
+        <p class="text-sm text-slate-400 text-right mt-1 mb-3"><span id="cc-reason">0</span> / 2,000 characters</p>
         <p id="reason-error" class="hidden text-red-500 text-sm font-bold mb-3"></p>
         <div class="flex gap-3">
           <button id="reason-submit"
@@ -2198,6 +2208,7 @@ init();
 window.openBugReportModal = () => {
     const existing = document.getElementById('bug-report-modal');
     if (existing) existing.remove();
+    window._bugShots = [];  // fresh staging area per modal
 
     // Capture environment at the moment the modal opens
     window._bugEnv = {
@@ -2229,27 +2240,24 @@ window.openBugReportModal = () => {
             </div>
 
  <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Title</label>
-            <input id="bug-title" type="text" placeholder="Short summary of the issue" maxlength="120"
- class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium">
+            <input id="bug-title" type="text" placeholder="Short summary of the issue" maxlength="200" oninput="window._cc(this, 'cc-bug-title')"
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 font-medium">
+ <p class="text-sm text-slate-400 text-right mt-1 mb-4"><span id="cc-bug-title">0</span> / 200 characters</p>
 
  <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">Description</label>
-            <textarea id="bug-description" rows="4" placeholder="What happened? What did you expect? Steps to reproduce…"
- class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 mb-4 font-medium resize-none"></textarea>
+            <textarea id="bug-description" rows="4" maxlength="5000" oninput="window._cc(this, 'cc-bug-desc')" placeholder="What happened? What did you expect? Steps to reproduce…"
+ class="w-full px-4 py-3 rounded-2xl border-2 border-slate-100 bg-white/80 text-slate-900 placeholder-slate-400 focus:outline-none focus:border-red-400 font-medium resize-none"></textarea>
+ <p class="text-sm text-slate-400 text-right mt-1 mb-4"><span id="cc-bug-desc">0</span> / 5,000 characters</p>
 
  <label class="block text-sm font-black text-slate-500 uppercase tracking-widest mb-2">
- Screenshot <span class="text-slate-400 font-normal normal-case tracking-normal">— optional</span>
+ Screenshots <span class="text-slate-400 font-normal normal-case tracking-normal">— optional, up to 5</span>
             </label>
  <label class="flex flex-col items-center justify-center w-full h-24 rounded-2xl border-2 border-dashed border-slate-200 hover:border-red-300 cursor-pointer transition-colors mb-1" id="bug-screenshot-label">
  <i data-lucide="image-plus" class="w-6 h-6 text-slate-400 mb-1"></i>
- <span class="text-sm text-slate-400">Click to attach or paste an image</span>
- <input id="bug-screenshot-input" type="file" accept="image/*" class="hidden" onchange="window._bugScreenshotPicked(this)">
+ <span class="text-sm text-slate-400">Click to attach images</span>
+ <input id="bug-screenshot-input" type="file" accept="image/*" multiple class="hidden" onchange="window._bugScreenshotPicked(this)">
             </label>
- <div id="bug-screenshot-preview" class="hidden mb-4 relative">
- <img id="bug-screenshot-img" src="" class="w-full rounded-2xl border border-slate-200 max-h-40 object-contain">
- <button onclick="window._bugScreenshotClear()" class="absolute top-2 right-2 w-7 h-7 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
- <i data-lucide="x" class="w-3 h-3"></i>
-                </button>
-            </div>
+ <div id="bug-screenshot-previews" class="hidden mb-4 grid grid-cols-3 gap-2"></div>
 
  <div id="bug-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
 
@@ -2264,37 +2272,49 @@ window.openBugReportModal = () => {
     if (typeof lucide !== 'undefined') lucide.createIcons();
 };
 
+const MAX_BUG_SHOTS = 5;
+window._bugShots = [];  // data URLs staged for the open report modal
+
+function _renderBugShots() {
+    const grid = document.getElementById('bug-screenshot-previews');
+    const label = document.getElementById('bug-screenshot-label');
+    if (!grid) return;
+    const shots = window._bugShots;
+    grid.innerHTML = shots.map((src, i) => `
+        <div class="relative">
+            <img src="${src}" class="w-full h-20 object-cover rounded-xl border border-slate-200">
+            <button onclick="window._bugScreenshotRemove(${i})" class="absolute top-1 right-1 w-6 h-6 bg-red-500 text-white rounded-full flex items-center justify-center hover:bg-red-600 transition-colors">
+                <i data-lucide="x" class="w-3 h-3"></i>
+            </button>
+        </div>`).join('');
+    grid.classList.toggle('hidden', shots.length === 0);
+    label?.classList.toggle('hidden', shots.length >= MAX_BUG_SHOTS);
+    if (typeof lucide !== 'undefined') lucide.createIcons();
+}
+
 window._bugScreenshotPicked = (input) => {
-    const file = input.files?.[0];
-    if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (e) => {
-        const img = document.getElementById('bug-screenshot-img');
-        const preview = document.getElementById('bug-screenshot-preview');
-        const label = document.getElementById('bug-screenshot-label');
-        if (img) img.src = e.target.result;
-        preview?.classList.remove('hidden');
-        label?.classList.add('hidden');
-        if (typeof lucide !== 'undefined') lucide.createIcons();
-    };
-    reader.readAsDataURL(file);
+    const files = Array.from(input.files || []).slice(0, MAX_BUG_SHOTS - window._bugShots.length);
+    input.value = '';
+    files.forEach(file => {
+        const reader = new FileReader();
+        reader.onload = (e) => {
+            if (window._bugShots.length < MAX_BUG_SHOTS) {
+                window._bugShots.push(e.target.result);
+                _renderBugShots();
+            }
+        };
+        reader.readAsDataURL(file);
+    });
 };
 
-window._bugScreenshotClear = () => {
-    const input = document.getElementById('bug-screenshot-input');
-    const img = document.getElementById('bug-screenshot-img');
-    const preview = document.getElementById('bug-screenshot-preview');
-    const label = document.getElementById('bug-screenshot-label');
-    if (input) input.value = '';
-    if (img) img.src = '';
-    preview?.classList.add('hidden');
-    label?.classList.remove('hidden');
+window._bugScreenshotRemove = (idx) => {
+    window._bugShots.splice(idx, 1);
+    _renderBugShots();
 };
 
 window._submitBugReport = async () => {
     const title = document.getElementById('bug-title')?.value?.trim();
     const description = document.getElementById('bug-description')?.value?.trim();
-    const screenshot = document.getElementById('bug-screenshot-img')?.src || null;
     const errEl = document.getElementById('bug-error');
 
     if (!title) {
@@ -2308,11 +2328,11 @@ window._submitBugReport = async () => {
         return;
     }
 
-    const screenshotData = screenshot?.startsWith('data:') ? screenshot : null;
     const environment = window._bugEnv || null;
 
     try {
-        await submitBugReport(title, description, screenshotData, environment);
+        await submitBugReport(title, description, window._bugShots.slice(0, MAX_BUG_SHOTS), environment);
+        window._bugShots = [];
         document.getElementById('bug-report-modal')?.remove();
     } catch (e) {
         errEl.textContent = e.message || 'Failed to submit. Please try again.';

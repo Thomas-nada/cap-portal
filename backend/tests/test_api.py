@@ -545,9 +545,9 @@ def test_client_ip_uses_last_forwarded_for():
 # ── Input size limits ─────────────────────────────────────────────────────────
 
 def test_long_deliberation_is_allowed(client, db):
-    """Limits are roomy — a ~12,000-word section must be accepted."""
+    """Limits are roomy — a ~2,800-word section must be accepted."""
     seed_user(db, AUTHOR_ADDR, "Alice")
-    long_text = "This is a thorough deliberation. " * 2200  # ~72k chars
+    long_text = "This is a thorough deliberation. " * 550  # ~18k chars
     r = client.post("/proposals", json=proposal_body(motivation=long_text),
                     headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 201
@@ -560,11 +560,17 @@ def test_oversized_input_rejected_with_clean_message(client, db):
                     headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 400
     assert isinstance(r.json()["detail"], str)  # single readable string, not a nested list
-    # Oversized section
-    r = client.post("/proposals", json={"title": "ok", "type": "CAP", "structured": {"motivation": "z" * 150_000}},
+    # Oversized section (over the 20k per-field cap, under the total cap)
+    r = client.post("/proposals", json={"title": "ok", "type": "CAP", "structured": {"motivation": "z" * 50_000}},
                     headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 400
     assert "too long" in r.json()["detail"]
+    # Oversized proposal overall (each field under 20k, combined over 100k)
+    big = {f"extra_{i}": "z" * 19_000 for i in range(6)}
+    r = client.post("/proposals", json={"title": "ok", "type": "CAP", "structured": {"abstract": "a", **big}},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert "too large" in r.json()["detail"]
 
 
 def test_oversized_comment_rejected(client, db):

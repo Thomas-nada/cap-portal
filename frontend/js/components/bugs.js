@@ -61,7 +61,10 @@ export function renderBugs(state) {
  ${r.environment.username ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">User</span><span class="text-slate-700 ">${escapeHtml(r.environment.username)}</span></div>` : ''}
  ${r.environment.timestamp ? `<div class="flex gap-2"><span class="text-slate-400 w-24 shrink-0">Timestamp</span><span class="text-slate-700 ">${escapeHtml(r.environment.timestamp)}</span></div>` : ''}
             </div>` : ''}
- ${r.screenshot ? `<img src="${r.screenshot}" class="w-full max-h-64 object-contain rounded-2xl border border-slate-200 mb-4">` : ''}
+ ${(r.screenshots || []).length ? `
+ <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+                ${r.screenshots.map(s => `<a href="${s}" target="_blank" rel="noopener"><img src="${s}" class="w-full max-h-64 object-contain rounded-2xl border border-slate-200 hover:border-slate-300 transition-colors"></a>`).join('')}
+            </div>` : ''}
  <div class="flex flex-wrap gap-2">
                 ${r.status !== 'open' ? `
                 <button onclick="window.updateBugStatus(${r.id}, 'open')"

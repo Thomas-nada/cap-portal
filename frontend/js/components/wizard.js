@@ -218,9 +218,10 @@ function renderStep1(wizard) {
  <div class="mt-12">
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 block">Title</label>
             <input type="text" value="${escapeHtml(wizard.title || '')}"
-                oninput="state.wizardData.title = this.value;"
-                placeholder="Give your ${wizard.type} a clear, descriptive title..."
+                oninput="state.wizardData.title = this.value; window._cc(this, 'cc-title')"
+                placeholder="Give your ${wizard.type} a clear, descriptive title..." maxlength="200"
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 font-bold text-xl focus:border-blue-600 outline-none transition-all">
+            ${charCounter('cc-title', wizard.title, 200)}
         </div>
     </div>`;
 }
@@ -323,10 +324,11 @@ function renderStep3(wizard) {
                 </div>
                 <div>
  <label class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2 block">New Text to Add:</label>
-                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value;"
+                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value; window._cc(this, 'cc-rev-${idx}')" maxlength="20000"
                         placeholder="Write the new text to insert after the selected passage..."
  class="w-full p-4 rounded-xl border-2 border-cyan-300 bg-white/80 text-slate-900 focus:border-cyan-500 outline-none transition-all min-h-32 font-mono text-sm"
                     >${escapeHtml(wizard.revisions?.[idx] || '')}</textarea>
+                    ${charCounter(`cc-rev-${idx}`, wizard.revisions?.[idx], 20000)}
                 </div>
             </div>
             ` : `
@@ -339,10 +341,11 @@ function renderStep3(wizard) {
                 </div>
                 <div>
  <label class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2 block">Proposed:</label>
-                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value;"
+                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value; window._cc(this, 'cc-rev-${idx}')" maxlength="20000"
                         placeholder="Write your proposed replacement text..."
  class="w-full p-4 rounded-xl border-2 border-green-300 bg-green-50 text-slate-900 focus:border-green-500 outline-none transition-all min-h-32 font-mono text-sm"
                     >${escapeHtml(wizard.revisions?.[idx] || '')}</textarea>
+                    ${charCounter(`cc-rev-${idx}`, wizard.revisions?.[idx], 20000)}
                 </div>
             </div>
             `).join('')}
@@ -365,61 +368,68 @@ function renderStep4(wizard) {
             <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1 block">Summary</label>
  <p class="text-sm text-slate-400 mb-3">A short, plain-language summary of the core idea.</p>
-                <textarea oninput="state.wizardData.abstract = this.value;"
+                <textarea oninput="state.wizardData.abstract = this.value; window._cc(this, 'cc-abstract')" maxlength="20000"
                     placeholder="Summarize the core idea..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-32"
                 >${escapeHtml(wizard.abstract || '')}</textarea>
+                    ${charCounter('cc-abstract', wizard.abstract, 20000)}
             </div>
             ${wizard.type === 'CAP' ? `
  <div class="space-y-6 p-6 bg-slate-50 rounded-2xl border border-slate-200 ">
                 <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1 block">Why is this change needed?</label>
  <p class="text-sm text-slate-400 mb-3">Explain the problem this solves and why the Constitution should change.</p>
-                    <textarea oninput="state.wizardData.motivation = this.value;"
+                    <textarea oninput="state.wizardData.motivation = this.value; window._cc(this, 'cc-motivation')" maxlength="20000"
                         placeholder="Explain why the constitution should be changed..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-40"
                     >${escapeHtml(wizard.motivation || '')}</textarea>
+                    ${charCounter('cc-motivation', wizard.motivation, 20000)}
                 </div>
                 <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-1 block">Analysis &amp; Test</label>
  <p class="text-sm text-slate-400 mb-3">Describe the expected impact and consequences, and how you'll know the change worked (measurable success criteria).</p>
-                    <textarea oninput="state.wizardData.analysis = this.value;"
+                    <textarea oninput="state.wizardData.analysis = this.value; window._cc(this, 'cc-analysis')" maxlength="20000"
                         placeholder="Describe expected impact, consequences, and measurable success criteria..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-48"
                     >${escapeHtml(wizard.analysis || '')}</textarea>
+                    ${charCounter('cc-analysis', wizard.analysis, 20000)}
                 </div>
             </div>
             ` : `
  <div class="space-y-6">
                 <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2 block">Problem</label>
-                    <textarea oninput="state.wizardData.motivation = this.value;"
+                    <textarea oninput="state.wizardData.motivation = this.value; window._cc(this, 'cc-motivation')" maxlength="20000"
                         placeholder="Describe the constitutional issue..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-36"
                     >${escapeHtml(wizard.motivation || '')}</textarea>
+                    ${charCounter('cc-motivation', wizard.motivation, 20000)}
                 </div>
                 <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2 block">Context <span class="font-normal normal-case opacity-60">(optional)</span></label>
-                    <textarea oninput="state.wizardData.analysis = this.value;"
+                    <textarea oninput="state.wizardData.analysis = this.value; window._cc(this, 'cc-analysis')" maxlength="20000"
                         placeholder="Background and context..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-36"
                     >${escapeHtml(wizard.analysis || '')}</textarea>
+                    ${charCounter('cc-analysis', wizard.analysis, 20000)}
                 </div>
                 <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2 block">Impact <span class="font-normal normal-case opacity-60">(optional)</span></label>
-                    <textarea oninput="state.wizardData.impact = this.value;"
+                    <textarea oninput="state.wizardData.impact = this.value; window._cc(this, 'cc-impact')" maxlength="20000"
                         placeholder="Consequences if unaddressed..."
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-36"
                     >${escapeHtml(wizard.impact || '')}</textarea>
+                    ${charCounter('cc-impact', wizard.impact, 20000)}
                 </div>
             </div>
             `}
             <div>
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-3 block">Links and Files (Optional)</label>
-                <textarea oninput="state.wizardData.exhibits = this.value;"
+                <textarea oninput="state.wizardData.exhibits = this.value; window._cc(this, 'cc-exhibits')" maxlength="20000"
                     placeholder="- Link 1&#10;- Link 2"
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-24"
                 >${escapeHtml(wizard.exhibits || '')}</textarea>
+                    ${charCounter('cc-exhibits', wizard.exhibits, 20000)}
             </div>
         </div>
     </div>`;
@@ -517,4 +527,10 @@ export function buildMarkdown(wizard) {
 
 function escapeHtml(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// "X / Y characters" line under a field. The X span is updated live by
+// window._cc from the field's oninput; Y (the limit) is static.
+function charCounter(id, value, max) {
+    return `<p class="text-sm text-slate-400 text-right mt-1"><span id="${id}">${String(value || '').length.toLocaleString()}</span> / ${max.toLocaleString()} characters</p>`;
 }

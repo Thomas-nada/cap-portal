@@ -337,8 +337,10 @@ export function renderDetail(state) {
                             ${state.user ? `
  <div class="pt-8 pl-0 sm:pl-20">
  <form onsubmit="event.preventDefault(); window.postComment(this)" class="space-y-6">
-                                    <textarea name="comment" required placeholder="Share your thoughts…"
+                                    <textarea name="comment" required placeholder="Share your thoughts…" maxlength="20000"
+                                        oninput="window._cc(this, 'cc-comment')"
  class="w-full bg-white/80 p-10 rounded-[3rem] min-h-[200px] font-medium text-lg outline-none border-2 border-slate-100 focus:border-blue-600 transition-all text-slate-900 shadow-sm resize-none"></textarea>
+ <p class="text-sm text-slate-400 text-right -mt-4"><span id="cc-comment">0</span> / 20,000 characters</p>
  <div class="flex justify-end">
                                         <button type="submit" ${state.loading?.postComment ? 'disabled' : ''}
  class="bg-slate-950 text-white px-14 py-6 rounded-3xl font-black uppercase text-sm tracking-[0.3em] hover:-translate-y-1 active:scale-95 transition-all shadow-2xl disabled:opacity-50">

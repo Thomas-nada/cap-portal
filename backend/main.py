@@ -26,7 +26,7 @@ if (_is_production or _uses_real_db) and not _config.get("JWT_SECRET"):
     )
 from datetime import datetime, timezone, timedelta
 from pathlib import Path
-from typing import Optional
+from typing import List, Optional
 
 from fastapi import FastAPI, Depends, HTTPException, Header, Request
 from fastapi.middleware.cors import CORSMiddleware
@@ -235,15 +235,16 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_exceeded_handler)
 from fastapi.responses import JSONResponse as _JSONResponse
 
 # ── Input size limits ─────────────────────────────────────────────────────────
-# Deliberations can run long, so text limits are generous — they exist to stop a
-# single request bloating the database, not to constrain legitimate writing.
-MAX_TITLE = 300
-MAX_LONG_TEXT = 100_000       # ~16,000 words per proposal section / comment
-MAX_STRUCTURED_TOTAL = 500_000  # whole proposal body (all fields combined)
-MAX_REASON = 10_000
-MAX_GUIDE_CONTENT = 300_000
+# Roomy enough for long deliberations; tight enough to stop a single request
+# bloating the database.
+MAX_TITLE = 200
+MAX_LONG_TEXT = 20_000        # per proposal section / comment (~3,000 words)
+MAX_STRUCTURED_TOTAL = 100_000  # whole proposal body (all fields combined)
+MAX_REASON = 2_000            # moderation reasons (flag / remove)
+MAX_BUG_DESC = 5_000
 MAX_SCREENSHOT = 5_000_000    # base64 data URL (~3.7 MB image)
-MAX_NAME = 200
+MAX_SCREENSHOTS = 5           # per bug report
+MAX_NAME = 100
 
 _PROPOSAL_TEXT_FIELDS = ("abstract", "motivation", "analysis", "impact", "exhibits")
 
@@ -257,6 +258,12 @@ def _validate_structured(v):
         val = v.get(key)
         if isinstance(val, str) and len(val) > MAX_LONG_TEXT:
             raise ValueError(f"The '{key}' field is too long (max {MAX_LONG_TEXT:,} characters)")
+    # Each structured revision (original passage + proposed text) is a section too.
+    for i, rev in enumerate(v.get("revisions") or []):
+        if isinstance(rev, dict):
+            for rk, rv in rev.items():
+                if isinstance(rv, str) and len(rv) > MAX_LONG_TEXT:
+                    raise ValueError(f"Revision #{i + 1} ('{rk}') is too long (max {MAX_LONG_TEXT:,} characters)")
     return v
 
 
@@ -1727,7 +1734,7 @@ def seed_editor(body: dict, db: Session = Depends(get_db)):
 
 class GuideUpdate(BaseModel):
     title: str = Field(min_length=1, max_length=MAX_TITLE)
-    content: str = Field(max_length=MAX_GUIDE_CONTENT)  # markdown
+    content: str  # markdown — no size limit (editor/admin only)
     section: str = Field(default='general', max_length=100)
     section_label: Optional[str] = Field(default=None, max_length=MAX_TITLE)
     sort_order: int = 0
@@ -1796,9 +1803,20 @@ def delete_guide(slug: str, user: dict = Depends(require_editor_or_admin), db: S
 
 class BugReportCreate(BaseModel):
     title: str = Field(min_length=1, max_length=MAX_TITLE)
-    description: str = Field(max_length=MAX_LONG_TEXT)
-    screenshot: Optional[str] = Field(default=None, max_length=MAX_SCREENSHOT)  # base64 data URL
+    description: str = Field(max_length=MAX_BUG_DESC)
+    screenshots: Optional[List[str]] = None  # base64 data URLs
     environment: Optional[dict] = None  # auto-captured env info
+
+    @field_validator("screenshots")
+    @classmethod
+    def _check_screenshots(cls, v):
+        if v:
+            if len(v) > MAX_SCREENSHOTS:
+                raise ValueError(f"At most {MAX_SCREENSHOTS} screenshots per report")
+            for s in v:
+                if len(s) > MAX_SCREENSHOT:
+                    raise ValueError("Each screenshot must be under ~3.7 MB")
+        return v
 
 class BugReportStatusUpdate(BaseModel):
     status: str  # open | in_progress | resolved
@@ -1813,7 +1831,8 @@ def submit_bug_report(body: BugReportCreate,
     report = BugReport(
         title=body.title.strip(),
         description=body.description.strip(),
-        screenshot=body.screenshot,
+        # Stored as a JSON array in the legacy single-screenshot TEXT column.
+        screenshot=json.dumps(body.screenshots) if body.screenshots else None,
         environment=json.dumps(body.environment) if body.environment else None,
         reporter_stake_address=user["sub"],
         reporter_display_name=user.get("display_name"),
@@ -1827,9 +1846,20 @@ def submit_bug_report(body: BugReportCreate,
 @app.get("/bug-reports", tags=["bug-reports"], summary="List all bug reports (admin only)")
 def list_bug_reports(user: dict = Depends(require_admin),
                      db: Session = Depends(get_db)):
+    def shots(raw):
+        # New reports store a JSON array; legacy rows hold a single data URL.
+        if not raw:
+            return []
+        if raw.startswith("["):
+            try:
+                return json.loads(raw)
+            except ValueError:
+                return []
+        return [raw]
+
     reports = db.query(BugReport).order_by(BugReport.created_at.desc()).all()
     return [{"id": r.id, "title": r.title, "description": r.description,
-             "screenshot": r.screenshot,
+             "screenshots": shots(r.screenshot),
              "environment": json.loads(r.environment) if r.environment else None,
              "reporter_stake_address": r.reporter_stake_address,
              "reporter_display_name": r.reporter_display_name,

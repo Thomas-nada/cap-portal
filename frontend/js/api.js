@@ -234,8 +234,8 @@ export async function rejectSuggestion(number, id) {
 
 // ── Bug Reports ───────────────────────────────────────────────────────────────
 
-export async function submitBugReport(title, description, screenshot = null, environment = null) {
-    return req('POST', '/bug-reports', { title, description, screenshot, environment }, true);
+export async function submitBugReport(title, description, screenshots = [], environment = null) {
+    return req('POST', '/bug-reports', { title, description, screenshots, environment }, true);
 }
 
 export async function fetchBugReports() {
