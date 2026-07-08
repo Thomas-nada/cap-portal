@@ -71,11 +71,13 @@ export function renderNav(state) {
     return `
  <nav class="bg-[#0228aa] shadow-md">
  <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
- <div class="flex items-center gap-3 cursor-pointer" onclick="window.setView('dashboard')">
+ <div class="flex items-center gap-3 cursor-pointer flex-shrink-0" onclick="window.setView('dashboard')">
  <div class="w-11 h-11 flex items-center justify-center flex-shrink-0">
  <img src="CAP-white.png" alt="CAP Logo" class="w-11 h-11 object-contain">
                 </div>
- <div class="hidden sm:block text-left">
+                <!-- Full wordmark needs room: hidden while the desktop menu (lg)
+                     competes for width, back at xl where both fit comfortably. -->
+ <div class="hidden sm:block lg:hidden xl:block text-left whitespace-nowrap">
  <h1 class="font-semibold text-base leading-none tracking-tight text-white">Constitutional Amendment Portal</h1>
  <p class="text-sm font-semibold text-white/60 uppercase tracking-[0.2em] mt-1">Cardano Constitution</p>
                 </div>
