@@ -30,16 +30,18 @@ export function renderDashboard(state) {
 
     return `
  <div class="space-y-12 fade-in text-left">
-        <!-- Stats -->
- <div class="grid grid-cols-1 sm:grid-cols-3 gap-6 mt-8">
+        <!-- Stats (compact: icon with label + number beside it) -->
+ <div class="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
             ${statCards.map(c => `
             <div onclick="window.setView('${c.view}')"
- class="bg-white/80 p-8 rounded-[2.5rem] border border-slate-100 shadow-sm group hover:border-blue-200 transition-all cursor-pointer">
- <div class="w-12 h-12 ${c.bg} ${c.color} rounded-2xl flex items-center justify-center mb-6 group-hover:scale-110 transition-transform">
- <i data-lucide="${c.icon}" class="w-6 h-6"></i>
+ class="bg-white/80 px-6 py-4 rounded-2xl border border-slate-100 shadow-sm group hover:border-blue-200 transition-all cursor-pointer flex items-center gap-4">
+ <div class="w-11 h-11 ${c.bg} ${c.color} rounded-xl flex items-center justify-center flex-shrink-0 group-hover:scale-110 transition-transform">
+ <i data-lucide="${c.icon}" class="w-5 h-5"></i>
                 </div>
- <p class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-1">${c.label}</p>
- <p class="text-4xl font-black tracking-tighter text-slate-900 ">${c.value ?? '—'}</p>
+                <div>
+ <p class="text-sm font-black uppercase tracking-[0.15em] text-slate-400">${c.label}</p>
+ <p class="text-2xl font-black tracking-tighter text-slate-900 leading-none mt-0.5">${c.value ?? '—'}</p>
+                </div>
             </div>
             `).join('')}
         </div>
@@ -60,37 +62,7 @@ export function renderDashboard(state) {
             </button>
         </div>
 
-        <!-- How it works -->
- <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
- <div class="flex items-center justify-between mb-8">
- <h2 class="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
- <i data-lucide="map" class="w-4 h-4 text-blue-500"></i> How It Works
-                </h2>
- <button onclick="window.setView('learn')" class="text-sm font-black text-blue-600 uppercase tracking-widest hover:underline">Learn More →</button>
-            </div>
- <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                ${PROCESS_STEPS.map(step => `
- <div class="relative">
- <div class="w-10 h-10 rounded-2xl ${step.bg} ${step.bg === 'bg-amber-500' ? 'text-slate-900' : 'text-white'} flex items-center justify-center font-black text-sm mb-4">${step.num}</div>
- <div class="flex items-center gap-2 mb-2">
- <i data-lucide="${step.icon}" class="w-4 h-4 ${step.text}"></i>
- <p class="text-sm font-black text-slate-900 ">${step.label}</p>
-                    </div>
- <p class="text-sm text-slate-400 leading-relaxed">${step.desc}</p>
-                </div>
-                `).join('')}
-            </div>
-        </div>
-
-        <!-- Walkthrough video -->
- <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
- <h2 class="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-2 mb-6">
- <i data-lucide="play-circle" class="w-4 h-4 text-purple-500"></i> Watch the Walkthrough
-            </h2>
-            ${renderCaptionedVideo(WALKTHROUGH_VIDEO_URL)}
-        </div>
-
-        <!-- Content grid -->
+        <!-- Recent activity & Most discussed (up top — the live pulse of the portal) -->
  <div class="grid grid-cols-1 lg:grid-cols-2 gap-8">
             <!-- Recent activity -->
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
@@ -136,6 +108,36 @@ export function renderDashboard(state) {
                     `).join('')}
                 </div>
             </div>
+        </div>
+
+        <!-- How it works -->
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+ <div class="flex items-center justify-between mb-8">
+ <h2 class="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-2">
+ <i data-lucide="map" class="w-4 h-4 text-blue-500"></i> How It Works
+                </h2>
+ <button onclick="window.setView('learn')" class="text-sm font-black text-blue-600 uppercase tracking-widest hover:underline">Learn More →</button>
+            </div>
+ <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+                ${PROCESS_STEPS.map(step => `
+ <div class="relative">
+ <div class="w-10 h-10 rounded-2xl ${step.bg} ${step.bg === 'bg-amber-500' ? 'text-slate-900' : 'text-white'} flex items-center justify-center font-black text-sm mb-4">${step.num}</div>
+ <div class="flex items-center gap-2 mb-2">
+ <i data-lucide="${step.icon}" class="w-4 h-4 ${step.text}"></i>
+ <p class="text-sm font-black text-slate-900 ">${step.label}</p>
+                    </div>
+ <p class="text-sm text-slate-400 leading-relaxed">${step.desc}</p>
+                </div>
+                `).join('')}
+            </div>
+        </div>
+
+        <!-- Walkthrough video -->
+ <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm p-8">
+ <h2 class="text-sm font-black uppercase tracking-widest text-slate-900 flex items-center gap-2 mb-6">
+ <i data-lucide="play-circle" class="w-4 h-4 text-purple-500"></i> Watch the Walkthrough
+            </h2>
+            ${renderCaptionedVideo(WALKTHROUGH_VIDEO_URL)}
         </div>
     </div>`;
 }
