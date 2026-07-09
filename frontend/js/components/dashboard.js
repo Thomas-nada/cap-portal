@@ -1,6 +1,6 @@
 import { renderCaptionedVideo } from './videoCaptions.js';
 
-const WALKTHROUGH_VIDEO_URL = 'videos/walkthrough_clean.mp4';
+const WALKTHROUGH_VIDEO_URL = 'videos/walkthrough_clean.webm';
 
 const PROCESS_STEPS = [
     { num: 1, icon: 'wallet',         label: 'Connect Wallet',  desc: 'Sign in with any Cardano wallet — no account or password needed.', bg: 'bg-blue-500',   text: 'text-blue-500' },
