@@ -18,10 +18,10 @@ export function renderDashboard(state) {
         { label: 'Done',            value: s.done,         icon: 'award',          color: 'text-emerald-500',bg: 'bg-emerald-50 ',view: 'list'   },
     ];
 
-    const recent = state.proposals
+    const recentAll = state.proposals
         .slice()
-        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at))
-        .slice(0, 8);
+        .sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
+    const recent = recentAll.slice(0, 5);
 
     const trending = state.proposals
         .filter(p => p.state === 'open')
@@ -68,6 +68,11 @@ export function renderDashboard(state) {
                     </div>
                     `).join('')}
                 </div>
+                ${recentAll.length > 5 ? `
+                <button onclick="window.setView('list')"
+ class="w-full px-8 py-4 border-t border-slate-100 flex items-center justify-center gap-2 text-sm font-black uppercase tracking-widest text-blue-600 hover:bg-blue-50/50 transition-colors">
+                    See all proposals <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                </button>` : ''}
             </div>
 
             <!-- Trending -->
