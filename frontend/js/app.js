@@ -63,6 +63,8 @@ export const state = {
     auditPanelExpanded: false,   // audit-trail popup (proposal detail)
     versionHistoryExpanded: false,  // version-history popup (proposal detail)
     proposalsTab: 'list',        // Proposals page: 'list' | 'board'
+    // Alpha banner: dismissible, stays hidden for the rest of the browser session.
+    alphaBannerDismissed: (() => { try { return sessionStorage.getItem('alphaBannerDismissed') === '1'; } catch { return false; } })(),
     mobileNavOpen: false,
     // Filters
     kanbanSearch: '',
@@ -118,6 +120,17 @@ export function updateUI(rerender = false) {
         default:             content = renderDashboard(state);
     }
 
+    // Dismissible red alpha banner — sits above the header, gone for the session once closed.
+    const alphaBanner = state.alphaBannerDismissed ? '' : `
+        <div class="relative bg-red-600 text-white text-sm font-semibold px-10 py-2 text-center">
+            This is an alpha version currently in testing.
+            <button onclick="window.showAlphaInfo()" class="underline underline-offset-2 font-bold ml-1 hover:text-white/80">Read more</button>
+            <button onclick="window.dismissAlphaBanner()" title="Dismiss for this session"
+                class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/20 transition-colors">
+                <i data-lucide="x" class="w-4 h-4"></i>
+            </button>
+        </div>`;
+
     const notif = state.notificationsOpen ? renderNotificationsPanel() : '';
     // Detail-page popups (version history / audit trail) render at the app root:
     // inside the fade-in page container their position:fixed would anchor to the
@@ -141,15 +154,13 @@ export function updateUI(rerender = false) {
         const backBtn = `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`;
         const rightBtn = state.wizardSubmitted ? '' :
             `<div class="flex items-center gap-2">${step > 1 ? backBtn : ''}${discardBtn}</div>`;
-        root.innerHTML = `<div class="sticky top-0 z-50">
+        root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}
             <div class="bg-white/90 border-b border-slate-200 backdrop-blur">
                 <div class="max-w-5xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
                     <div onclick="window.wizardExit()" class="flex items-center gap-3 cursor-pointer">
-                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-[85px] h-[85px] object-contain">
+                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-[68px] h-[68px] object-contain">
                         <div class="text-left leading-[1.3] font-normal text-sm text-slate-800 whitespace-nowrap">
                             <div>Constitutional<br>Amendment<br>Portal</div>
-                            <button onclick="event.stopPropagation(); window.showAlphaInfo()" title="What does alpha mean? Click to read more"
-                                class="inline-flex items-center gap-1 mt-1.5 pl-2 pr-1.5 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-sm font-medium leading-none cursor-pointer ring-1 ring-red-300 hover:ring-red-400 transition-all">Alpha<i data-lucide="info" class="w-3 h-3"></i></button>
                         </div>
                     </div>
                     ${rightBtn}
@@ -163,7 +174,7 @@ export function updateUI(rerender = false) {
         return;
     }
 
-    root.innerHTML = `<div class="sticky top-0 z-50">${nav}</div>` + `
+    root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}${nav}</div>` + `
  <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             ${content}
         </main>
@@ -269,6 +280,13 @@ function renderNotificationsPanel() {
 
 window.dismissError = () => {
     state.error = null;
+    updateUI();
+};
+
+// Hide the alpha banner for the rest of this browser session (returns next session).
+window.dismissAlphaBanner = () => {
+    state.alphaBannerDismissed = true;
+    try { sessionStorage.setItem('alphaBannerDismissed', '1'); } catch { /* private mode */ }
     updateUI();
 };
 
