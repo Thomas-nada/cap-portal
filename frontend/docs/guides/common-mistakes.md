@@ -6,9 +6,9 @@ These are the most frequent issues editors encounter during initial review. Avoi
 
 ## 1. Quoting the original text inaccurately
 
-If you ever transcribe constitutional text by hand instead of using the wizard's selection tool, even minor differences in punctuation, capitalization, or spacing will make your "original text" not actually match the Constitution — which undermines the revision and confuses reviewers.
+If you ever transcribe constitutional text by hand instead of using the form's selection tool, even minor differences in punctuation, capitalization, or spacing will make your "original text" not actually match the Constitution — which undermines the revision and confuses reviewers.
 
-**Fix:** Always use the Amendment Wizard's **Browse Constitution** step to highlight and select text directly, rather than typing it out. This guarantees an exact match.
+**Fix:** Always use the proposal form's **Browse Constitution** step to highlight and select text directly, rather than typing it out. This guarantees an exact match.
 
 ---
 

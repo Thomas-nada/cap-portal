@@ -18,8 +18,8 @@ export function renderWizard(state) {
     return `
  <div class="max-w-5xl mx-auto pb-20 fade-in text-left">
  <header class="mb-12">
- <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">Amendment wizard</h1>
- <p class="text-on-surface-variant text-lg font-medium mt-3">Guided process to create a Constitutional Amendment Proposal</p>
+ <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">New proposal</h1>
+ <p class="text-on-surface-variant text-lg font-medium mt-3">A guided, step-by-step process to create a Constitutional Amendment Proposal</p>
         </header>
 
         <!-- Progress -->

@@ -6,7 +6,7 @@ Every CAP and CIS goes through a mandatory deliberation period after submission.
 
 ## When Does It Start?
 
-The deliberation period begins the moment a proposal is submitted through the portal's Amendment Wizard. There is no separate step to "open" a proposal for discussion — submission and the start of deliberation are the same event. Every proposal enters the **consultation** lifecycle stage immediately on submission.
+The deliberation period begins the moment a proposal is submitted through the portal's proposal form. There is no separate step to "open" a proposal for discussion — submission and the start of deliberation are the same event. Every proposal enters the **consultation** lifecycle stage immediately on submission.
 
 ---
 
@@ -25,7 +25,7 @@ The recommended minimum deliberation period depends on the proposal's category:
 
 These are **recommended minimums**. A proposal may remain in consultation longer if community discussion is ongoing or if the author is incorporating feedback.
 
-The recommended review date is calculated automatically at submission, based on the category you chose in the wizard.
+The recommended review date is calculated automatically at submission, based on the category you chose in the form.
 
 ---
 

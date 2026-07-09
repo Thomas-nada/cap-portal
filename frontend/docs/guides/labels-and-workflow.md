@@ -56,7 +56,7 @@ Editors apply one of these labels to communicate their assessment of a proposal.
 
 ## Category Labels
 
-The category determines the recommended minimum deliberation period. It is chosen by the author in the submission wizard.
+The category determines the recommended minimum deliberation period. It is chosen by the author in the submission form.
 
 | Label | Deliberation Period | Typical Use |
 | :--- | :---: | :--- |
@@ -108,7 +108,7 @@ Proposal submitted
 
 - **Authors:** Can apply and remove the `author-ready` label via the **Author Controls** panel on their own proposal. This is the only label authors control directly.
 - **CAP Editors:** Apply and remove all lifecycle labels, status tags, editor signals, and special handling labels via the **Editor Controls** panel.
-- **The Wizard:** Automatically applies the type label (CAP/CIS) and category label when a proposal is first submitted.
+- **The form:** Automatically applies the type label (CAP/CIS) and category label when a proposal is first submitted.
 
 ---
 

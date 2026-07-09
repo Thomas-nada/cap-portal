@@ -1,10 +1,10 @@
-# Submitting a CAP or CIS with the Wizard
+# Submitting a CAP or CIS, Step by Step
 
-The Amendment Wizard is the guided, step-by-step flow for submitting a new CAP or CIS. It walks you through everything needed for a complete, reviewable proposal.
+The proposal form is the guided, step-by-step flow for submitting a new CAP or CIS. It walks you through everything needed for a complete, reviewable proposal.
 
 ---
 
-## Starting the Wizard
+## Starting a proposal
 
 Click **New Proposal** from the Dashboard or Registry. You'll need to be connected with your Cardano wallet — if you aren't, you'll be prompted to connect first.
 
@@ -51,7 +51,7 @@ Fill in:
 
 ## Submitting
 
-Once submitted, the wizard:
+Once submitted, the form:
 - Creates your proposal with the `consultation` lifecycle label.
 - Applies the type label (CAP/CIS) and your chosen category label automatically.
 - If your CAP includes at least one revision, automatically generates a **draft constitution** showing your proposed text merged into the current document — viewable from the Constitution page's version dropdown.

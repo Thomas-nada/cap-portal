@@ -5,7 +5,7 @@ const WALKTHROUGH_VIDEO_URL = 'videos/walkthrough_clean.mp4';
 const PROCESS_STEPS = [
     { num: 1, icon: 'wallet',         label: 'Connect Wallet',  desc: 'Sign in with any Cardano wallet — no account or password needed.', bg: 'bg-blue-500',   text: 'text-blue-500' },
     { num: 2, icon: 'book-open',      label: 'Browse & Select', desc: 'Read the Constitution and highlight the exact text you want to amend.', bg: 'bg-purple-500', text: 'text-purple-500' },
-    { num: 3, icon: 'wand-2',         label: 'Submit',          desc: 'Use the Amendment Wizard to write your CAP or CIS, step by step.', bg: 'bg-amber-500',        text: 'text-amber-600' },
+    { num: 3, icon: 'wand-2',         label: 'Submit',          desc: 'Write your CAP or CIS in a guided, step-by-step form.', bg: 'bg-amber-500',        text: 'text-amber-600' },
     { num: 4, icon: 'message-circle', label: 'Discuss & Track', desc: 'Your proposal goes public for consultation — track it through to ratification.', bg: 'bg-blue-500',   text: 'text-blue-500' },
 ];
 
@@ -44,22 +44,6 @@ export function renderDashboard(state) {
                 </div>
             </div>
             `).join('')}
-        </div>
-
-        <!-- Actions -->
- <div class="flex flex-wrap gap-4">
-            <button onclick="window.setView('wizard')"
- class="bg-brand-primary hover:bg-brand-primary-fixed-dim active:bg-brand-primary-active active:scale-[0.98] text-brand-on-primary px-10 h-12 rounded-full font-semibold uppercase text-sm tracking-widest transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)] flex items-center gap-3">
- <i data-lucide="wand-2" class="w-4 h-4"></i> Amendment Wizard
-            </button>
-            <button onclick="window.setView('constitution')"
- class="bg-transparent text-on-surface border-2 border-on-surface/40 hover:bg-white/10 px-10 h-12 rounded-full font-semibold uppercase text-sm tracking-widest transition-all flex items-center gap-3">
- <i data-lucide="book-open" class="w-4 h-4"></i> Read Constitution
-            </button>
-            <button onclick="window.setView('learn')"
- class="bg-transparent text-on-surface border-2 border-on-surface/40 hover:bg-white/10 px-10 h-12 rounded-full font-semibold uppercase text-sm tracking-widest transition-all flex items-center gap-3">
- <i data-lucide="graduation-cap" class="w-4 h-4"></i> Learn & Guide
-            </button>
         </div>
 
         <!-- Recent activity & Most discussed (up top — the live pulse of the portal) -->

@@ -35,6 +35,6 @@ If you disagree with the CAP process entirely, you may also bypass it and submit
 
 ## Where to start
 
-The [Amendment Wizard](/#/wizard) in the CAP Portal guides you through drafting a proposal step by step, including selecting the exact constitutional text you want to change.
+The [proposal form](/#/new) in the CAP Portal guides you through drafting a proposal step by step, including selecting the exact constitutional text you want to change.
 
 Alternatively, see [Creating a CAP or CIS via GitHub](creating-a-cap) for the manual submission process.

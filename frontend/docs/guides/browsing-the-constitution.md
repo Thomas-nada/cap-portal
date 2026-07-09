@@ -40,4 +40,4 @@ Click **Download (.txt)** to save the currently displayed version as a plain tex
 
 ## Selecting Text for a New CAP
 
-If you highlight any passage while browsing (outside of Diff Mode), a popup appears letting you flag it as the target of a new amendment — click **+ CAP** to add it to a new proposal, or **+ CIS** to cite it in a new issue statement. This is the same selection mechanism used in [the Wizard](submitting-with-the-wizard) — browsing here and starting the Wizard from the New Proposal button both feed into the same selection step.
+If you highlight any passage while browsing (outside of Diff Mode), a popup appears letting you flag it as the target of a new amendment — click **+ CAP** to add it to a new proposal, or **+ CIS** to cite it in a new issue statement. This is the same selection mechanism used in [the proposal form](submitting-with-the-wizard) — browsing here and starting the form from the New Proposal button both feed into the same selection step.

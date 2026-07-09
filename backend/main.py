@@ -94,7 +94,7 @@ _DEFAULT_GUIDES = [
     ("writing-caps",     "Writing CAPs",        1, "cap-template-guide",                 "CAP Template Guide"),
     ("writing-caps",     "Writing CAPs",        3, "common-mistakes",                    "Common Mistakes to Avoid"),
     ("using-the-portal", "Using the Portal",    0, "connecting-your-wallet",             "Connecting Your Cardano Wallet"),
-    ("using-the-portal", "Using the Portal",    1, "submitting-with-the-wizard",         "Submitting a CAP with the Wizard"),
+    ("using-the-portal", "Using the Portal",    1, "submitting-with-the-wizard",         "Submitting a CAP, Step by Step"),
     ("using-the-portal", "Using the Portal",    2, "browsing-the-constitution",          "Browsing & Comparing the Constitution"),
     ("using-the-portal", "Using the Portal",    3, "commenting-and-discussing",          "Commenting & Discussion"),
     ("using-the-portal", "Using the Portal",    4, "labels-and-workflow",                "Labels & Workflow"),
@@ -114,7 +114,7 @@ _DEFAULT_GUIDES = [
     ("faq",              "FAQ",                12, "faq-what-are-guardrails",            "What are the Guardrails?"),
     ("faq",              "FAQ",                13, "faq-what-is-a-cap-editor",           "What is a CAP Editor?"),
     ("faq",              "FAQ",                14, "faq-do-i-need-a-wallet",             "Do I need a Cardano wallet?"),
-    ("faq",              "FAQ",                15, "faq-what-is-the-amendment-wizard",   "What is the Amendment Wizard?"),
+    ("faq",              "FAQ",                15, "faq-what-is-the-amendment-wizard",   "How does the proposal form work?"),
 ]
 
 with engine.connect() as _conn:
@@ -130,6 +130,18 @@ with engine.connect() as _conn:
             except Exception:
                 pass
         _conn.commit()
+    # Terminology migration: retitle the two "Wizard" guides on already-seeded
+    # databases. Matches the old default title only, so editor edits are kept.
+    for _slug, _old, _new in [
+        ("submitting-with-the-wizard", "Submitting a CAP with the Wizard", "Submitting a CAP, Step by Step"),
+        ("faq-what-is-the-amendment-wizard", "What is the Amendment Wizard?", "How does the proposal form work?"),
+    ]:
+        try:
+            _conn.execute(text("UPDATE guides SET title = :new WHERE slug = :slug AND title = :old"),
+                          {"new": _new, "slug": _slug, "old": _old})
+            _conn.commit()
+        except Exception:
+            pass
 
 def client_ip(request: Request) -> str:
     """Real client IP for rate limiting. Behind Render's proxy the socket peer

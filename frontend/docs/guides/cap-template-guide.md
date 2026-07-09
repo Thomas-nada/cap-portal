@@ -1,6 +1,6 @@
 # CAP Template Guide
 
-Every CAP submitted through the Amendment Wizard is assembled into the same structure automatically. This guide explains what belongs in each section and how to write it well. For the click-by-click submission flow, see [Submitting a CAP with the Wizard](submitting-with-the-wizard).
+Every CAP submitted through the proposal form is assembled into the same structure automatically. This guide explains what belongs in each section and how to write it well. For the click-by-click submission flow, see [Submitting a CAP, Step by Step](submitting-with-the-wizard).
 
 ---
 
@@ -43,7 +43,7 @@ A strong Analysis & Test section:
 
 ## Revisions
 
-For each passage you select from the Constitution in Step 2 of the wizard, the portal automatically generates a revision block showing:
+For each passage you select from the Constitution in Step 2 of the form, the portal automatically generates a revision block showing:
 - **Original Text** — the exact passage you selected, quoted.
 - **Proposed Revision** — your replacement (or inserted) text.
 

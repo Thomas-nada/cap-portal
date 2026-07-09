@@ -41,4 +41,4 @@ If you are submitting a CAP and want credit under a specific name, use the displ
 
 ## The portal and authentication
 
-The CAP Portal can be used fully without authentication for reading. The **Amendment Wizard** — the guided proposal drafting tool — is available to logged-in users who connect their wallet.
+The CAP Portal can be used fully without authentication for reading. The **proposal form** — the guided proposal drafting tool — is available to logged-in users who connect their wallet.

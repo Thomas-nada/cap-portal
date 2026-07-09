@@ -118,12 +118,6 @@ export function updateUI(rerender = false) {
         default:             content = renderDashboard(state);
     }
 
-    const alphaBanner = `
-        <div class="bg-red-600 text-white text-center text-sm font-semibold px-4 py-2">
-            This is an alpha version currently in testing.
-            <button onclick="window.showAlphaInfo()" class="underline underline-offset-2 font-bold ml-1 hover:text-white/80">Read more</button>
-        </div>`;
-
     const notif = state.notificationsOpen ? renderNotificationsPanel() : '';
     // Detail-page popups (version history / audit trail) render at the app root:
     // inside the fade-in page container their position:fixed would anchor to the
@@ -145,16 +139,17 @@ export function updateUI(rerender = false) {
         const rightBtn = state.wizardSubmitted ? '' : (step > 1
             ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
             : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`);
-        root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}
+        root.innerHTML = `<div class="sticky top-0 z-50">
             <div class="bg-white/90 border-b border-slate-200 backdrop-blur">
-                <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between">
-                    <button onclick="window.wizardExit()" class="flex items-center gap-3">
-                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-9 h-9 object-contain">
-                        <div class="text-left leading-none">
-                            <span class="block font-semibold text-slate-900">Constitutional Amendment Portal</span>
-                            <span class="block text-sm font-semibold text-slate-400 uppercase tracking-[0.2em]">Cardano Constitution</span>
+                <div class="max-w-5xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
+                    <div onclick="window.wizardExit()" class="flex items-center gap-3 cursor-pointer">
+                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-[85px] h-[85px] object-contain">
+                        <div class="text-left leading-[1.3] font-normal text-sm text-slate-800 whitespace-nowrap">
+                            <div>Constitutional<br>Amendment<br>Portal</div>
+                            <button onclick="event.stopPropagation(); window.showAlphaInfo()" title="What does alpha mean? Click to read more"
+                                class="inline-flex items-center gap-1 mt-1.5 pl-2 pr-1.5 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-sm font-medium leading-none cursor-pointer ring-1 ring-red-300 hover:ring-red-400 transition-all">Alpha<i data-lucide="info" class="w-3 h-3"></i></button>
                         </div>
-                    </button>
+                    </div>
                     ${rightBtn}
                 </div>
             </div>
@@ -166,7 +161,7 @@ export function updateUI(rerender = false) {
         return;
     }
 
-    root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}${nav}</div>` + `
+    root.innerHTML = `<div class="sticky top-0 z-50">${nav}</div>` + `
  <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
             ${content}
         </main>
@@ -294,7 +289,7 @@ window.setView = (view) => {
         dashboard: '#/home',
         list: state.proposalsTab === 'board' ? '#/board' : '#/proposals',
         constitution: '#/constitution',
-        wizard: '#/wizard', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
+        wizard: '#/new', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
     };
     if (map[view]) window.location.hash = map[view];
     updateUI();
@@ -331,7 +326,7 @@ window.handleRouting = async () => {
     } else if (hash === '#/constitution') {
         state.view = 'constitution';
         loadConstitution();
-    } else if (hash === '#/wizard') {
+    } else if (hash === '#/new' || hash === '#/wizard') {
         state.view = 'wizard';
         updateUI();
     } else if (hash.startsWith('#/detail/')) {
@@ -1743,7 +1738,7 @@ window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; sta
 // Confirmed reset for the "Start Over" button — guards against a misclick
 // discarding a draft the user has spent several steps building.
 window.wizardStartOver = () => {
-    if (!confirm('Start over? This discards everything you\'ve entered in the wizard.')) return;
+    if (!confirm('Start over? This discards everything you\'ve entered.')) return;
     window.wizardReset();
 };
 
@@ -1886,7 +1881,7 @@ function showSelectionAddedBanner() {
             </button>
             <button onclick="window.returnToWizardFromConstitution()"
                 style="background:#2563eb;border:none;color:#fff;cursor:pointer;padding:7px 16px;border-radius:12px;font-size:14px;font-weight:800;letter-spacing:.04em;text-transform:uppercase;">
-                Back to Wizard
+                Back to Proposal
             </button>
         </div>`;
     document.body.appendChild(banner);

@@ -120,7 +120,7 @@ Authorization: Bearer <token>
 }
 ```
 
-`structured` is a free-form object — the API does not enforce a fixed schema on its keys — but the fields above are what the portal's own Amendment Wizard generates, and what every other client should produce for consistency. Content supports Markdown.
+`structured` is a free-form object — the API does not enforce a fixed schema on its keys — but the fields above are what the portal's own proposal form generates, and what every other client should produce for consistency. Content supports Markdown.
 
 ### Get proposal versions
 

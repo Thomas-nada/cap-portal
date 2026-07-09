@@ -197,7 +197,7 @@ export function renderLearnHub(state) {
                 <button onclick="window.setView('wizard')"
  class="px-8 py-4 rounded-2xl bg-blue-600 text-white font-black uppercase text-sm tracking-widest hover:-translate-y-1 active:scale-95 transition-all shadow-xl flex items-center gap-3">
  <i data-lucide="wand-2" class="w-5 h-5"></i>
-                    Use Amendment Wizard
+                    Start a Proposal
                 </button>
                 <button onclick="window.setView('constitution')"
  class="px-8 py-4 rounded-2xl bg-white/80 text-slate-900 border border-slate-200 font-black uppercase text-sm tracking-widest hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-3">

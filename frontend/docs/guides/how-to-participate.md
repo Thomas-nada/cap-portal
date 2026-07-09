@@ -24,11 +24,11 @@ Every CAP and CIS has an open discussion thread for the duration of its delibera
 
 ### Submit a CIS
 
-If you've identified a constitutional problem, ambiguity, or governance gap but aren't ready to propose a specific fix, submit a **Constitutional Issue Statement (CIS)**. This formally documents the problem and opens it for community discussion. Use **New Proposal** in the portal and choose CIS in the wizard — see [Submitting a CAP with the Wizard](submitting-with-the-wizard).
+If you've identified a constitutional problem, ambiguity, or governance gap but aren't ready to propose a specific fix, submit a **Constitutional Issue Statement (CIS)**. This formally documents the problem and opens it for community discussion. Use **New Proposal** in the portal and choose CIS in the form — see [Submitting a CAP, Step by Step](submitting-with-the-wizard).
 
 ### Submit a CAP
 
-If you have a specific proposal to change or clarify the Constitution, submit a **Constitutional Amendment Proposal (CAP)**. The Amendment Wizard guides you through the process step by step, including selecting the exact constitutional text you want to change.
+If you have a specific proposal to change or clarify the Constitution, submit a **Constitutional Amendment Proposal (CAP)**. The proposal form guides you through the process step by step, including selecting the exact constitutional text you want to change.
 
 ---
 

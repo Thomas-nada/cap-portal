@@ -69,16 +69,16 @@ export function renderNav(state) {
 
     return `
  <nav class="bg-[#0228aa] shadow-md">
- <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 flex justify-between items-center">
+ <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[104px] flex justify-between items-center">
  <div class="flex items-center gap-3 cursor-pointer flex-shrink-0" onclick="window.setView('dashboard')">
- <div class="w-11 h-11 flex items-center justify-center flex-shrink-0">
- <img src="CAP-white.png" alt="CAP Logo" class="w-11 h-11 object-contain">
+ <div class="w-[85px] h-[85px] flex items-center justify-center flex-shrink-0">
+ <img src="CAP-white.png" alt="CAP Logo" class="w-[85px] h-[85px] object-contain">
                 </div>
-                <!-- Full wordmark needs room: hidden while the desktop menu (lg)
-                     competes for width, back at xl where both fit comfortably. -->
- <div class="hidden sm:block lg:hidden xl:block text-left whitespace-nowrap">
- <h1 class="font-semibold text-base leading-none tracking-tight text-white">Constitutional Amendment Portal</h1>
- <p class="text-sm font-semibold text-white/60 uppercase tracking-[0.2em] mt-1">Cardano Constitution</p>
+                <!-- Stacked wordmark is narrow, so it fits at every width -->
+ <div class="hidden sm:block text-left whitespace-nowrap leading-[1.3]">
+ <h1 class="font-normal text-sm text-white/95">Constitutional<br>Amendment<br>Portal</h1>
+                    <button onclick="event.stopPropagation(); window.showAlphaInfo()" title="What does alpha mean? Click to read more"
+ class="inline-flex items-center gap-1 mt-1.5 pl-2 pr-1.5 py-0.5 rounded-full bg-red-600 hover:bg-red-500 text-white text-sm font-medium leading-none cursor-pointer ring-1 ring-white/40 hover:ring-white/80 transition-all">Alpha<i data-lucide="info" class="w-3 h-3"></i></button>
                 </div>
             </div>
 

@@ -1,6 +1,6 @@
 # Creating a CAP or CIS: Quick Checklist
 
-A condensed, checklist-style reference for creating a proposal. For the full step-by-step walkthrough with field-by-field detail, see [Submitting a CAP with the Wizard](submitting-with-the-wizard).
+A condensed, checklist-style reference for creating a proposal. For the full step-by-step walkthrough with field-by-field detail, see [Submitting a CAP, Step by Step](submitting-with-the-wizard).
 
 ---
 
