@@ -136,9 +136,11 @@ export function updateUI(rerender = false) {
     // logo (→ home) and a Discard (step 1) / Back (later steps) control.
     if (state.view === 'wizard') {
         const step = state.wizardStep || 1;
-        const rightBtn = state.wizardSubmitted ? '' : (step > 1
-            ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
-            : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`);
+        // Discard is available on every step; Back appears alongside it from step 2 on.
+        const discardBtn = `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-red-600 hover:bg-red-50 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`;
+        const backBtn = `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-2 rounded-xl text-sm font-bold text-slate-600 hover:bg-slate-100 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`;
+        const rightBtn = state.wizardSubmitted ? '' :
+            `<div class="flex items-center gap-2">${step > 1 ? backBtn : ''}${discardBtn}</div>`;
         root.innerHTML = `<div class="sticky top-0 z-50">
             <div class="bg-white/90 border-b border-slate-200 backdrop-blur">
                 <div class="max-w-5xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
