@@ -38,7 +38,10 @@
     <style>
         .glass { backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px); }
         .fade-in { animation: fadeIn 0.5s ease-out forwards; }
-        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+        /* End state must be transform:none — a retained transform turns the page
+           container into the containing block for position:fixed children, which
+           anchors modals to the page instead of the viewport. */
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: none; } }
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
         .prose pre code {

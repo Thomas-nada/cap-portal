@@ -7,7 +7,6 @@ export function renderNav(state) {
     const menu = [
         { id: 'dashboard',    label: 'Home',         icon: 'home' },
         { id: 'list',         label: 'Proposals',    icon: 'database' },
-        { id: 'kanban',       label: 'Board',        icon: 'layout-dashboard' },
         { id: 'constitution', label: 'Constitution', icon: 'book-open' },
         { id: 'learn',        label: 'Guides',       icon: 'book' },
         ...(state.user?.is_admin ? [{ id: 'moderation', label: 'Moderation', icon: 'gavel' }] : []),

@@ -200,6 +200,8 @@ export function renderDetail(state) {
     const LIFECYCLE = ['consultation', 'ready', 'done', 'withdrawn'];
     const nonLifecycle = (p.labels || []).filter(l => !LIFECYCLE.includes(l.name.toLowerCase()));
 
+    const versions = state.proposalVersions || [];
+
     return `
  <div class="max-w-7xl mx-auto pb-20 fade-in text-left">
  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-12">
@@ -207,7 +209,19 @@ export function renderDetail(state) {
  <i data-lucide="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition-transform"></i>
                     Back to Registry
                 </button>
- <span class="text-sm font-black text-on-surface-variant uppercase tracking-widest">#${p.number}</span>
+ <div class="flex items-center gap-2 flex-wrap">
+                    ${versions.length ? `
+                    <button onclick="window.toggleVersionHistory()"
+ class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 border border-slate-200 text-sm font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 transition-all">
+ <i data-lucide="history" class="w-4 h-4"></i> Version history
+ <span class="text-sm font-black text-blue-600">${versions.length}</span>
+                    </button>` : ''}
+                    <button onclick="window.toggleAuditPanel()"
+ class="flex items-center gap-2 px-4 py-2 rounded-xl bg-white/80 border border-slate-200 text-sm font-bold text-slate-600 hover:border-blue-300 hover:text-blue-700 transition-all">
+ <i data-lucide="scroll-text" class="w-4 h-4"></i> Audit trail
+                    </button>
+ <span class="text-sm font-black text-on-surface-variant uppercase tracking-widest ml-2">#${p.number}</span>
+                </div>
             </div>
 
             <!-- Full-width header: tags, title, meta -->
@@ -252,9 +266,18 @@ export function renderDetail(state) {
                 </div>
             </header>
 
- <div class="grid grid-cols-1 lg:grid-cols-3 gap-16 items-start">
+            <!-- Lifecycle stepper + contextual actions -->
+            ${renderLifecycleStepper(p, state, isAuthor, isEditor)}
+
+            <!-- Author / moderation actions -->
+            ${renderActionRow(p, state, isAuthor, isEditor, isAdmin)}
+
+            <!-- Editor tools (status tags, signal, withdraw override) -->
+            ${isEditor ? renderEditorControls(p, state) : ''}
+
+ <div class="mt-16">
                 <!-- Main Body -->
- <div class="lg:col-span-2 space-y-16">
+ <div class="space-y-16">
                     <!-- Proposal Body -->
  <article class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed">
                         ${p.structured ? renderStructuredBody(p.structured, p.type) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
@@ -334,7 +357,17 @@ export function renderDetail(state) {
                                 </div>`;
                             }).join('')}
 
-                            ${state.user ? `
+                            ${!state.user ? `
+ <div class="pt-8 pl-0 sm:pl-20">
+ <div class="bg-white/80 p-8 rounded-[2.5rem] border border-slate-100 shadow-sm flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4">
+ <p class="text-sm text-slate-500 font-bold">Have a wallet? Connect to join the discussion.</p>
+                                    <button onclick="window.loginWithWallet()"
+ class="inline-flex items-center justify-center gap-2 px-6 py-2.5 bg-slate-950 text-white rounded-xl text-sm font-black hover:opacity-90 transition-all flex-shrink-0">
+ <i data-lucide="wallet" class="w-3.5 h-3.5"></i> Connect Wallet
+                                    </button>
+                                </div>
+                            </div>
+                            ` : `
  <div class="pt-8 pl-0 sm:pl-20">
  <form onsubmit="event.preventDefault(); window.postComment(this)" class="space-y-6">
                                     <textarea name="comment" required placeholder="Share your thoughts…" maxlength="20000"
@@ -349,88 +382,68 @@ export function renderDetail(state) {
                                     </div>
                                 </form>
                             </div>
-                            ` : ''}
+                            `}
                         </div>
                     </section>
 
                 </div>
-
-                <!-- Sidebar -->
- <aside class="space-y-8 sticky top-28">
-                    ${!state.user ? `
- <div class="bg-white/80 p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
- <p class="text-sm text-slate-500 font-bold mb-3">Have a wallet? Connect to comment.</p>
-                        <button onclick="window.loginWithWallet()"
- class="w-full inline-flex items-center justify-center gap-2 py-2.5 bg-slate-950 text-white rounded-xl text-sm font-black hover:opacity-90 transition-all">
- <i data-lucide="wallet" class="w-3.5 h-3.5"></i> Connect Wallet
-                        </button>
-                    </div>
-                    ` : ''}
-
-                    <!-- Version History -->
-                    ${renderVersionHistory(state, p)}
-
-                    <!-- Audit Trail -->
- <div class="bg-white/80 p-8 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
- <button onclick="window.toggleAuditPanel()" class="w-full flex items-center justify-between">
- <h3 class="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Audit Trail</h3>
- <div class="flex items-center gap-2">
- <span class="w-1.5 h-1.5 rounded-full bg-blue-600 animate-pulse block"></span>
- <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${state.auditPanelExpanded ? 'rotate-180' : ''}"></i>
-                            </div>
-                        </button>
- ${state.auditPanelExpanded ? `<div class="mt-8">${renderAuditTrail(state)}</div>` : ''}
-                    </div>
-
-                    <!-- Author Controls -->
-                    ${isAuthor ? renderAuthorControls(p, state) : ''}
-
-                    <!-- Editor Controls -->
-                    ${isEditor ? renderEditorControls(p, state) : ''}
-
-                    <!-- Moderation (flag for removal; admins get a queue link) -->
-                    ${(isEditor || isAdmin) ? renderModerationPanel(p, state, isAdmin) : ''}
-                </aside>
             </div>
         </div>`;
 }
 
-function renderVersionHistory(state, p) {
-    const versions = state.proposalVersions || [];
-    if (!versions.length) return '';
+// Rendered by updateUI at the app root — NOT inside the page container, whose
+// fade-in transform would turn position:fixed into page-anchored positioning.
+export function renderDetailOverlays(state) {
+    const p = state.currentProposal;
+    if (!p) return '';
+    return (state.versionHistoryExpanded ? renderDetailModal('Version history', 'toggleVersionHistory', renderVersionList(state, p)) : '')
+         + (state.auditPanelExpanded ? renderDetailModal('Audit trail', 'toggleAuditPanel', renderAuditTrail(state)) : '');
+}
 
-    const expanded = state.versionHistoryExpanded;
+// Full-screen overlay used for the version-history and audit-trail popups.
+function renderDetailModal(title, closeFn, body) {
     return `
- <div class="bg-white/80 p-8 rounded-[2.5rem] border border-slate-100 shadow-sm">
- <button onclick="window.toggleVersionHistory()" class="w-full flex items-center justify-between">
- <h3 class="text-sm font-black uppercase tracking-[0.3em] text-slate-400">Version History</h3>
- <div class="flex items-center gap-2">
- <span class="text-sm font-black text-blue-600 uppercase tracking-widest">${versions.length} version${versions.length !== 1 ? 's' : ''}</span>
- <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-slate-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}"></i>
+ <div onclick="if (event.target === this) window.${closeFn}()"
+ class="fixed inset-0 z-[60] bg-slate-950/50 backdrop-blur-sm flex items-start sm:items-center justify-center p-4 sm:p-8">
+ <div class="bg-white w-full max-w-2xl max-h-[85vh] rounded-[2rem] shadow-2xl flex flex-col overflow-hidden">
+ <div class="flex items-center justify-between px-8 py-5 border-b border-slate-100 flex-shrink-0">
+ <h3 class="text-xl font-black tracking-tight text-slate-900">${title}</h3>
+                <button onclick="window.${closeFn}()"
+ class="w-9 h-9 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+ <i data-lucide="x" class="w-4 h-4"></i>
+                </button>
             </div>
-        </button>
- ${expanded ? `<div class="space-y-2 mt-6">
-            ${versions.map((v, i) => {
-                const isCurrent = i === 0;
-                const when = new Date(v.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
-                return `
-                <button onclick="window.openVersionModal(${p.number}, ${v.version})"
+ <div class="p-8 overflow-y-auto">${body}</div>
+        </div>
+    </div>`;
+}
+
+function renderVersionList(state, p) {
+    const versions = state.proposalVersions || [];
+    if (!versions.length) return `<p class="text-sm text-slate-400 italic">No versions yet.</p>`;
+    return `
+ <div class="space-y-2">
+        ${versions.map((v, i) => {
+            const isCurrent = i === 0;
+            const when = new Date(v.created_at).toLocaleDateString(undefined, { day: 'numeric', month: 'short', year: 'numeric' });
+            return `
+            <button onclick="window.openVersionModal(${p.number}, ${v.version})"
  class="w-full text-left flex items-center gap-4 px-4 py-3 rounded-2xl transition-all
-                        ${isCurrent ? 'bg-blue-50 border border-blue-100 ' : 'hover:bg-slate-50 border border-transparent'}">
+                    ${isCurrent ? 'bg-blue-50 border border-blue-100 ' : 'hover:bg-slate-50 border border-transparent'}">
  <span class="flex-shrink-0 w-10 h-10 rounded-xl flex items-center justify-center text-sm font-black
-                        ${isCurrent ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 '}">
-                        V${v.version}
-                    </span>
+                    ${isCurrent ? 'bg-blue-600 text-white' : 'bg-slate-100 text-slate-500 '}">
+                    V${v.version}
+                </span>
  <div class="min-w-0 flex-1">
  <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(v.change_summary || 'Update')}</p>
  <p class="text-sm text-slate-400 mt-0.5">${when} · ${escapeHtml(v.created_by_name || shortAddress(v.created_by))}</p>
  ${v.content_hash ? `<p class="text-sm text-slate-300 font-mono mt-1 truncate" title="${v.content_hash}">${v.content_hash.slice(0, 16)}…</p>` : ''}
-                    </div>
+                </div>
  ${isCurrent ? `<span class="flex-shrink-0 text-sm font-black uppercase tracking-widest text-blue-500">Current</span>` : `<i data-lucide="eye" class="w-3.5 h-3.5 text-slate-300 flex-shrink-0"></i>`}
-                </button>`;
-            }).join('')}
-        </div>` : ''}
-    </div>`;
+            </button>`;
+        }).join('')}
+    </div>
+ <p class="text-sm text-slate-400 mt-4">Click a version to view its full text.</p>`;
 }
 
 function renderAuditTrail(state) {
@@ -493,118 +506,157 @@ function renderAuditTrail(state) {
     </button>` : ''}`;
 }
 
-function renderAuthorControls(p, state) {
+// The proposal's process, visualised: Consultation → Ready → Done. The author's
+// advisory "ready" signal and the editor's stage advance live on the stepper
+// itself, so it's clear they are part of moving the proposal forward.
+function renderLifecycleStepper(p, state, isAuthor, isEditor) {
+    const labels = (p.labels || []).map(l => l.name);
+    const stage = ['consultation','ready','done','withdrawn'].find(s => labels.includes(s)) || 'consultation';
+    const authorReady = labels.includes('author-ready');
+
+    if (stage === 'withdrawn') {
+        return `
+ <div class="bg-red-50 border border-red-200 rounded-[2rem] px-8 py-5 flex items-center gap-3">
+ <i data-lucide="x-circle" class="w-5 h-5 text-red-500 flex-shrink-0"></i>
+ <p class="text-sm font-bold text-red-700">This proposal has been withdrawn. It is closed and no longer progresses through the process.</p>
+        </div>`;
+    }
+
+    const STEPS = [
+        { id: 'consultation', label: 'Consultation', desc: 'Open for community discussion' },
+        { id: 'ready',        label: 'Ready',        desc: 'Under editor review' },
+        { id: 'done',         label: 'Done',         desc: 'Finalised and closed' },
+    ];
+    const curIdx = STEPS.findIndex(s => s.id === stage);
+    const nextStage = curIdx < STEPS.length - 1 ? STEPS[curIdx + 1].id : null;
+
+    // Contextual action attached to the stepper.
+    const signalText = stage === 'consultation' ? 'Signal ready for review'
+                     : stage === 'ready' ? 'Signal ready for completion'
+                     : null;
+    let action = '';
+    if (isAuthor && signalText) {
+        action = authorReady
+            ? `<div class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-green-600 text-white text-sm font-bold">
+ <i data-lucide="check-circle" class="w-4 h-4"></i> Ready signal active — editors have been signalled
+               </div>
+               <button onclick="window.authorSignalReady()" class="text-sm font-bold text-slate-400 hover:text-slate-600 underline underline-offset-2 transition-colors">Retract</button>`
+            : `<button onclick="window.authorSignalReady()"
+ class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-green-600 hover:bg-green-700 text-white text-sm font-bold transition-all">
+ <i data-lucide="thumbs-up" class="w-4 h-4"></i> ${signalText}
+               </button>
+ <span class="text-sm text-slate-400">Tells the editors you consider this proposal ready to move to the next stage. Advisory — editors decide.</span>`;
+    } else if (isEditor && nextStage) {
+        const nextLabel = STEPS[curIdx + 1].label;
+        action = `
+            ${authorReady ? `<span class="flex items-center gap-1.5 px-3 py-2 rounded-xl bg-green-50 border border-green-200 text-sm font-bold text-green-700"><i data-lucide="thumbs-up" class="w-3.5 h-3.5"></i> Author has signalled ready</span>` : ''}
+            <button onclick="window.editorSetLifecycle('${nextStage}')"
+ class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-all">
+ <i data-lucide="arrow-right-circle" class="w-4 h-4"></i> Move to ${nextLabel}
+            </button>
+ <span class="text-sm text-slate-400">Permanently recorded.</span>`;
+    }
+
+    return `
+ <div class="bg-white/80 rounded-[2rem] border border-slate-100 shadow-sm px-6 sm:px-10 py-6">
+ <div class="flex items-center">
+            ${STEPS.map((s, i) => `
+ <div class="flex flex-col items-center gap-1.5 flex-shrink-0">
+ <div class="w-9 h-9 rounded-full flex items-center justify-center font-black text-sm ${
+                    i < curIdx ? 'bg-green-500 text-white' :
+                    i === curIdx ? 'bg-blue-600 text-white' :
+                    'bg-slate-200 text-slate-400'
+                }">
+                    ${i < curIdx ? '<i data-lucide="check" class="w-4 h-4"></i>' : i + 1}
+                </div>
+ <span class="text-sm font-black uppercase tracking-widest ${i === curIdx ? 'text-blue-600' : i < curIdx ? 'text-green-600' : 'text-slate-400'}">${s.label}</span>
+ <span class="text-sm text-slate-400 hidden sm:block">${s.desc}</span>
+            </div>
+ ${i < STEPS.length - 1 ? `<div class="h-0.5 flex-1 mx-3 sm:mx-5 ${i < curIdx ? 'bg-green-500' : 'bg-slate-200'} -mt-10"></div>` : ''}
+            `).join('')}
+        </div>
+        ${action ? `<div class="mt-5 pt-5 border-t border-slate-100 flex flex-wrap items-center gap-3">${action}</div>` : ''}
+    </div>`;
+}
+
+// Author actions (edit / withdraw) and moderation controls, directly under the
+// key-details header where they're easy to find — no more sidebar.
+function renderActionRow(p, state, isAuthor, isEditor, isAdmin) {
     const labels = (p.labels || []).map(l => l.name);
     const stage = ['consultation','ready','done','withdrawn'].find(s => labels.includes(s)) || null;
-    const authorReady = labels.includes('author-ready');
     const isActive = !stage || stage === 'consultation';
     const isLocked = stage === 'ready' || stage === 'done' || stage === 'withdrawn';
     const isRevision = labels.includes('revision');
+    const mod = p.moderation_status || 'visible';
 
-    const signalText = stage === 'consultation' ? 'Signal Ready for Review'
-                     : stage === 'ready' ? 'Signal Ready for Completion'
-                     : null;
+    const parts = [];
 
-    const expanded = state.authorControlsExpanded;
-    return `
- <div class="bg-white/80 p-8 rounded-[2.5rem] border-2 border-blue-100 shadow-xl">
- <button onclick="window.toggleAuthorControls()" class="w-full flex items-center justify-between">
- <h3 class="text-sm font-black uppercase tracking-[0.2em] text-blue-600">Author Controls</h3>
- <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-blue-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}"></i>
-        </button>
+    if (isAuthor && isRevision) {
+        parts.push(`
+ <span class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-orange-50 border border-orange-200 text-sm font-bold text-orange-700">
+ <i data-lucide="pencil-line" class="w-4 h-4"></i> Revision requested by an editor
+        </span>`);
+    }
+    if (isAuthor && isActive) {
+        parts.push(`
+        <button onclick="window.startEdit()"
+ class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-blue-50 border border-blue-100 hover:bg-blue-100 text-sm font-bold text-blue-700 transition-all">
+ <i data-lucide="edit-3" class="w-4 h-4"></i> Edit proposal
+        </button>`);
+    }
+    if (isAuthor && isLocked && stage !== 'withdrawn') {
+        parts.push(`
+ <span class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-slate-50 border border-slate-200 text-sm font-bold text-slate-500">
+ <i data-lucide="lock" class="w-4 h-4"></i> Editing locked — past consultation
+        </span>`);
+    }
+    if (isAuthor && stage !== 'withdrawn') {
+        parts.push(`
+        <button onclick="window.authorWithdraw()"
+ class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-red-50 hover:border-red-200 hover:text-red-600 text-sm font-bold text-slate-600 transition-all">
+ <i data-lucide="x-circle" class="w-4 h-4"></i> Withdraw proposal
+        </button>`);
+    }
 
- ${expanded ? `<div class="space-y-6 mt-6">
-        ${isRevision ? `
- <div class="flex items-start gap-3 px-4 py-3 rounded-2xl bg-orange-50 border border-orange-200 ">
- <i data-lucide="pencil-line" class="w-3.5 h-3.5 text-orange-500 flex-shrink-0 mt-0.5"></i>
-            <div>
- <span class="text-sm font-black uppercase tracking-wider text-orange-700 block">Revision Active</span>
- <span class="text-sm text-orange-500 leading-relaxed">An editor has flagged this proposal for revision.</span>
-            </div>
-        </div>` : ''}
+    // Moderation (editors/admins)
+    if (isEditor || isAdmin) {
+        if (mod === 'under_review') {
+            parts.push(`<span class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-amber-500 text-white text-sm font-black uppercase tracking-wider"><i data-lucide="eye-off" class="w-4 h-4"></i> Hidden — under review</span>`);
+        } else if (mod === 'removed') {
+            parts.push(`<span class="flex items-center gap-2 px-4 py-2.5 rounded-xl bg-red-600 text-white text-sm font-black uppercase tracking-wider"><i data-lucide="ban" class="w-4 h-4"></i> Removed — admins only</span>`);
+        } else {
+            parts.push(`
+            <button onclick="window.flagProposalForRemoval()" title="Hides the proposal and sends it to an admin with your reason. The author is notified."
+ class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-red-50 border border-red-200 hover:bg-red-100 text-sm font-bold text-red-600 transition-all">
+ <i data-lucide="flag" class="w-4 h-4"></i> Flag for removal
+            </button>`);
+        }
+        if (isAdmin && mod !== 'visible') {
+            parts.push(`
+            <button onclick="window.setView('moderation')"
+ class="flex items-center gap-2 px-5 py-2.5 rounded-xl bg-slate-50 border border-slate-200 hover:bg-slate-100 text-sm font-bold text-slate-600 transition-all">
+ <i data-lucide="gavel" class="w-4 h-4"></i> Review in moderation queue
+            </button>`);
+        }
+    }
 
- <div class="space-y-3">
-            ${signalText ? `
-            <button onclick="window.authorSignalReady()"
- class="w-full flex items-center justify-between p-5 rounded-2xl transition-all group border ${
-                    authorReady ? 'bg-green-600 border-green-600' : 'bg-green-50 border-green-100 hover:bg-green-100 '
-                }">
- <div class="flex items-center gap-3">
- <i data-lucide="${authorReady ? 'check-circle' : 'thumbs-up'}" class="w-4 h-4 ${authorReady ? 'text-white' : 'text-green-600'}"></i>
- <span class="text-sm font-bold ${authorReady ? 'text-white' : 'text-green-700 '}">
-                        ${authorReady ? '✓ Ready Signal Active' : signalText}
-                    </span>
-                </div>
- <i data-lucide="chevron-right" class="w-4 h-4 ${authorReady ? 'text-green-200' : 'text-green-300'} group-hover:translate-x-1 transition-transform"></i>
-            </button>
-            ` : ''}
-
-            ${isActive ? `
- <button onclick="window.startEdit()" class="w-full flex items-center justify-between p-5 rounded-2xl bg-blue-50 hover:bg-blue-100 transition-all group">
- <div class="flex items-center gap-3">
- <i data-lucide="edit-3" class="w-4 h-4 text-blue-600"></i>
- <span class="text-sm font-bold text-blue-600">Edit Proposal</span>
-                </div>
- <i data-lucide="chevron-right" class="w-4 h-4 text-blue-300 group-hover:translate-x-1 transition-transform"></i>
-            </button>
-            ` : ''}
-            ${isLocked ? `
- <div class="flex items-center gap-3 px-4 py-3 rounded-2xl bg-slate-50 border border-slate-200 ">
- <i data-lucide="lock" class="w-3.5 h-3.5 text-slate-400 flex-shrink-0"></i>
- <span class="text-sm font-bold text-slate-500 uppercase tracking-wider">Editing locked — proposal has passed consultation</span>
-            </div>
-            ` : ''}
-
-            ${stage !== 'withdrawn' ? `
- <button onclick="window.authorWithdraw()" class="w-full flex items-center justify-between p-5 rounded-2xl bg-slate-50 hover:bg-slate-100 transition-all group border border-slate-100 ">
- <div class="flex items-center gap-3">
- <i data-lucide="x-circle" class="w-4 h-4 text-slate-400 group-hover:text-slate-900 transition-colors"></i>
-                    <div>
- <span class="text-sm font-bold text-slate-600 block">Withdraw Proposal</span>
- <span class="text-sm text-slate-400">Closes and marks as withdrawn</span>
-                    </div>
-                </div>
- <i data-lucide="chevron-right" class="w-4 h-4 text-slate-300"></i>
-            </button>` : ''}
-        </div>
-
- <p class="text-sm text-slate-400 leading-relaxed">
-            Editors control lifecycle stage progression. Your ready signal is advisory. All actions are permanently recorded.
-        </p>
-        </div>` : ''}
-    </div>`;
+    if (!parts.length) return '';
+    return `<div class="mt-6 flex flex-wrap items-center gap-3">${parts.join('')}</div>`;
 }
 
 function renderEditorControls(p, state) {
     const labels = (p.labels || []).map(l => l.name);
-    const LIFECYCLE = ['consultation','ready','done','withdrawn'];
-    const currentStage = LIFECYCLE.find(s => labels.includes(s)) || null;
-    const authorReady = labels.includes('author-ready');
-
-    const nextStage = currentStage === null ? 'consultation'
-                    : currentStage === 'consultation' ? 'ready'
-                    : currentStage === 'ready' ? 'done'
-                    : null;
-
-    const STAGE_CFG = {
-        consultation: { color: 'purple',  icon: 'message-circle', label: 'Consultation' },
-        ready:        { color: 'green',   icon: 'check-circle',    label: 'Ready' },
-        done:         { color: 'emerald', icon: 'award',           label: 'Done' },
-        withdrawn:    { color: 'red',    icon: 'x-circle',        label: 'Withdrawn' },
-    };
-
+    // Lifecycle advancement lives on the stepper; this panel holds the rest.
     const STATUS_TAGS = ['review','revision','finalizing','onchain'];
     const SIGNAL_TAGS = {
         'editor-ok':       { color: 'green',  icon: 'check-circle', label: 'OK' },
         'editor-concern':  { color: 'red',    icon: 'alert-circle',  label: 'Concern' },
     };
     const currentSignal = Object.keys(SIGNAL_TAGS).find(s => labels.includes(s)) || null;
-    const curCfg  = currentStage ? STAGE_CFG[currentStage] : null;
-    const nextCfg = nextStage ? STAGE_CFG[nextStage] : null;
 
     const expanded = state.editorControlsExpanded;
     return `
- <div class="bg-white/80 p-8 rounded-[2.5rem] border-2 border-amber-100 shadow-xl">
+ <div class="mt-6 bg-white/80 p-6 sm:p-8 rounded-[2rem] border-2 border-amber-100 shadow-sm">
  <button onclick="window.toggleEditorControls()" class="w-full flex items-center justify-between">
  <h3 class="text-sm font-black uppercase tracking-[0.2em] text-amber-600 flex items-center gap-2">
  <i data-lucide="shield" class="w-3.5 h-3.5"></i> Editor Controls
@@ -612,35 +664,7 @@ function renderEditorControls(p, state) {
  <i data-lucide="chevron-down" class="w-3.5 h-3.5 text-amber-400 transition-transform duration-200 ${expanded ? 'rotate-180' : ''}"></i>
         </button>
 
- ${expanded ? `<div class="space-y-8 mt-8">
-        <!-- Lifecycle -->
- <div class="space-y-3">
- <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Lifecycle Stage</p>
-            ${curCfg ? `
- <div class="flex items-center gap-2.5 px-4 py-3 rounded-2xl bg-${curCfg.color}-50 ${curCfg.color}-900/10 border border-${curCfg.color}-200 ${curCfg.color}-900/30 text-sm font-bold text-${curCfg.color}-700 ${curCfg.color}-300 uppercase tracking-wider">
- <i data-lucide="${curCfg.icon}" class="w-3.5 h-3.5 flex-shrink-0"></i>
-                ${curCfg.label}
-            </div>` : ''}
-            ${nextCfg ? `
-            ${authorReady ? `
- <div class="flex items-center gap-2.5 px-4 py-2.5 rounded-xl bg-green-50 border border-green-200 text-sm font-bold text-green-700 ">
- <i data-lucide="thumbs-up" class="w-3.5 h-3.5 flex-shrink-0"></i>
-                Author has signalled ready
-            </div>` : ''}
-            <button onclick="window.editorSetLifecycle('${nextStage}')"
- class="w-full flex items-center justify-between px-4 py-3.5 rounded-xl border bg-${nextCfg.color}-50 ${nextCfg.color}-900/10 border-${nextCfg.color}-200 ${nextCfg.color}-900/30 hover:bg-${nextCfg.color}-100 ${nextCfg.color}-900/20 transition-all group">
- <div class="flex items-center gap-3">
- <i data-lucide="arrow-right-circle" class="w-4 h-4 text-${nextCfg.color}-600 flex-shrink-0"></i>
-                    <div>
- <span class="text-sm font-bold text-${nextCfg.color}-700 ${nextCfg.color}-300 uppercase tracking-wider block">Move to ${nextCfg.label}</span>
- <span class="text-sm text-${nextCfg.color}-500">Permanently recorded</span>
-                    </div>
-                </div>
- <i data-lucide="chevron-right" class="w-4 h-4 text-${nextCfg.color}-300 group-hover:translate-x-1 transition-transform"></i>
-            </button>
- ` : `<p class="text-sm text-slate-400 italic">No further transitions from this stage.</p>`}
-        </div>
-
+ ${expanded ? `<div class="grid grid-cols-1 md:grid-cols-2 gap-8 mt-8">
         <!-- Status Tags -->
  <div class="space-y-3">
  <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Status Tags</p>
@@ -677,45 +701,6 @@ function renderEditorControls(p, state) {
         <!-- Withdraw override (two-person rule for editors) -->
         ${renderEditorWithdraw(p, state, labels)}
         </div>` : ''}
-    </div>`;
-}
-
-function renderModerationPanel(p, state, isAdmin) {
-    const mod = p.moderation_status || 'visible';
-    let statusBlock = '';
-    if (mod === 'under_review') {
-        statusBlock = `
- <div class="flex items-center gap-2 px-4 py-3 rounded-xl bg-amber-500 text-white text-sm font-black uppercase tracking-wider mb-4">
- <i data-lucide="eye-off" class="w-3.5 h-3.5 flex-shrink-0"></i> Hidden — under review by an admin
-        </div>`;
-    } else if (mod === 'removed') {
-        statusBlock = `
- <div class="flex items-center gap-2 px-4 py-3 rounded-xl bg-red-600 text-white text-sm font-black uppercase tracking-wider mb-4">
- <i data-lucide="ban" class="w-3.5 h-3.5 flex-shrink-0"></i> Removed — visible to admins only
-        </div>`;
-    }
-
-    const flagBtn = mod === 'visible' ? `
-        <button onclick="window.flagProposalForRemoval()"
- class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-red-200 bg-red-50 text-red-600 text-sm font-black uppercase tracking-wider hover:bg-red-100 transition-all">
- <i data-lucide="flag" class="w-3.5 h-3.5"></i> Flag for Removal
-        </button>` : '';
-
-    const queueBtn = (isAdmin && mod !== 'visible') ? `
-        <button onclick="window.setView('moderation')"
- class="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl border border-slate-200 bg-slate-50 text-slate-600 text-sm font-black uppercase tracking-wider hover:bg-slate-100 transition-all mt-2">
- <i data-lucide="gavel" class="w-3.5 h-3.5"></i> Review in Moderation Queue
-        </button>` : '';
-
-    return `
- <div class="bg-white/80 p-8 rounded-[2.5rem] border-2 border-red-100 shadow-xl">
- <h3 class="text-sm font-black uppercase tracking-[0.2em] text-red-600 flex items-center gap-2 mb-4">
- <i data-lucide="shield-alert" class="w-3.5 h-3.5"></i> Moderation
-        </h3>
-        ${statusBlock}
- <p class="text-sm text-slate-400 mb-4">Flagging hides the content and sends it to an admin with your reason. The author is notified it is under review.</p>
-        ${flagBtn}
-        ${queueBtn}
     </div>`;
 }
 
@@ -773,8 +758,8 @@ function renderEditorWithdraw(p, state, labels) {
     }
 
     return `
- <div class="pt-4 border-t border-slate-100 ">
- <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-400 mb-3">Withdraw Proposal</p>
+ <div class="space-y-3">
+ <p class="text-sm font-black uppercase tracking-[0.18em] text-slate-400">Withdraw Proposal</p>
             ${inner}
         </div>`;
 }
@@ -958,38 +943,4 @@ function getAuditDetails(ev, state) {
                 detail: '',
             };
     }
-}
-
-function getTimerHTML(expiryDate, issueState) {
-    const diff = expiryDate - new Date();
-    const expired = diff <= 0 || issueState === 'closed';
-    const days    = Math.max(0, Math.floor(diff / 86400000));
-    const hours   = Math.max(0, Math.floor((diff % 86400000) / 3600000));
-    const minutes = Math.max(0, Math.floor((diff % 3600000) / 60000));
-    const seconds = Math.max(0, Math.floor((diff % 60000) / 1000));
-
-    return `
- <div class="${issueState === 'closed' ? 'bg-slate-950 shadow-inner' : 'bg-blue-600 shadow-2xl'} p-10 rounded-[3rem] text-white relative overflow-hidden">
- <div class="absolute -right-4 -top-4 opacity-10">
- <i data-lucide="clock" class="w-24 h-24"></i>
-        </div>
- <div class="flex items-center gap-3 mb-8 relative z-10">
- <i data-lucide="timer" class="w-4 h-4 opacity-50"></i>
- <h3 class="text-sm font-black uppercase tracking-[0.4em] opacity-80">Review Period</h3>
-        </div>
-        ${expired ? `
- <div class="relative z-10 py-2">
- <p class="text-4xl font-black italic tracking-tighter uppercase">COMPLETE</p>
- <div class="w-12 h-1 bg-white/20 my-4 rounded-full"></div>
- <p class="text-sm font-bold opacity-60 uppercase tracking-widest leading-relaxed">The 30-day review period has ended.</p>
-        </div>
-        ` : `
- <div class="grid grid-cols-4 gap-4 items-end relative z-10">
- <div><p class="text-4xl font-black italic tracking-tighter">${days}</p><p class="text-sm font-black uppercase opacity-50 mt-1 tracking-widest">Days</p></div>
- <div><p class="text-4xl font-black italic tracking-tighter">${hours}</p><p class="text-sm font-black uppercase opacity-50 mt-1 tracking-widest">Hrs</p></div>
- <div><p class="text-4xl font-black italic tracking-tighter">${minutes}</p><p class="text-sm font-black uppercase opacity-50 mt-1 tracking-widest">Min</p></div>
- <div class="text-blue-200"><p class="text-4xl font-black italic tracking-tighter">${seconds}</p><p class="text-sm font-black uppercase opacity-50 mt-1 tracking-widest">Sec</p></div>
-        </div>
-        `}
-    </div>`;
 }

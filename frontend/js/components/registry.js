@@ -1,4 +1,5 @@
 import { LIFECYCLE, getStage } from '../lifecycle.js';
+import { renderBoardColumns } from './kanban.js';
 
 const STAGE_COLOR = {
     consultation: 'purple', ready: 'green', done: 'emerald', withdrawn: 'red',
@@ -11,12 +12,14 @@ const STAGE_BG = {
 };
 
 export function renderRegistry(state) {
+    const tab = state.proposalsTab === 'board' ? 'board' : 'list';
     const search = (state.registrySearch || '').toLowerCase();
     const stageFilter = state.stageFilter || 'all';
     const typeFilter = state.docTypeFilter || 'ALL';
 
     let proposals = state.proposals;
-    if (stageFilter !== 'all') proposals = proposals.filter(p => getStage(p) === stageFilter);
+    // Board columns ARE the stages, so the stage filter only applies in list view.
+    if (tab === 'list' && stageFilter !== 'all') proposals = proposals.filter(p => getStage(p) === stageFilter);
     if (typeFilter !== 'ALL') proposals = proposals.filter(p => p.type === typeFilter);
     if (search) {
         proposals = proposals.filter(p =>
@@ -40,7 +43,16 @@ export function renderRegistry(state) {
  <div class="fade-in space-y-6">
  <div class="flex flex-col gap-4">
  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+ <div class="flex items-center gap-4 flex-wrap">
  <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface ">Proposals</h1>
+ <div class="inline-flex rounded-xl border border-slate-200 bg-white/80 p-1">
+                        ${[['list','list','List'],['board','layout-dashboard','Board']].map(([id, icon, label]) => `
+                        <button onclick="window.setProposalsTab('${id}')"
+ class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${tab === id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}">
+ <i data-lucide="${icon}" class="w-4 h-4"></i> ${label}
+                        </button>`).join('')}
+                    </div>
+                </div>
  <div class="flex items-center gap-2 w-full sm:w-auto">
                     <input type="text" placeholder="Search by title, author, label…" value="${escapeHtml(state.registrySearch || '')}"
                         oninput="window.setRegistrySearch(this.value)"
@@ -52,13 +64,13 @@ export function renderRegistry(state) {
                 </div>
             </div>
  <div class="flex flex-wrap gap-2">
-                ${STAGES.map(s => `
+                ${tab === 'list' ? `${STAGES.map(s => `
                 <button onclick="state.stageFilter='${s}'; window.updateUI()"
  class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                     ${(state.stageFilter||'all')===s ? STAGE_ACTIVE[s] : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
                     ${s}
                 </button>`).join('')}
- <div class="w-px bg-slate-200 mx-1"></div>
+ <div class="w-px bg-slate-200 mx-1"></div>` : ''}
                 ${['ALL','CAP','CIS'].map(t => `
                 <button onclick="state.docTypeFilter='${t}'; window.updateUI()"
  class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
@@ -68,6 +80,7 @@ export function renderRegistry(state) {
             </div>
         </div>
 
+        ${tab === 'board' ? renderBoardColumns(proposals) : `
  <p class="text-sm text-on-surface-variant font-bold">${proposals.length} proposal${proposals.length !== 1 ? 's' : ''}</p>
 
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
@@ -79,6 +92,7 @@ export function renderRegistry(state) {
                 : proposals.map(p => renderRow(p)).join('')
             }
         </div>
+        `}
     </div>`;
 }
 

@@ -7,46 +7,31 @@ const COLUMNS = [
     { id: 'withdrawn',    label: 'Withdrawn',       icon: 'x-circle',       color: 'text-red-500',    bg: 'bg-red-50 ',        border: 'border-red-200 ' },
 ];
 
-export function renderKanban(state) {
-    const typeFilter = state.docTypeFilter || 'ALL';
-    let proposals = state.proposals;
-    if (typeFilter !== 'ALL') proposals = proposals.filter(p => p.type === typeFilter);
-
+// Stage columns for the Proposals page's Board tab. Page chrome (heading,
+// search, filters, tab toggle) lives in registry.js; this renders only the
+// columns for an already-filtered list of proposals.
+export function renderBoardColumns(proposals) {
     const byStage = {};
     for (const col of COLUMNS) byStage[col.id] = [];
     for (const p of proposals) byStage[getStage(p)].push(p);
 
     return `
- <div class="fade-in">
- <div class="flex items-center justify-between mb-6">
- <h1 class="text-3xl font-black tracking-tighter text-on-surface ">Board</h1>
- <div class="flex items-center gap-2">
-                ${['ALL','CAP','CIS'].map(t => `
-                <button onclick="state.docTypeFilter='${t}'; window.updateUI()"
- class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
-                    ${(state.docTypeFilter||'ALL')===t ? 'bg-brand-primary text-white ' : 'bg-white/10 border border-white/20 text-on-surface-variant hover:text-on-surface '}">
-                    ${t}
-                </button>`).join('')}
-            </div>
-        </div>
-
  <div class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-6">
-            ${COLUMNS.map(col => `
+        ${COLUMNS.map(col => `
  <div class="flex flex-col gap-3">
  <div class="flex items-center gap-2 px-1">
  <div class="w-7 h-7 ${col.bg} ${col.color} rounded-lg flex items-center justify-center flex-shrink-0">
  <i data-lucide="${col.icon}" class="w-3.5 h-3.5"></i>
-                    </div>
- <span class="text-sm font-black uppercase tracking-widest text-on-surface-variant ">${col.label}</span>
- <span class="ml-auto text-sm font-black text-on-surface-variant/70 ">${byStage[col.id].length}</span>
                 </div>
-                ${byStage[col.id].length === 0
- ? `<div class="rounded-[2rem] border-2 border-dashed border-white/20 p-8 text-center text-on-surface-variant/70 text-sm font-bold">Empty</div>`
-                    : byStage[col.id].map(p => renderCard(p)).join('')
-                }
+ <span class="text-sm font-black uppercase tracking-widest text-slate-500">${col.label}</span>
+ <span class="ml-auto text-sm font-black text-slate-400">${byStage[col.id].length}</span>
             </div>
-            `).join('')}
+            ${byStage[col.id].length === 0
+ ? `<div class="rounded-[2rem] border-2 border-dashed border-slate-200 p-8 text-center text-slate-400 text-sm font-bold">Empty</div>`
+                : byStage[col.id].map(p => renderCard(p)).join('')
+            }
         </div>
+        `).join('')}
     </div>`;
 }
 

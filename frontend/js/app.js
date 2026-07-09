@@ -24,8 +24,7 @@ import { computeStageCounts } from './lifecycle.js';
 import { renderNav }          from './components/nav.js';
 import { renderDashboard }    from './components/dashboard.js';
 import { renderRegistry }     from './components/registry.js';
-import { renderKanban }       from './components/kanban.js';
-import { renderDetail }       from './components/detail.js';
+import { renderDetail, renderDetailOverlays } from './components/detail.js';
 import { renderWizard, validateStep, isStepSkipped } from './components/wizard.js';
 import { renderEdit }         from './components/edit.js';
 import { renderConstitution } from './components/constitution.js';
@@ -61,7 +60,9 @@ export const state = {
     view: 'dashboard',
     loading: { init: true, proposals: false, proposal: false },
     error: null,
-    auditPanelExpanded: true,
+    auditPanelExpanded: false,   // audit-trail popup (proposal detail)
+    versionHistoryExpanded: false,  // version-history popup (proposal detail)
+    proposalsTab: 'list',        // Proposals page: 'list' | 'board'
     mobileNavOpen: false,
     // Filters
     kanbanSearch: '',
@@ -105,7 +106,7 @@ export function updateUI(rerender = false) {
     switch (state.view) {
         case 'dashboard':    content = renderDashboard(state); break;
         case 'list':         content = renderRegistry(state); break;
-        case 'kanban':       content = renderKanban(state); break;
+        case 'kanban':       content = renderRegistry(state); break;  // legacy alias — Board is now a tab on Proposals
         case 'detail':       content = renderDetail(state); break;
         case 'wizard':       content = renderWizard(state); break;
         case 'edit':         content = renderEdit(state); break;
@@ -124,6 +125,10 @@ export function updateUI(rerender = false) {
         </div>`;
 
     const notif = state.notificationsOpen ? renderNotificationsPanel() : '';
+    // Detail-page popups (version history / audit trail) render at the app root:
+    // inside the fade-in page container their position:fixed would anchor to the
+    // page, not the viewport.
+    const overlays = state.view === 'detail' ? renderDetailOverlays(state) : '';
     const errorToast = state.error ? `
         <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
  <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
@@ -196,6 +201,7 @@ export function updateUI(rerender = false) {
  class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
  <i data-lucide="bug" class="w-6 h-6"></i>
         </button>` : ''}
+        ${overlays}
         ${notif}
         ${errorToast}`;
 
@@ -279,15 +285,25 @@ window._cc = (el, id) => {
 // ── Navigation ────────────────────────────────────────────────────────────────
 
 window.setView = (view) => {
+    // Board is a tab of the Proposals page, not its own view.
+    if (view === 'kanban') { view = 'list'; state.proposalsTab = 'board'; }
     state.view = view;
     state.mobileNavOpen = false;
     state.wizardSubmitted = null;  // never leave a stale success screen
     const map = {
-        dashboard: '#/home', list: '#/proposals', kanban: '#/board',
+        dashboard: '#/home',
+        list: state.proposalsTab === 'board' ? '#/board' : '#/proposals',
         constitution: '#/constitution',
         wizard: '#/wizard', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
     };
     if (map[view]) window.location.hash = map[view];
+    updateUI();
+};
+
+// List | Board toggle on the Proposals page.
+window.setProposalsTab = (tab) => {
+    state.proposalsTab = tab === 'board' ? 'board' : 'list';
+    window.location.hash = state.proposalsTab === 'board' ? '#/board' : '#/proposals';
     updateUI();
 };
 
@@ -306,9 +322,11 @@ window.handleRouting = async () => {
         loadProposals();
     } else if (hash === '#/proposals' || hash === '#/registry') {
         state.view = 'list';
+        state.proposalsTab = 'list';
         loadProposals();
     } else if (hash === '#/board' || hash === '#/kanban') {
-        state.view = 'kanban';
+        state.view = 'list';
+        state.proposalsTab = 'board';
         loadProposals();
     } else if (hash === '#/constitution') {
         state.view = 'constitution';
@@ -590,6 +608,8 @@ window.setCompareVersion = async (name) => {
 window.openProposal = async (number, addToHistory = true) => {
     state.loading.proposal = true;
     state.view = 'detail';
+    state.auditPanelExpanded = false;      // popups start closed per proposal
+    state.versionHistoryExpanded = false;
     updateUI();
     try {
         const [proposal, comments, audit, suggestions, versions] = await Promise.all([
