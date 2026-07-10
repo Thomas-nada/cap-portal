@@ -1,18 +1,18 @@
 [
-  { "kind": "badge",   "key": "badge1", "start": 0.8,  "end": 5.5 },
-  { "kind": "caption", "key": "c1a",    "start": 1.0,  "end": 5.5 },
+  { "kind": "badge",   "key": "badge1", "start": 0.8,  "end": 11.0 },
+  { "kind": "caption", "key": "c1a",    "start": 1.5,  "end": 11.0 },
 
-  { "kind": "badge",   "key": "badge2", "start": 5.5,  "end": 31.0 },
-  { "kind": "caption", "key": "c2a",    "start": 6.0,  "end": 16.5 },
-  { "kind": "caption", "key": "c2b",    "start": 16.5, "end": 24.0 },
-  { "kind": "caption", "key": "c2c",    "start": 24.0, "end": 31.0 },
+  { "kind": "badge",   "key": "badge2", "start": 11.0, "end": 49.5 },
+  { "kind": "caption", "key": "c2a",    "start": 12.0, "end": 31.0 },
+  { "kind": "caption", "key": "c2b",    "start": 32.0, "end": 42.0 },
+  { "kind": "caption", "key": "c2c",    "start": 42.0, "end": 49.5 },
 
-  { "kind": "badge",   "key": "badge3", "start": 31.0, "end": 48.0 },
-  { "kind": "caption", "key": "c3a",    "start": 31.0, "end": 39.5 },
-  { "kind": "caption", "key": "c3b",    "start": 39.5, "end": 45.5 },
-  { "kind": "caption", "key": "c3c",    "start": 45.5, "end": 48.0 },
+  { "kind": "badge",   "key": "badge3", "start": 49.5, "end": 95.5 },
+  { "kind": "caption", "key": "c3a",    "start": 50.0, "end": 65.0 },
+  { "kind": "caption", "key": "c3b",    "start": 66.0, "end": 89.0 },
+  { "kind": "caption", "key": "c3c",    "start": 89.5, "end": 95.5 },
 
-  { "kind": "badge",   "key": "badge4", "start": 48.0, "end": 59.0 },
-  { "kind": "caption", "key": "c4a",    "start": 48.0, "end": 54.0 },
-  { "kind": "caption", "key": "c4b",    "start": 54.0, "end": 59.0 }
+  { "kind": "badge",   "key": "badge4", "start": 95.5, "end": 118.0 },
+  { "kind": "caption", "key": "c4a",    "start": 96.0,  "end": 108.0 },
+  { "kind": "caption", "key": "c4b",    "start": 108.0, "end": 118.0 }
 ]
