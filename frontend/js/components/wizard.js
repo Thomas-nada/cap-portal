@@ -11,12 +11,8 @@ export function renderWizard(state) {
         ...(state.wizardData || {}),
     };
 
-    // On the CAP "Select text" screen a single sticky bar at the bottom of the
-    // screen is the only way forward, so the in-flow Next button is hidden there.
-    const onSelectStep = step === 2 && wizard.type !== 'CIS';
-
     return `
- <div class="max-w-5xl mx-auto pb-20 fade-in text-left">
+ <div class="max-w-5xl mx-auto pb-28 fade-in text-left">
  <header class="mb-12">
  <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">New proposal</h1>
  <p class="text-on-surface-variant text-lg font-medium mt-3">A guided, step-by-step process to create a Constitutional Amendment Proposal</p>
@@ -56,71 +52,85 @@ export function renderWizard(state) {
  <span class="text-sm font-bold">${escapeHtml(state.wizardError)}</span>
         </div>` : ''}
 
- ${onSelectStep ? '' : `
- <div class="flex items-center justify-end gap-3 ${state.wizardError ? 'mt-6' : 'mt-12'}">
-            ${step < 5 ? `
-            <button onclick="window.wizardNextStep()"
- class="px-4 sm:px-8 py-4 rounded-2xl bg-blue-600 text-white font-black text-sm uppercase tracking-widest hover:-translate-y-1 active:scale-95 transition-all flex items-center gap-2 shadow-xl">
- Next <i data-lucide="arrow-right" class="w-4 h-4"></i>
-            </button>
-            ` : `
-            <button onclick="window.wizardSubmit()" ${state.loading?.submitting ? 'disabled' : ''}
- class="px-6 sm:px-12 py-4 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm uppercase tracking-widest active:scale-95 transition-all flex items-center gap-3 shadow-xl disabled:opacity-60 disabled:cursor-not-allowed">
-                ${state.loading?.submitting
-                    ? '<span class="w-5 h-5 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Submitting…'
-                    : '<i data-lucide="send" class="w-5 h-5"></i> Submit Proposal'}
-            </button>
-            `}
-        </div>`}
     </div>
-    ${onSelectStep ? renderSelectBar(wizard) : ''}`;
+    ${renderWizardBar(step, wizard, state)}`;
 }
 
-// The single, always-visible control for the CAP "Select text" step. Sticks to
-// the bottom of the screen; explains what to do when nothing is selected yet.
-// Clicking the count opens a panel above the bar listing every selection, so
-// reviewing/removing them never requires scrolling back up.
-function renderSelectBar(wizard) {
+// The persistent, always-visible navigation bar, fixed to the bottom of the
+// screen on every step so Back/Next stay reachable no matter how far you scroll.
+//   left  — Back (step > 1) or Discard (step 1)
+//   right — Next, or Submit on the final step
+// On the CAP "Select text" step it also shows the selection status + Add more,
+// and clicking the count opens a panel listing every selection for review.
+function renderWizardBar(step, wizard, state) {
+    const isSelect = step === 2 && wizard.type !== 'CIS';
+    const isLast = step === 5;
     const n = (wizard.selectedText || []).length;
-    const has = n > 0;
-    const open = has && window.state?.wizardSelPanelOpen;
-    return `
- <div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.25)]">
-        ${open ? `
+    const hasSel = n > 0;
+    const open = isSelect && hasSel && state.wizardSelPanelOpen;
+    const submitting = state.loading?.submitting;
+
+    const leftBtn = step > 1
+        ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white/85 hover:bg-white/10 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
+        : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-red-300 hover:bg-white/10 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`;
+
+    let rightBtn;
+    if (isLast) {
+        rightBtn = `<button onclick="window.wizardSubmit()" ${submitting ? 'disabled' : ''}
+ class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+            ${submitting
+                ? '<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Submitting…'
+                : '<i data-lucide="send" class="w-4 h-4"></i> Submit Proposal'}
+        </button>`;
+    } else if (isSelect) {
+        rightBtn = `<button onclick="window.wizardNextStep()" ${hasSel ? '' : 'disabled'}
+ class="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${hasSel ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white/10 text-white/40 cursor-not-allowed'}">
+            Next step <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>`;
+    } else {
+        rightBtn = `<button onclick="window.wizardNextStep()"
+ class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all">
+            Next <i data-lucide="arrow-right" class="w-4 h-4"></i>
+        </button>`;
+    }
+
+    const center = isSelect ? `
+ <div class="flex items-center gap-2 min-w-0 flex-1 justify-center">
+            ${hasSel
+                ? `<button onclick="window.toggleWizardSelPanel()" title="${open ? 'Hide' : 'Show'} selections"
+ class="flex items-center gap-2 min-w-0 rounded-xl px-2 py-1 hover:bg-white/10 transition-colors">
+ <span class="flex-shrink-0 inline-flex items-center justify-center w-6 h-6 rounded-full bg-green-500 text-white"><i data-lucide="check" class="w-3.5 h-3.5"></i></span>
+ <span class="text-white font-bold text-sm truncate">${n} passage${n === 1 ? '' : 's'} selected</span>
+ <i data-lucide="${open ? 'chevron-down' : 'chevron-up'}" class="w-4 h-4 text-white/60 flex-shrink-0"></i>
+                   </button>
+                   <button onclick="document.getElementById('constitution-col')?.scrollIntoView({behavior:'smooth',block:'start'})"
+ class="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-colors">+ Add more</button>`
+                : `<span class="text-white/80 font-medium text-sm truncate text-center">Highlight text in the Constitution below, then choose Replace or Add After</span>`}
+        </div>` : `<div class="flex-1"></div>`;
+
+    const panel = open ? `
  <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-4 max-h-[45vh] overflow-y-auto">
  <div class="space-y-2 pb-1">
-                ${(wizard.selectedText || []).map((sel, idx) => `
+            ${(wizard.selectedText || []).map((sel, idx) => `
  <div class="flex items-start gap-3 p-3 rounded-xl bg-white/10 border border-white/10">
  <span class="flex-shrink-0 text-sm font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${sel.kind === 'add_after' ? 'bg-cyan-500/25 text-cyan-200' : 'bg-white/15 text-white/70'}">${sel.kind === 'add_after' ? 'Add After' : 'Replace'}</span>
  <p class="flex-1 min-w-0 text-sm text-white/85 italic leading-snug line-clamp-2">"${escapeHtml(sel.text)}"</p>
-                    <button onclick="window.removeWizardSelection(${idx})" title="Remove selection"
+                <button onclick="window.removeWizardSelection(${idx})" title="Remove selection"
  class="flex-shrink-0 text-red-300 hover:text-red-200 hover:bg-white/10 p-1.5 rounded-lg transition-all">
  <i data-lucide="x" class="w-4 h-4"></i>
-                    </button>
-                </div>
-                `).join('')}
-            </div>
-        </div>` : ''}
- <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center justify-between gap-4">
- <div class="flex items-center gap-3 min-w-0">
-                ${has
-                    ? `<button onclick="window.toggleWizardSelPanel()" title="${open ? 'Hide' : 'Show'} selections"
- class="flex items-center gap-3 min-w-0 rounded-xl px-2 py-1 -mx-2 hover:bg-white/10 transition-colors">
- <span class="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-green-500 text-white"><i data-lucide="check" class="w-4 h-4"></i></span>
- <span class="text-white font-bold text-sm sm:text-base truncate">${n} passage${n === 1 ? '' : 's'} selected</span>
- <i data-lucide="${open ? 'chevron-down' : 'chevron-up'}" class="w-4 h-4 text-white/60 flex-shrink-0"></i>
-                       </button>`
-                    : `<span class="flex-shrink-0 inline-flex items-center justify-center w-7 h-7 rounded-full bg-white/15 text-white"><i data-lucide="mouse-pointer-2" class="w-4 h-4"></i></span>
-                       <span class="text-white/80 font-medium text-sm sm:text-base truncate">Highlight text in the Constitution below, then choose Replace or Add After</span>`}
-            </div>
- <div class="flex items-center gap-2 flex-shrink-0">
-                ${has ? `<button onclick="document.getElementById('constitution-col')?.scrollIntoView({behavior:'smooth',block:'start'})"
- class="hidden sm:inline-flex items-center gap-1 px-4 py-3 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-colors">+ Add more</button>` : ''}
-                <button onclick="window.wizardNextStep()" ${has ? '' : 'disabled'}
- class="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${has ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white/10 text-white/40 cursor-not-allowed'}">
- Next step <i data-lucide="arrow-right" class="w-4 h-4"></i>
                 </button>
             </div>
+            `).join('')}
+        </div>
+    </div>` : '';
+
+    return `
+ <div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.25)]">
+        ${panel}
+ <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+            ${leftBtn}
+            ${center}
+            ${rightBtn}
         </div>
     </div>`;
 }
@@ -220,7 +230,7 @@ function renderStep1(wizard) {
             <input type="text" value="${escapeHtml(wizard.title || '')}"
                 oninput="state.wizardData.title = this.value; window._cc(this, 'cc-title')"
                 placeholder="Give your ${wizard.type} a clear, descriptive title..." maxlength="200"
- class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 font-bold text-xl focus:border-blue-600 outline-none transition-all">
+ class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 font-bold placeholder:font-normal text-xl focus:border-blue-600 outline-none transition-all">
             ${charCounter('cc-title', wizard.title, 200)}
         </div>
     </div>`;

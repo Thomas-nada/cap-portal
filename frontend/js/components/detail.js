@@ -133,14 +133,21 @@ function renderSuggestions(state, p, isAuthor, isEditor) {
 
     return `
  <section class="space-y-6 pt-16 border-t border-slate-100 ">
- <div class="flex items-center justify-between px-4">
+ <div class="px-4">
+ <div class="flex items-center justify-between">
  <h2 class="text-sm font-black uppercase tracking-[0.4em] text-slate-400 flex items-center gap-2">
  <i data-lucide="git-pull-request" class="w-3.5 h-3.5"></i> Suggested Changes
-            </h2>
+                </h2>
  ${pending.length ? `<span class="text-sm font-black text-amber-600 uppercase tracking-widest">${pending.length} pending</span>` : ''}
+            </div>
+ <p class="text-sm text-slate-400 mt-2">This section is for any changes suggested by the editors.</p>
         </div>
         ${suggestButtons}
- ${pending.length ? `<div class="space-y-4">${pendingCards}</div>` : (isEditor && !isAuthor ? `<p class="text-sm text-slate-400 px-4">No pending suggestions.</p>` : '')}
+ ${pending.length ? `<div class="space-y-4">${pendingCards}</div>` : `
+ <div class="mx-1 py-10 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
+ <i data-lucide="git-pull-request" class="w-8 h-8 mx-auto mb-3 text-slate-300"></i>
+ <p class="text-sm font-bold text-slate-400">The editors have submitted no suggestions.</p>
+        </div>`}
         ${resolved.length ? `
  <details class="px-1">
  <summary class="text-sm font-black uppercase tracking-widest text-slate-400 cursor-pointer hover:text-slate-600 transition-colors">Show ${resolved.length} resolved</summary>
@@ -207,7 +214,7 @@ export function renderDetail(state) {
  <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-12">
  <button onclick="window.setView('list')" class="group flex items-center gap-2 text-on-surface-variant hover:text-brand-primary transition-colors font-bold uppercase text-sm tracking-widest">
  <i data-lucide="arrow-left" class="w-4 h-4 group-hover:-translate-x-1 transition-transform"></i>
-                    Back to Registry
+                    Back to Proposals
                 </button>
  <div class="flex items-center gap-2 flex-wrap">
                     ${versions.length ? `

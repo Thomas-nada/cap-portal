@@ -38,51 +38,65 @@ export function renderRegistry(state) {
         done:         'bg-emerald-600 text-white',
         withdrawn:    'bg-red-600 text-white',
     };
+    // Hover tooltips so people know what each filter means.
+    const STAGE_DESC = {
+        all:          'Proposals in every stage',
+        consultation: 'Open for community discussion',
+        ready:        'Author has signalled ready; under editor review',
+        done:         'Finalised and closed',
+        withdrawn:    'Withdrawn by the author or editors',
+    };
+    const TYPE_DESC = {
+        ALL: 'Both CAPs and Constitutional Issue Statements',
+        CAP: 'Constitutional Amendment Proposal — proposes specific changes to the Constitution text',
+        CIS: 'Constitutional Issue Statement — raises a problem without proposing specific text',
+    };
 
     return `
  <div class="fade-in space-y-6">
  <div class="flex flex-col gap-4">
  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
- <div class="flex items-center gap-4 flex-wrap">
  <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface ">Proposals</h1>
- <div class="inline-flex rounded-xl border border-slate-200 bg-white/80 p-1">
-                        ${[['list','list','List'],['board','layout-dashboard','Board']].map(([id, icon, label]) => `
-                        <button onclick="window.setProposalsTab('${id}')"
- class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${tab === id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}">
- <i data-lucide="${icon}" class="w-4 h-4"></i> ${label}
-                        </button>`).join('')}
-                    </div>
-                </div>
  <div class="flex items-center gap-2 w-full sm:w-auto">
                     <input type="text" placeholder="Search by title, author, label…" value="${escapeHtml(state.registrySearch || '')}"
                         oninput="window.setRegistrySearch(this.value)"
  class="px-4 py-2 rounded-xl border border-slate-200 bg-white/80 text-sm text-slate-900 outline-none focus:border-blue-400 w-full sm:w-64">
                     ${state.user ? `<button onclick="window.setView('wizard')"
  class="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
- <i data-lucide="plus" class="w-4 h-4"></i> New CAP
+ <i data-lucide="plus" class="w-4 h-4"></i> New Proposal
                     </button>` : ''}
                 </div>
             </div>
- <div class="flex flex-wrap gap-2">
+ <div class="flex flex-wrap gap-2 items-center">
                 ${tab === 'list' ? `${STAGES.map(s => `
-                <button onclick="state.stageFilter='${s}'; window.updateUI()"
- class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
+                <button onclick="state.stageFilter='${s}'; window.updateUI()" title="${STAGE_DESC[s]}"
+ class="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                     ${(state.stageFilter||'all')===s ? STAGE_ACTIVE[s] : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
-                    ${s}
+                    ${s}${s !== 'all' ? ` <i data-lucide="info" class="w-3 h-3 opacity-60"></i>` : ''}
                 </button>`).join('')}
  <div class="w-px bg-slate-200 mx-1"></div>` : ''}
                 ${['ALL','CAP','CIS'].map(t => `
-                <button onclick="state.docTypeFilter='${t}'; window.updateUI()"
- class="px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
+                <button onclick="state.docTypeFilter='${t}'; window.updateUI()" title="${TYPE_DESC[t]}"
+ class="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
                     ${(state.docTypeFilter||'ALL')===t ? 'bg-slate-900 text-white ' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
-                    ${t}
+                    ${t}${t !== 'ALL' ? ` <i data-lucide="info" class="w-3 h-3 opacity-60"></i>` : ''}
+                </button>`).join('')}
+            </div>
+        </div>
+
+        <!-- Count, then the list/board view toggle below it -->
+ <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+ <p class="text-sm text-on-surface-variant font-bold">${proposals.length} proposal${proposals.length !== 1 ? 's' : ''}</p>
+ <div class="inline-flex rounded-xl border border-slate-200 bg-white/80 p-1 self-start sm:self-auto">
+                ${[['list','list','List'],['board','layout-dashboard','Board']].map(([id, icon, label]) => `
+                <button onclick="window.setProposalsTab('${id}')"
+ class="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-sm font-bold transition-all ${tab === id ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-500 hover:text-slate-900'}">
+ <i data-lucide="${icon}" class="w-4 h-4"></i> ${label}
                 </button>`).join('')}
             </div>
         </div>
 
         ${tab === 'board' ? renderBoardColumns(proposals) : `
- <p class="text-sm text-on-surface-variant font-bold">${proposals.length} proposal${proposals.length !== 1 ? 's' : ''}</p>
-
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-sm overflow-hidden">
             ${proposals.length === 0
  ? `<div class="py-20 text-center text-slate-400">

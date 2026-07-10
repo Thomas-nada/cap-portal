@@ -43,15 +43,19 @@ export function initConstitutionSelection() {
             document.body.appendChild(popup);
         }
         const isLoggedIn = !!window.state?.user;
-        // In the wizard the type is already CAP, so only offer Replace / Add After.
+        const btnReplace = `<button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>`;
+        const btnAddAfter = `<button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>`;
+        // In the wizard the type is already CAP, so only offer Replace / Add After,
+        // under a small "Select what to edit" heading.
+        popup.style.flexDirection = inWizard() ? 'column' : 'row';
+        popup.style.alignItems = inWizard() ? 'stretch' : 'center';
         popup.innerHTML = !isLoggedIn
             ? `<span style="color:#94a3b8;font-size:14px;font-weight:700;padding:0 4px">Connect wallet to flag text</span>`
             : inWizard()
-            ? `<button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
-               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>`
+            ? `<div style="color:#94a3b8;font-size:14px;font-weight:700;text-align:center;white-space:nowrap;padding:0 2px 4px;">Select what to edit</div>
+               <div style="display:flex;gap:6px;justify-content:center;">${btnReplace}${btnAddAfter}</div>`
             : `<span style="color:#64748b;font-size:14px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:0 2px">CAP</span>
-               <button onclick="window.commitSelection('CAP','replace')" style="background:#2563eb;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Replace this text">↔ Replace</button>
-               <button onclick="window.commitSelection('CAP','add_after')" style="background:#0891b2;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap" title="Insert new text after this">+ Add After</button>
+               ${btnReplace}${btnAddAfter}
                <button onclick="window.commitSelection('CIS','replace')" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap">+ CIS</button>`;
         popup.style.top = '-9999px'; popup.style.left = '-9999px'; popup.style.display = 'flex';
         requestAnimationFrame(() => {

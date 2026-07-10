@@ -11,7 +11,6 @@ export function renderNav(state) {
         { id: 'learn',        label: 'Guides',       icon: 'book' },
         ...(state.user?.is_admin ? [{ id: 'moderation', label: 'Moderation', icon: 'gavel' }] : []),
         ...(state.user?.is_admin ? [{ id: 'bugs', label: 'Bugs', icon: 'bug' }] : []),
-        ...(isLoggedIn ? [{ id: 'wizard', label: 'New CAP', icon: 'plus-square' }] : [])
     ];
 
     const bell = isLoggedIn ? `
