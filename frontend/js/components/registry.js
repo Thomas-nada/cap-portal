@@ -51,6 +51,17 @@ export function renderRegistry(state) {
         CAP: 'Constitutional Amendment Proposal — proposes specific changes to the Constitution text',
         CIS: 'Constitutional Issue Statement — raises a problem without proposing specific text',
     };
+    // Filter chip with a CSS-driven tooltip that appears on the very first hover
+    // (the native `title` attribute is unreliable — it only shows after a delay).
+    const filterChip = (label, isActive, activeCls, onclick, desc, showIcon) => `
+ <div class="relative group inline-flex">
+            <button onclick="${onclick}"
+ class="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-colors
+                ${isActive ? activeCls : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
+                ${label}${showIcon ? ` <i data-lucide="info" class="w-3 h-3 opacity-60"></i>` : ''}
+            </button>
+            ${desc ? `<span class="pointer-events-none absolute top-full left-1/2 -translate-x-1/2 mt-2 hidden group-hover:block whitespace-nowrap rounded-lg bg-slate-900 text-white text-sm font-medium normal-case tracking-normal px-2.5 py-1.5 shadow-lg z-30">${desc}</span>` : ''}
+        </div>`;
 
     return `
  <div class="fade-in space-y-6">
@@ -68,19 +79,13 @@ export function renderRegistry(state) {
                 </div>
             </div>
  <div class="flex flex-wrap gap-2 items-center">
-                ${tab === 'list' ? `${STAGES.map(s => `
-                <button onclick="state.stageFilter='${s}'; window.updateUI()" title="${STAGE_DESC[s]}"
- class="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
-                    ${(state.stageFilter||'all')===s ? STAGE_ACTIVE[s] : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
-                    ${s}${s !== 'all' ? ` <i data-lucide="info" class="w-3 h-3 opacity-60"></i>` : ''}
-                </button>`).join('')}
+                ${tab === 'list' ? `${STAGES.map(s =>
+                    filterChip(s, (state.stageFilter||'all')===s, STAGE_ACTIVE[s], `state.stageFilter='${s}'; window.updateUI()`, STAGE_DESC[s], s !== 'all')
+                ).join('')}
  <div class="w-px bg-slate-200 mx-1"></div>` : ''}
-                ${['ALL','CAP','CIS'].map(t => `
-                <button onclick="state.docTypeFilter='${t}'; window.updateUI()" title="${TYPE_DESC[t]}"
- class="inline-flex items-center gap-1 px-3 py-2 rounded-xl text-sm font-black uppercase tracking-wide transition-all
-                    ${(state.docTypeFilter||'ALL')===t ? 'bg-slate-900 text-white ' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900 '}">
-                    ${t}${t !== 'ALL' ? ` <i data-lucide="info" class="w-3 h-3 opacity-60"></i>` : ''}
-                </button>`).join('')}
+                ${['ALL','CAP','CIS'].map(t =>
+                    filterChip(t, (state.docTypeFilter||'ALL')===t, 'bg-slate-900 text-white ', `state.docTypeFilter='${t}'; window.updateUI()`, TYPE_DESC[t], t !== 'ALL')
+                ).join('')}
             </div>
         </div>
 
