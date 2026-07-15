@@ -1,0 +1,39 @@
+# Ephemeral Render test environment.
+#
+# The API intentionally uses SQLite on Render's ephemeral filesystem. Test
+# records reset whenever the free web service sleeps, restarts, or redeploys.
+# This keeps the test environment isolated from production at zero database
+# cost. Do not add this API to a keep-alive workflow.
+
+services:
+  - type: web
+    runtime: python
+    name: cap-portal-api-test
+    branch: test
+    rootDir: backend
+    plan: free
+    region: frankfurt
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    healthCheckPath: /health
+    autoDeployTrigger: commit
+    envVars:
+      - key: DATABASE_URL
+        value: sqlite:///./cap-test.db
+      - key: JWT_SECRET
+        generateValue: true
+      # Keep production safeguards enabled on every internet-accessible host.
+      - key: ENVIRONMENT
+        value: production
+
+  - type: web
+    runtime: static
+    name: cap-portal-test
+    branch: test
+    buildCommand: echo "Static test site ready"
+    staticPublishPath: ./frontend
+    autoDeployTrigger: commit
+    routes:
+      - type: rewrite
+        source: /*
+        destination: /index.html
