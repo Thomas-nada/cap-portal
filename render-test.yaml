@@ -18,6 +18,11 @@ services:
     healthCheckPath: /health
     autoDeployTrigger: commit
     envVars:
+      # Match the version used by the production Blueprint. The pinned
+      # pydantic-core release has a prebuilt wheel for Python 3.11, whereas
+      # Render's Python 3.14 default attempts an unsupported Rust source build.
+      - key: PYTHON_VERSION
+        value: "3.11.0"
       - key: DATABASE_URL
         value: sqlite:///./cap-test.db
       - key: JWT_SECRET

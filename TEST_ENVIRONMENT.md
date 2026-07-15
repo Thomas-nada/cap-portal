@@ -17,6 +17,9 @@ endpoints remain disabled. Wallet authentication works normally. The first
 authenticated user can claim the initial test administrator/editor roles after
 each database reset.
 
+The Blueprint pins Python 3.11 because the repository's pinned Pydantic stack
+does not provide a compatible prebuilt wheel for Render's Python 3.14 default.
+
 Do not point this branch at the production `DATABASE_URL`, and do not add the
 test API to a keep-alive workflow. A sleeping free service preserves the shared
 Render workspace's monthly free instance hours.
@@ -42,4 +45,3 @@ If either service name is already taken, rename both services in
 2. Connect a wallet and create a clearly labeled test proposal.
 3. Confirm the proposal appears only on the test site.
 4. Open the production site and confirm it is absent.
-
