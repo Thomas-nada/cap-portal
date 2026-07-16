@@ -93,6 +93,19 @@ export const state = {
 
 window.state = state;
 
+// Full renders replace #app. Only animate when the actual page changes;
+// background data updates on the same page must not replay the entrance effect.
+let lastRenderedView = null;
+
+function finishRender(root) {
+    if (lastRenderedView === state.view) {
+        root.querySelectorAll('.fade-in').forEach(el => el.classList.remove('fade-in'));
+    }
+    lastRenderedView = state.view;
+    lucide.createIcons();
+    if (window.fixPreCode) window.fixPreCode();
+}
+
 // ── Keep-alive ping (prevents Render free tier spin-down) ─────────────────────
 setInterval(() => fetch(`${API_BASE}/health`).catch(() => {}), 10 * 60 * 1000);
 
@@ -169,8 +182,7 @@ export function updateUI(rerender = false) {
         </div>
  <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
         ` + notif + errorToast;
-        lucide.createIcons();
-        if (window.fixPreCode) window.fixPreCode();
+        finishRender(root);
         return;
     }
 
@@ -213,8 +225,7 @@ export function updateUI(rerender = false) {
         ${notif}
         ${errorToast}`;
 
-    lucide.createIcons();
-    if (window.fixPreCode) window.fixPreCode();
+    finishRender(root);
 }
 
 window.updateUI = updateUI;
@@ -311,15 +322,20 @@ window.setView = (view) => {
         constitution: '#/constitution',
         wizard: '#/new', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
     };
-    if (map[view]) window.location.hash = map[view];
-    updateUI();
+    const target = map[view];
+    if (target && window.location.hash !== target) {
+        window.location.hash = target;
+    } else {
+        window.handleRouting();
+    }
 };
 
 // List | Board toggle on the Proposals page.
 window.setProposalsTab = (tab) => {
     state.proposalsTab = tab === 'board' ? 'board' : 'list';
-    window.location.hash = state.proposalsTab === 'board' ? '#/board' : '#/proposals';
-    updateUI();
+    const target = state.proposalsTab === 'board' ? '#/board' : '#/proposals';
+    if (window.location.hash !== target) window.location.hash = target;
+    else window.handleRouting();
 };
 
 window.toggleMobileNav = () => {
@@ -334,24 +350,24 @@ window.handleRouting = async () => {
 
     if (hash === '#/home' || hash === '#/') {
         state.view = 'dashboard';
-        loadProposals();
+        await loadProposals();
     } else if (hash === '#/proposals' || hash === '#/registry') {
         state.view = 'list';
         state.proposalsTab = 'list';
-        loadProposals();
+        await loadProposals();
     } else if (hash === '#/board' || hash === '#/kanban') {
         state.view = 'list';
         state.proposalsTab = 'board';
-        loadProposals();
+        await loadProposals();
     } else if (hash === '#/constitution') {
         state.view = 'constitution';
-        loadConstitution();
+        await loadConstitution();
     } else if (hash === '#/new' || hash === '#/wizard') {
         state.view = 'wizard';
         updateUI();
     } else if (hash.startsWith('#/detail/')) {
         const number = parseInt(hash.split('/').pop());
-        openProposal(number, false);
+        await openProposal(number, false);
     } else if (hash.startsWith('#/edit/')) {
         const number = parseInt(hash.split('/').pop());
         if (state.view === 'edit' && state.currentProposal?.number === number) {
@@ -383,16 +399,16 @@ window.handleRouting = async () => {
         else updateUI();
     } else if (hash === '#/editors') {
         state.view = 'editors';
-        loadEditors();
+        await loadEditors();
     } else if (hash === '#/moderation') {
         state.view = 'moderation';
-        loadModerationCases();
+        await loadModerationCases();
     } else if (hash === '#/bugs') {
         state.view = 'bugs';
-        loadBugReports();
+        await loadBugReports();
     } else {
         state.view = 'dashboard';
-        loadProposals();
+        await loadProposals();
     }
 };
 
@@ -517,7 +533,11 @@ async function refreshUnreadCount() {
     try {
         const { count } = await fetchUnreadCount();
         state.unreadCount = count;
-        updateUI();
+        document.querySelectorAll('[data-unread-badge]').forEach(badge => {
+            badge.textContent = count > 9 ? '9+' : String(count);
+            badge.classList.toggle('hidden', count === 0);
+            badge.classList.toggle('flex', count > 0);
+        });
     } catch { /* ignore */ }
 }
 window.refreshUnreadCount = refreshUnreadCount;
@@ -569,7 +589,7 @@ async function loadGuides() {
 
 async function loadProposals() {
     state.loading.proposals = true;
-    updateUI();
+    if (!state.loading.init) updateUI();
     try {
         const ps = await fetchAllProposals();
         state.proposals = ps;
@@ -2280,9 +2300,9 @@ async function init() {
         };
     }
 
-    state.loading.init = false;
     window.addEventListener('hashchange', window.handleRouting);
     await window.handleRouting();
+    state.loading.init = false;
     if (state.user) {
         // A restored session whose account has no server-side acceptance record
         // still sees the agreement once (dev sessions have no such field → skip).
