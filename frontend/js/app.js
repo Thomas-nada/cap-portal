@@ -382,10 +382,10 @@ window.handleRouting = async () => {
         const slug = hash.replace('#/guides/', '').replace('#/learn/', '');
         state.view = 'learn';
         if (slug) {
-            if (!state.guidesLoaded) loadGuides().then(() => window.openGuide(slug));
-            else window.openGuide(slug);
+            if (!state.guidesLoaded) await loadGuides();
+            await window.openGuide(slug);
         } else {
-            if (!state.guidesLoaded) loadGuides();
+            if (!state.guidesLoaded) await loadGuides();
             else updateUI();
         }
     } else if (hash === '#/guides' || hash === '#/learn') {
@@ -1995,6 +1995,16 @@ window.returnToWizardFromConstitution = () => {
 // ── Learn / guides ────────────────────────────────────────────────────────────
 
 window.openGuide = async (slug) => {
+    // The API list is the publication boundary. Do not let an old bookmarked
+    // slug bypass launch review by falling back directly to its static file.
+    if (state.guidesLoaded && !state.guides.some(guide => guide.slug === slug)) {
+        state.activeGuide = null;
+        state.guideHtml = null;
+        window.location.hash = '#/guides';
+        updateUI();
+        return;
+    }
+
     state.activeGuide = slug;
     state.guideHtml = null;
     state.view = 'learn';

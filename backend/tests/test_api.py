@@ -102,6 +102,24 @@ def proposal_body(title="Test Proposal", **kwargs):
     }
 
 
+def test_launch_guides_hide_unreviewed_content(client, db):
+    from models import Guide
+
+    db.add_all([
+        Guide(slug="getting-started", title="Getting Started", content="Reviewed",
+              section="getting-started", section_label="Getting Started", sort_order=0),
+        Guide(slug="common-mistakes", title="Common Mistakes", content="Draft",
+              section="writing-caps", section_label="Writing CAPs", sort_order=0),
+    ])
+    db.commit()
+
+    listed = client.get("/guides")
+    assert listed.status_code == 200
+    assert [guide["slug"] for guide in listed.json()] == ["getting-started"]
+    assert client.get("/guides/getting-started").status_code == 200
+    assert client.get("/guides/common-mistakes").status_code == 404
+
+
 # ── Basic ─────────────────────────────────────────────────────────────────────
 
 def test_proposals_empty(client):

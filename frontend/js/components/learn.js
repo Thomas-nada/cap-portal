@@ -1,5 +1,3 @@
-import { API_BASE } from '../config.js';
-
 const SECTION_STYLE = {
     'editor-guides':    { icon: 'shield',           color: 'bg-amber-500' },
     'getting-started':  { icon: 'play',             color: 'bg-blue-600' },
@@ -176,19 +174,6 @@ export function renderLearnHub(state) {
  <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
             ${sections.size > 0 ? sectionCards : emptyState}
 
-            <!-- Developer API always shown -->
- <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-10">
- <div class="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center mb-6 text-white">
- <i data-lucide="code-2" class="w-6 h-6"></i>
-                </div>
- <h2 class="text-2xl font-black italic tracking-tighter text-slate-900 uppercase mb-4">Developer API</h2>
- <p class="text-slate-500 mb-6">Build your own tools on top of the CAP Portal</p>
- <div class="space-y-3">
- <a href="${API_BASE}/docs" target="_blank" class="block w-full p-4 rounded-2xl bg-indigo-50 border-2 border-indigo-200 text-indigo-700 text-sm font-bold text-left hover:-translate-y-0.5 transition-all">
-                        📐 Interactive API Docs →
-                    </a>
-                </div>
-            </div>
         </div>
 
  <div class="mt-12 bg-gradient-to-r from-blue-50 to-purple-50 p-10 rounded-[3rem] border border-blue-100 ">

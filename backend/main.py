@@ -84,43 +84,20 @@ with engine.connect() as _conn:
 # ── Seed default guides (metadata only — content served from static files) ────
 _DEFAULT_GUIDES = [
     # section, section_label, sort_order, slug, title
-    ("editor-guides",    "Editor Guides",       0, "editor-guide",                       "Complete Editor Guide"),
-    ("editor-guides",    "Editor Guides",       1, "editor-role",                        "Editor Role & Scope"),
-    ("getting-started",  "Getting Started",     0, "about-the-cap-process",              "How the CAP Process Was Built"),
-    ("getting-started",  "Getting Started",     1, "intro-to-caps-and-cis",              "Introduction to CAPs & CIS"),
-    ("getting-started",  "Getting Started",     2, "how-to-participate",                 "How to Participate"),
-    ("getting-started",  "Getting Started",     3, "deliberation-process",               "The Deliberation Process"),
-    ("writing-caps",     "Writing CAPs",        0, "creating-a-cap",                     "Creating a CAP or CIS: Quick Checklist"),
-    ("writing-caps",     "Writing CAPs",        1, "cap-template-guide",                 "CAP Template Guide"),
-    ("writing-caps",     "Writing CAPs",        3, "common-mistakes",                    "Common Mistakes to Avoid"),
-    ("using-the-portal", "Using the Portal",    0, "connecting-your-wallet",             "Connecting Your Cardano Wallet"),
-    ("using-the-portal", "Using the Portal",    1, "submitting-with-the-wizard",         "Submitting a CAP, Step by Step"),
-    ("using-the-portal", "Using the Portal",    2, "browsing-the-constitution",          "Browsing & Comparing the Constitution"),
-    ("using-the-portal", "Using the Portal",    3, "commenting-and-discussing",          "Commenting & Discussion"),
-    ("using-the-portal", "Using the Portal",    4, "labels-and-workflow",                "Labels & Workflow"),
-    ("constitution",     "Constitution",        0, "article-by-article-breakdown",       "Article-by-Article Breakdown"),
-    ("faq",              "FAQ",                 0, "faq-what-is-a-cap",                  "What is a CAP?"),
-    ("faq",              "FAQ",                 1, "faq-what-is-a-cis",                  "What is a CIS?"),
-    ("faq",              "FAQ",                 2, "faq-who-can-create-a-cap",           "Who can create a CAP?"),
-    ("faq",              "FAQ",                 3, "faq-how-long-is-deliberation",       "How long is deliberation?"),
-    ("faq",              "FAQ",                 4, "faq-what-are-the-categories",        "What CAP categories exist?"),
-    ("faq",              "FAQ",                 5, "faq-can-i-edit-my-cap",              "Can I edit my CAP?"),
-    ("faq",              "FAQ",                 6, "faq-can-a-cis-become-a-cap",         "Can a CIS become a CAP?"),
-    ("faq",              "FAQ",                 7, "faq-what-happens-after-30-days",     "What happens after deliberation?"),
-    ("faq",              "FAQ",                 8, "faq-how-are-caps-approved",          "How are CAPs approved?"),
-    ("faq",              "FAQ",                 9, "faq-what-is-a-governance-action",    "What is a governance action?"),
-    ("faq",              "FAQ",                10, "faq-what-is-the-constitutional-committee", "What is the Constitutional Committee?"),
-    ("faq",              "FAQ",                11, "faq-what-is-a-drep",                 "What is a DRep?"),
-    ("faq",              "FAQ",                12, "faq-what-are-guardrails",            "What are the Guardrails?"),
-    ("faq",              "FAQ",                13, "faq-what-is-a-cap-editor",           "What is a CAP Editor?"),
-    ("faq",              "FAQ",                14, "faq-do-i-need-a-wallet",             "Do I need a Cardano wallet?"),
-    ("faq",              "FAQ",                15, "faq-what-is-the-amendment-wizard",   "How does the proposal form work?"),
+    ("getting-started", "Getting Started", 0, "getting-started",       "Getting Started & Using the Portal"),
+    ("getting-started", "Getting Started", 1, "intro-to-caps-and-cis", "CAPs and CISs Explained"),
+    ("editor-guides",   "Editor Guides",   0, "editor-role",           "Editor Role & Responsibilities"),
+    ("faq",             "FAQ",             0, "faq",                   "Frequently Asked Questions"),
 ]
 
+# Only reviewed launch material is public. Other guide rows and static files are
+# deliberately retained so they can be reviewed and published gradually.
+_LAUNCH_GUIDE_SLUGS = tuple(guide[3] for guide in _DEFAULT_GUIDES)
+
 with engine.connect() as _conn:
-    existing = _conn.execute(text("SELECT COUNT(*) FROM guides")).scalar()
-    if existing == 0:
-        for _sec, _sec_label, _order, _slug, _title in _DEFAULT_GUIDES:
+    existing_slugs = set(_conn.execute(text("SELECT slug FROM guides")).scalars())
+    for _sec, _sec_label, _order, _slug, _title in _DEFAULT_GUIDES:
+        if _slug not in existing_slugs:
             try:
                 _conn.execute(text(
                     "INSERT INTO guides (slug, title, content, section, section_label, sort_order) "
@@ -129,12 +106,14 @@ with engine.connect() as _conn:
                     "section_label": _sec_label, "order": _order})
             except Exception:
                 pass
-        _conn.commit()
+    _conn.commit()
     # Terminology migration: retitle the two "Wizard" guides on already-seeded
     # databases. Matches the old default title only, so editor edits are kept.
     for _slug, _old, _new in [
         ("submitting-with-the-wizard", "Submitting a CAP with the Wizard", "Submitting a CAP, Step by Step"),
         ("faq-what-is-the-amendment-wizard", "What is the Amendment Wizard?", "How does the proposal form work?"),
+        ("intro-to-caps-and-cis", "Introduction to CAPs & CIS", "CAPs and CISs Explained"),
+        ("editor-role", "Editor Role & Scope", "Editor Role & Responsibilities"),
     ]:
         try:
             _conn.execute(text("UPDATE guides SET title = :new WHERE slug = :slug AND title = :old"),
@@ -1792,14 +1771,18 @@ class GuideUpdate(BaseModel):
 
 @app.get("/guides", tags=["guides"], summary="List all guides")
 def list_guides(db: Session = Depends(get_db)):
-    guides = db.query(Guide).order_by(Guide.section, Guide.sort_order, Guide.slug).all()
+    guides = (db.query(Guide)
+              .filter(Guide.slug.in_(_LAUNCH_GUIDE_SLUGS))
+              .order_by(Guide.section, Guide.sort_order, Guide.slug).all())
     return [{"slug": g.slug, "title": g.title, "section": g.section,
              "section_label": g.section_label or g.section.replace('-', ' ').title(),
              "sort_order": g.sort_order} for g in guides]
 
 @app.get("/guides/{slug}", tags=["guides"], summary="Get a guide by slug")
 def get_guide(slug: str, db: Session = Depends(get_db)):
-    guide = db.query(Guide).filter(Guide.slug == slug).first()
+    guide = (db.query(Guide)
+             .filter(Guide.slug == slug, Guide.slug.in_(_LAUNCH_GUIDE_SLUGS))
+             .first())
     if not guide:
         raise HTTPException(status_code=404, detail="Guide not found")
     return {
