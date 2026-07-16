@@ -52,6 +52,23 @@ export function renderModeration(state) {
  <div class="space-y-5">
             ${cases.map(c => renderCase(c)).join('')}
         </div>`}
+
+        <!-- Danger zone -->
+ <div class="mt-12 rounded-[2rem] border-2 border-red-200 bg-red-50/40 p-6 sm:p-8">
+ <h2 class="text-sm font-black uppercase tracking-widest text-red-600 flex items-center gap-2">
+ <i data-lucide="alert-triangle" class="w-4 h-4"></i> Danger zone
+            </h2>
+ <div class="mt-4 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+                <div>
+ <p class="text-sm font-black text-slate-900">Reset all proposals</p>
+ <p class="text-sm text-slate-500 mt-1 max-w-xl">Permanently deletes every proposal and everything attached to it (comments, labels, audit trail, versions, suggestions). Editors, admins, users and guides are kept. Numbering restarts at #1. This cannot be undone.</p>
+                </div>
+                <button onclick="window.confirmResetProposals()"
+ class="flex-shrink-0 inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-red-600 hover:bg-red-700 text-white text-sm font-bold transition-colors">
+ <i data-lucide="trash-2" class="w-4 h-4"></i> Reset proposals
+                </button>
+            </div>
+        </div>
     </div>`;
 }
 

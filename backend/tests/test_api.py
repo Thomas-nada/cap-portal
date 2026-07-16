@@ -205,6 +205,39 @@ def test_list_proposals(client, db):
     assert len(r.json()) == 2
 
 
+def test_admin_can_reset_all_proposals(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_admin(db)
+    client.post("/proposals", json=proposal_body("P1"), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals", json=proposal_body("P2"), headers=auth(AUTHOR_ADDR, "Alice"))
+
+    r = client.post("/admin/reset-proposals", json={"confirm": "RESET"},
+                    headers=auth(ADMIN_ADDR, "Admin"))
+
+    assert r.status_code == 200
+    assert r.json() == {"ok": True, "deleted_proposals": 2}
+    assert client.get("/proposals").json() == []
+
+    created = client.post("/proposals", json=proposal_body("Fresh start"),
+                          headers=auth(AUTHOR_ADDR, "Alice"))
+    assert created.status_code == 201
+    assert created.json()["number"] == 1
+
+
+def test_reset_proposals_requires_admin(client, db):
+    seed_editor(db)
+    r = client.post("/admin/reset-proposals", json={"confirm": "RESET"},
+                    headers=auth(EDITOR_ADDR, "Editor"))
+    assert r.status_code == 403
+
+
+def test_reset_proposals_requires_exact_confirmation(client, db):
+    seed_admin(db)
+    r = client.post("/admin/reset-proposals", json={"confirm": "reset"},
+                    headers=auth(ADMIN_ADDR, "Admin"))
+    assert r.status_code == 400
+
+
 def test_update_proposal_by_author(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))

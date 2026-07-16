@@ -6,7 +6,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
          fetchConstitutionVersions, fetchConstitutionContent,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
-         fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin,
+         fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin, resetProposals,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchVersions, fetchVersion,
          getMe, devSeedEditor, setDisplayName, updateProfile, acceptAlphaAgreement,
@@ -428,6 +428,65 @@ async function loadModerationCases() {
 window.setModerationFilter = (f) => {
     state.moderationFilter = f;
     loadModerationCases();
+};
+
+// Admin: reset all proposals. Two gates — a typed "RESET" and the server also
+// requires the same phrase — so it can't fire by accident.
+window.confirmResetProposals = () => {
+    if (!state.user?.is_admin) return;
+    const backdrop = document.createElement('div');
+    backdrop.id = 'reset-proposals-backdrop';
+    backdrop.className = 'fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm';
+    backdrop.innerHTML = `
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-6 sm:p-8" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+                <h2 class="text-xl font-black text-slate-900">Reset all proposals?</h2>
+            </div>
+            <p class="text-sm text-slate-500 mb-2">This permanently deletes <b>every proposal</b> and all comments, labels, audit history, versions and suggestions. Editors, admins, users and guides are kept. Numbering restarts at #1.</p>
+            <p class="text-sm text-slate-500 mb-4">This cannot be undone. Type <b class="text-slate-900">RESET</b> to confirm:</p>
+            <input id="reset-proposals-input" type="text" placeholder="RESET" autocomplete="off"
+                oninput="window._resetProposalsCheck(this.value)"
+                onkeydown="if(event.key==='Enter') window._doResetProposals()"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white text-slate-900 outline-none focus:border-red-400 mb-4 font-bold tracking-widest text-center">
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('reset-proposals-backdrop').remove()"
+                    class="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black hover:bg-slate-200 transition-colors">Cancel</button>
+                <button id="reset-proposals-go" onclick="window._doResetProposals()" disabled
+                    class="flex-1 py-3 rounded-2xl bg-red-600 text-white font-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700">Reset</button>
+            </div>
+        </div>`;
+    backdrop.onclick = () => backdrop.remove();
+    document.body.appendChild(backdrop);
+    if (window.lucide) lucide.createIcons();
+    document.getElementById('reset-proposals-input')?.focus();
+};
+
+window._resetProposalsCheck = (v) => {
+    const go = document.getElementById('reset-proposals-go');
+    if (go) go.disabled = v.trim() !== 'RESET';
+};
+
+window._doResetProposals = async () => {
+    const input = document.getElementById('reset-proposals-input');
+    if (!input || input.value.trim() !== 'RESET') return;
+    const go = document.getElementById('reset-proposals-go');
+    if (go) { go.disabled = true; go.textContent = 'Resetting…'; }
+    try {
+        const res = await resetProposals();
+        document.getElementById('reset-proposals-backdrop')?.remove();
+        await loadProposals();
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 px-5 py-4 rounded-2xl bg-green-600 text-white shadow-2xl';
+        toast.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i><p class="text-sm font-bold">Reset complete — ${res.deleted_proposals} proposal${res.deleted_proposals === 1 ? '' : 's'} deleted. Numbering restarts at #1.</p>`;
+        document.body.appendChild(toast);
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => toast.remove(), 5000);
+    } catch (e) {
+        state.error = `Reset failed: ${e.message}`;
+        document.getElementById('reset-proposals-backdrop')?.remove();
+        updateUI();
+    }
 };
 
 window.moderationResolve = (caseId, decision) => {

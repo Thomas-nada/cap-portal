@@ -1547,6 +1547,45 @@ def remove_admin(stake_address: str, user: dict = Depends(require_admin),
     return {"ok": True}
 
 
+# ── Admin maintenance ─────────────────────────────────────────────────────────
+
+class ResetProposalsRequest(BaseModel):
+    # Belt-and-braces: the client must echo this exact phrase so the destructive
+    # call can't fire from a stray request or a mis-click.
+    confirm: str = Field(max_length=40)
+
+
+@app.post("/admin/reset-proposals", tags=["admins"], summary="Delete ALL proposals",
+          description="Irreversibly deletes every proposal and everything attached to it "
+                      "(comments, labels, audit, versions, suggestions, moderation cases, "
+                      "notifications, generated constitution drafts). Editors, admins, users, "
+                      "guides and the base Constitution are left intact, and proposal numbering "
+                      "restarts at 1. **Requires admin role** and the confirmation phrase `RESET`.")
+def reset_proposals(req: ResetProposalsRequest, user: dict = Depends(require_admin),
+                    db: Session = Depends(get_db)):
+    if req.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="Type RESET to confirm.")
+
+    proposal_count = db.query(Proposal).count()
+
+    # Delete children before parents so foreign keys never block the delete.
+    db.query(Label).delete(synchronize_session=False)
+    db.query(Comment).delete(synchronize_session=False)
+    db.query(AuditEvent).delete(synchronize_session=False)
+    db.query(ProposalVersion).delete(synchronize_session=False)
+    db.query(Suggestion).delete(synchronize_session=False)
+    db.query(ModerationCase).delete(synchronize_session=False)
+    db.query(Notification).delete(synchronize_session=False)
+    db.query(ConstitutionDoc).delete(synchronize_session=False)  # generated cap-N drafts only
+    db.query(Proposal).delete(synchronize_session=False)
+    db.commit()
+
+    logger.warning("[admin] %s reset all proposals — %d proposal(s) deleted",
+                   user["sub"], proposal_count)
+    # Next proposal number is max(number)+1 → 1 now that the table is empty.
+    return {"ok": True, "deleted_proposals": proposal_count}
+
+
 # ── Proposal versions ─────────────────────────────────────────────────────────
 
 def version_to_dict(v: ProposalVersion) -> dict:

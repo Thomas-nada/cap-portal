@@ -204,6 +204,11 @@ export async function claimFirstAdmin() {
     return req('POST', '/admins/bootstrap', {}, true);
 }
 
+// Admin-only: delete ALL proposals and their attached data. Numbering restarts at 1.
+export async function resetProposals() {
+    return req('POST', '/admin/reset-proposals', { confirm: 'RESET' }, true);
+}
+
 // ── Versions ──────────────────────────────────────────────────────────────────
 
 export async function fetchVersions(number) {
