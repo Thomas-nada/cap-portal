@@ -16,7 +16,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          showDisplayNameStep, devLogin, shortAddress,
-         getAvailableWallets } from './wallet.js';
+         getAvailableWallets, walletErrorMessage } from './wallet.js';
 
 import { DEV_MODE, API_BASE } from './config.js';
 import { computeStageCounts } from './lifecycle.js';
@@ -1662,7 +1662,7 @@ function showWalletModal() {
         } catch (e) {
             console.error('Wallet connection failed:', e);
             document.getElementById('wallet-modal-backdrop')?.remove();
-            state.error = `Wallet connection failed: ${e.message}`;
+            state.error = `Wallet connection failed: ${walletErrorMessage(e)}`;
             updateUI();
         }
     };

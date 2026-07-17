@@ -31,6 +31,48 @@ function capitalize(str) {
 }
 
 /**
+ * CIP-30 wallets reject with plain objects such as { code, info }, not
+ * necessarily Error instances. Extract a useful message for the UI.
+ */
+export function walletErrorMessage(error, fallback = 'The wallet request failed') {
+    if (typeof error === 'string' && error.trim()) return error.trim();
+    if (error && typeof error === 'object') {
+        for (const key of ['message', 'info', 'detail', 'reason']) {
+            const value = error[key];
+            if (typeof value === 'string' && value.trim()) return value.trim();
+        }
+    }
+    return fallback;
+}
+
+function walletStepError(step, error, codeMessages = {}) {
+    const code = error && typeof error === 'object' ? error.code : undefined;
+    const fallback = codeMessages[code] || 'The wallet did not provide an explanation';
+    return new Error(`${step}: ${walletErrorMessage(error, fallback)}`);
+}
+
+async function walletStep(step, action, codeMessages = {}) {
+    try {
+        return await action();
+    } catch (error) {
+        throw walletStepError(step, error, codeMessages);
+    }
+}
+
+const API_ERROR_MESSAGES = {
+    [-1]: 'The wallet received an invalid request',
+    [-2]: 'The wallet encountered an internal error',
+    [-3]: 'The wallet refused access',
+    [-4]: 'The active wallet account changed; please try connecting again',
+};
+
+const DATA_SIGN_ERROR_MESSAGES = {
+    1: 'The wallet could not generate the login signature',
+    2: 'This account cannot sign with its stake address',
+    3: 'The signing request was declined in the wallet',
+};
+
+/**
  * Connect a wallet and authenticate via CIP-8 challenge-response.
  * Requests CIP-95 extensions if available. Verifies mainnet (networkId=1).
  * Returns {token, stake_address, display_name, is_editor} on success.
@@ -44,18 +86,31 @@ export async function connectAndAuth(walletId, displayName = null) {
     try {
         api = await walletObj.enable({ extensions: [{ cip: 95 }] });
     } catch {
-        // Fall back to standard CIP-30 enable if CIP-95 not supported
-        api = await walletObj.enable();
+        // Fall back to standard CIP-30 enable if CIP-95 not supported.
+        api = await walletStep(
+            `Could not connect to ${walletObj.name || capitalize(walletId)}`,
+            () => walletObj.enable(),
+            API_ERROR_MESSAGES,
+        );
     }
+    if (!api) throw new Error(`${walletObj.name || capitalize(walletId)} did not return a wallet connection`);
 
     // Verify network — mainnet=1, testnet=0
-    const networkId = await api.getNetworkId();
+    const networkId = await walletStep(
+        'Could not read the wallet network',
+        () => api.getNetworkId(),
+        API_ERROR_MESSAGES,
+    );
     if (networkId !== 1 && !DEV_MODE) {
         throw new Error('Please switch your wallet to Cardano mainnet and try again.');
     }
 
     // Get stake address (reward address) — returned as hex-encoded address bytes
-    const rewardAddresses = await api.getRewardAddresses();
+    const rewardAddresses = await walletStep(
+        'Could not read the wallet stake address',
+        () => api.getRewardAddresses(),
+        API_ERROR_MESSAGES,
+    );
     if (!rewardAddresses?.length) {
         throw new Error('No stake address found in wallet');
     }
@@ -69,7 +124,15 @@ export async function connectAndAuth(walletId, displayName = null) {
 
     // Sign challenge — wallets expect payload as hex
     const challengeHex = stringToHex(challenge);
-    const { signature, key } = await api.signData(stakeAddressHex, challengeHex);
+    const signed = await walletStep(
+        'Could not approve the login signature',
+        () => api.signData(stakeAddressHex, challengeHex),
+        DATA_SIGN_ERROR_MESSAGES,
+    );
+    const { signature, key } = signed || {};
+    if (!signature || !key) {
+        throw new Error('The wallet returned an incomplete login signature');
+    }
 
     // Verify on server and get token
     const result = await verifyAuth({
