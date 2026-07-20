@@ -679,10 +679,20 @@ window.downloadConstitution = () => {
 };
 
 window.enableDiffMode = async () => {
-    const others = state.constitutionVersions.filter(v => v.name !== state.constitutionCurrentVersion);
-    if (!others.length) return;
-    state.constitutionCompareVersion = others[0].name;
-    try { await loadConstitutionVersionByName(others[0].name); } catch (e) { state.error = e.message; }
+    // The ratified base is always the "Before" side; compare it against a draft —
+    // preferring the version currently being viewed if that's a draft.
+    const base = state.constitutionVersions.find(v => v.isCurrent) || state.constitutionVersions[0];
+    if (!base) return;
+    const cur = state.constitutionCurrentVersion;
+    const target = (cur && cur !== base.name)
+        ? cur
+        : state.constitutionVersions.find(v => v.name !== base.name)?.name;
+    if (!target) return; // only the ratified version exists — nothing to compare
+    state.constitutionCompareVersion = target;
+    try {
+        await loadConstitutionVersionByName(base.name);
+        await loadConstitutionVersionByName(target);
+    } catch (e) { state.error = e.message; }
     updateUI();
 };
 
@@ -693,7 +703,12 @@ window.disableDiffMode = () => {
 
 window.setCompareVersion = async (name) => {
     state.constitutionCompareVersion = name;
-    try { await loadConstitutionVersionByName(name); } catch (e) { state.error = e.message; }
+    // Keep the ratified base ("Before") loaded alongside the chosen draft.
+    const base = state.constitutionVersions.find(v => v.isCurrent) || state.constitutionVersions[0];
+    try {
+        if (base) await loadConstitutionVersionByName(base.name);
+        await loadConstitutionVersionByName(name);
+    } catch (e) { state.error = e.message; }
     updateUI();
 };
 

@@ -173,6 +173,9 @@ export function renderConstitution(state) {
     const isDiffMode = state.constitutionCompareVersion !== null;
     const currentVersion = state.constitutionVersions.find(v => v.name === state.constitutionCurrentVersion);
     const compareVersion = isDiffMode ? state.constitutionVersions.find(v => v.name === state.constitutionCompareVersion) : null;
+    // In diff mode the "Before" side is always the ratified (current) constitution,
+    // and "After" is the proposed draft being compared.
+    const baseVersion = state.constitutionVersions.find(v => v.isCurrent) || state.constitutionVersions[0];
 
     initConstitutionSelection();
     const sections = CONSTITUTION_SECTIONS;
@@ -232,9 +235,10 @@ export function renderConstitution(state) {
                         Enable Diff View
                     </button>
                     ` : `
+                    <p class="text-sm text-slate-400 mb-2">Comparing against <span class="font-bold text-slate-600">${baseVersion?.name || 'the current constitution'}</span>:</p>
                     <select onchange="window.setCompareVersion(this.value)"
  class="w-full p-3 rounded-xl border border-slate-200 bg-white/80 text-slate-900 font-bold text-sm focus:outline-none mb-3">
-                        ${state.constitutionVersions.filter(v => v.name !== state.constitutionCurrentVersion).map(v => `
+                        ${state.constitutionVersions.filter(v => v.name !== baseVersion?.name).map(v => `
                         <option value="${v.name}" ${v.name === state.constitutionCompareVersion ? 'selected' : ''}>${v.name}</option>
                         `).join('')}
                     </select>
@@ -270,7 +274,7 @@ export function renderConstitution(state) {
             </aside>
 
  <div id="constitution-col" class="lg:col-span-3">
-                ${isDiffMode ? renderDiffView(currentVersion, compareVersion) : renderSingleView(currentVersion)}
+                ${isDiffMode ? renderDiffView(baseVersion, compareVersion) : renderSingleView(currentVersion)}
             </div>
         </div>
     </div>`;
