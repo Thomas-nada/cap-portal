@@ -782,6 +782,39 @@ def test_verify_binds_token_to_the_signing_key(client, db):
     assert decode_token(r2.json()["token"])["sub"] == mine
 
 
+def test_verify_rejects_testnet_wallet(client, db):
+    """WC-10: the app is mainnet-only. A validly-signed testnet identity must be
+    rejected even though the key legitimately derives one."""
+    from models import AuthChallenge
+    from auth import derive_stake_addresses
+
+    sig, key, pub = _sign_cose(b"chal-wc10")
+    testnet = next(a for a in derive_stake_addresses(pub) if a.startswith("stake_test1"))
+    db.add(AuthChallenge(challenge="chal-wc10")); db.commit()
+    r = client.post("/auth/verify", json={
+        "stake_address": testnet, "challenge": "chal-wc10", "signature": sig, "key": key,
+    })
+    assert r.status_code == 401
+    assert "token" not in r.json()
+
+
+def test_challenge_is_single_use(client, db):
+    """WC-12: a challenge is consumed on use — the same challenge/signature can't
+    be verified twice."""
+    from models import AuthChallenge
+    from auth import derive_stake_addresses
+
+    sig, key, pub = _sign_cose(b"chal-wc12")
+    mine = next(a for a in derive_stake_addresses(pub) if a.startswith("stake1"))
+    db.add(AuthChallenge(challenge="chal-wc12")); db.commit()
+    body = {"stake_address": mine, "challenge": "chal-wc12", "signature": sig, "key": key}
+
+    assert client.post("/auth/verify", json=body).status_code == 200   # first use works
+    assert client.post("/auth/verify", json=body).status_code == 400   # replay rejected
+    # And the challenge row is gone.
+    assert db.query(AuthChallenge).filter(AuthChallenge.challenge == "chal-wc12").first() is None
+
+
 # ── Alpha User Agreement ──────────────────────────────────────────────────────
 
 def test_alpha_agreement_recorded_server_side(client, db):

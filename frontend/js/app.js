@@ -15,7 +15,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
-         showDisplayNameStep, devLogin, shortAddress,
+         showDisplayNameStep, devLogin, shortAddress, revalidateWalletIdentity,
          getAvailableWallets, walletErrorMessage } from './wallet.js';
 
 import { DEV_MODE, API_BASE } from './config.js';
@@ -1750,6 +1750,39 @@ window.logoutWallet = async () => {
     state.unreadCount = 0;
     updateUI();
 };
+
+// WC-11: keep the session in sync with the wallet. If the extension silently
+// switches account or leaves mainnet while we're signed in, sign the user out
+// so they can't act as an identity the wallet no longer exposes. Checked when
+// the tab regains focus/visibility (cheap, and covers the common case of
+// switching accounts in the extension and returning to the tab).
+let _walletCheckPending = false;
+async function checkWalletIdentity() {
+    if (!state.user || _walletCheckPending) return;
+    _walletCheckPending = true;
+    try {
+        const res = await revalidateWalletIdentity();
+        if (res && res.ok === false) {
+            try { await revokeToken(); } catch (_) { /* best-effort */ }
+            logout();
+            state.user = null; state.notifications = []; state.notificationsOpen = false; state.unreadCount = 0;
+            updateUI();
+            const msg = res.reason === 'network'
+                ? 'Your wallet switched off Cardano mainnet — you have been signed out. Reconnect on mainnet to continue.'
+                : 'Your wallet account changed — you have been signed out. Reconnect to continue as the new account.';
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-amber-600 text-white shadow-2xl';
+            toast.innerHTML = `<i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i><p class="text-sm font-bold leading-snug">${msg}</p>`;
+            document.body.appendChild(toast);
+            if (window.lucide) lucide.createIcons();
+            setTimeout(() => toast.remove(), 8000);
+        }
+    } finally {
+        _walletCheckPending = false;
+    }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkWalletIdentity(); });
+window.addEventListener('focus', checkWalletIdentity);
 
 window.openProfile = () => {
     const existing = document.getElementById('profile-modal-backdrop');

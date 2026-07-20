@@ -575,8 +575,26 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
     if req.stake_address not in derive_stake_addresses(pub_key):
         raise HTTPException(status_code=401, detail="Signature key does not match the stake address")
 
-    # Consume challenge
-    db.delete(record)
+    # WC-10: the app is mainnet-only. The signing key legitimately derives a
+    # testnet address too, so enforce the mainnet HRP here — otherwise a direct
+    # API client could bypass the frontend's mainnet requirement with a valid
+    # testnet wallet.
+    if not req.stake_address.startswith("stake1"):
+        raise HTTPException(status_code=401, detail="Only Cardano mainnet wallets are supported.")
+
+    # WC-12: consume the challenge atomically. A conditional DELETE whose
+    # affected-row count must be exactly 1 guarantees single use even when two
+    # requests race — only the one whose DELETE removes the row proceeds; the
+    # loser sees 0 rows and is rejected. (Previously the read and delete were
+    # separate, so concurrent requests could both consume the same challenge.)
+    consumed = (
+        db.query(AuthChallenge)
+        .filter(AuthChallenge.challenge == req.challenge)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    if consumed != 1:
+        raise HTTPException(status_code=400, detail="Invalid or expired challenge")
 
     # Look up or create user record; stored name takes priority over request name
     user_record = db.query(User).filter(User.stake_address == req.stake_address).first()

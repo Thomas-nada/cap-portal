@@ -158,6 +158,37 @@ export function logout() {
     // cap_display_name is intentionally kept so returning users skip the name prompt
 }
 
+/**
+ * WC-11: confirm the connected wallet still exposes the same mainnet identity
+ * we authenticated as. Extensions can silently switch account or network while
+ * a session is open, leaving the portal authorising the old wallet. Returns:
+ *   { ok: true }                     — unchanged, still on mainnet
+ *   { ok: false, reason: 'account' } — the reward address changed
+ *   { ok: false, reason: 'network' } — the wallet left mainnet
+ *   null                             — indeterminate (no wallet api / dev / hiccup)
+ * A null result never invalidates the session — only a definite mismatch does.
+ */
+export async function revalidateWalletIdentity() {
+    const session = getSavedSession();
+    if (!session?.stake_address) return null;
+    const walletId = session.wallet;
+    if (!walletId || walletId === 'dev') return null;
+    const walletObj = window.cardano?.[walletId];
+    if (!walletObj) return null;
+    try {
+        if (!(await walletObj.isEnabled())) return null;  // not connected right now
+        const api = await walletObj.enable();
+        const networkId = await api.getNetworkId();
+        if (networkId !== 1 && !DEV_MODE) return { ok: false, reason: 'network' };
+        const rewards = await api.getRewardAddresses();
+        const current = rewards?.length ? (hexToBech32StakeAddress(rewards[0]) || rewards[0]) : null;
+        if (current && current !== session.stake_address) return { ok: false, reason: 'account' };
+        return { ok: true };
+    } catch {
+        return null;  // transient wallet error — don't sign the user out over a hiccup
+    }
+}
+
 export function getSavedSession() {
     const token = localStorage.getItem('cap_token');
     if (!token) return null;
