@@ -1,3 +1,14 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# REFERENCE ONLY — this is intentionally named render.yaml.example, NOT
+# render.yaml, so Render does NOT treat it as an active Blueprint. A live
+# render.yaml auto-provisions the services below on every push, which creates
+# duplicate services (e.g. "-6711" suffixed copies) alongside manually-created
+# ones. Services here are managed by hand in the Render dashboard.
+#
+# It's kept for documentation: the required env vars are BOOTSTRAP_ADMIN_STAKE
+# (operator stake for first-admin bootstrap) and CORS_ORIGINS, plus JWT_SECRET,
+# DATABASE_URL, and ENVIRONMENT=production.
+# ─────────────────────────────────────────────────────────────────────────────
 databases:
   - name: cap-portal-db
     plan: free
