@@ -137,6 +137,18 @@ class AuthChallenge(Base):
     created_at = Column(DateTime(timezone=True), default=now)
 
 
+class RevokedToken(Base):
+    """Tokens invalidated by an explicit logout. JWTs are stateless, so without
+    this a stolen token would stay usable until it expired even after the user
+    disconnected. Rows are purged once past `expires_at` — after that the JWT's
+    own `exp` rejects it anyway."""
+    __tablename__ = "revoked_tokens"
+
+    jti = Column(String, primary_key=True)
+    expires_at = Column(DateTime(timezone=True), nullable=False, index=True)
+    revoked_at = Column(DateTime(timezone=True), default=now)
+
+
 class User(Base):
     __tablename__ = "users"
 

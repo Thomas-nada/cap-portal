@@ -9,7 +9,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin, resetProposals,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchVersions, fetchVersion,
-         getMe, devSeedEditor, setDisplayName, updateProfile, acceptAlphaAgreement,
+         getMe, revokeToken, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
          fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
@@ -1724,7 +1724,10 @@ function showWalletModal() {
 
 window.loginWithWallet = showWalletModal;
 
-window.logoutWallet = () => {
+window.logoutWallet = async () => {
+    // Revoke server-side first (needs the token), then clear the local session.
+    // Best-effort: a failed call must never trap the user in a signed-in state.
+    try { await revokeToken(); } catch (_) { /* offline or already expired */ }
     logout();
     state.user = null;
     state.notifications = [];

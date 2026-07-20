@@ -157,6 +157,8 @@ def create_token(stake_address: str, display_name: str | None) -> str:
         "sub": stake_address,
         "display_name": display_name,
         "exp": expire,
+        # Unique id so an explicit logout can revoke this specific token.
+        "jti": secrets.token_urlsafe(16),
     }
     return jwt.encode(payload, secret, algorithm=ALGORITHM)
 

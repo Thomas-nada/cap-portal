@@ -24,6 +24,15 @@ services:
         generateValue: true
       - key: ENVIRONMENT
         value: production
+      # Operator stake address(es) permitted to self-claim the first admin/editor
+      # role (comma-separated). Required — bootstrap is fail-closed without it.
+      # Set to your own stake1... address in the Render dashboard.
+      - key: BOOTSTRAP_ADMIN_STAKE
+        sync: false
+      # Allowed CORS origins (comma-separated). Defaults to the known public
+      # frontends if unset; set explicitly to your production origin.
+      - key: CORS_ORIGINS
+        sync: false
 
   # Frontend: create as a Static Site manually in the Render dashboard
   # Publish directory: frontend

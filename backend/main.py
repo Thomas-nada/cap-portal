@@ -42,7 +42,7 @@ from auth import verify_cip8_signature, derive_stake_addresses, create_token, de
 from database import engine, get_db, Base
 from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
                     User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
-                    ModerationCase, Notification, AlphaAgreement)
+                    ModerationCase, Notification, AlphaAgreement, RevokedToken)
 
 Base.metadata.create_all(bind=engine)
 
@@ -273,9 +273,24 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     msg = msg.replace("Value error, ", "")
     return _JSONResponse(status_code=400, content={"detail": msg})
 
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Restricted to known origins rather than "*". Deployments should set
+# CORS_ORIGINS (comma-separated); without it we fall back to the known public
+# frontends. Any localhost/127.0.0.1 port is always allowed so local development
+# (and the test harness) keeps working.
+# Note: the API authenticates with Bearer tokens, not cookies, so credentials are
+# never sent cross-origin automatically — allow_credentials stays False.
+_cors_configured = _config.get("CORS_ORIGINS")
+_cors_origins = (
+    [o.strip() for o in _cors_configured.split(",") if o.strip()]
+    if _cors_configured
+    else ["https://cap.intersectmbo.org", "https://cap-portal-c0cc.onrender.com"]
+)
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
+    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -309,22 +324,37 @@ _migrate_constitution_files_to_db()
 
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
-def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+def _token_revoked(payload: dict, db: Session) -> bool:
+    """True once an explicit logout has revoked this token. JWTs are stateless,
+    so without this check a token would stay usable until `exp` even after the
+    user disconnected their wallet."""
+    jti = payload.get("jti")
+    if not jti:
+        return False
+    return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
+
+
+def get_current_user(authorization: Optional[str] = Header(None),
+                     db: Session = Depends(get_db)) -> Optional[dict]:
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.split(" ", 1)[1]
-    return decode_token(token)
+    payload = decode_token(token)
+    if not payload or _token_revoked(payload, db):
+        return None
+    return payload
 
 
-def require_user(authorization: Optional[str] = Header(None)) -> dict:
-    user = get_current_user(authorization)
+def require_user(authorization: Optional[str] = Header(None),
+                 db: Session = Depends(get_db)) -> dict:
+    user = get_current_user(authorization, db)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
 
 
 def require_editor(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
-    user = require_user(authorization)
+    user = require_user(authorization, db)
     editor = db.query(Editor).filter(Editor.stake_address == user["sub"]).first()
     if not editor:
         raise HTTPException(status_code=403, detail="Editor access required")
@@ -332,7 +362,7 @@ def require_editor(authorization: Optional[str] = Header(None), db: Session = De
 
 
 def require_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
-    user = require_user(authorization)
+    user = require_user(authorization, db)
     admin = db.query(Admin).filter(Admin.stake_address == user["sub"]).first()
     if not admin:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -340,7 +370,7 @@ def require_admin(authorization: Optional[str] = Header(None), db: Session = Dep
 
 
 def require_editor_or_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
-    user = require_user(authorization)
+    user = require_user(authorization, db)
     is_editor = db.query(Editor).filter(Editor.stake_address == user["sub"]).first()
     is_admin = db.query(Admin).filter(Admin.stake_address == user["sub"]).first()
     if not is_editor and not is_admin:
@@ -589,6 +619,25 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
     }
 
 
+@app.post("/auth/logout", tags=["auth"], summary="Revoke the current token",
+          description="Invalidates the presented Bearer token immediately. Call this when the user "
+                      "disconnects — a JWT is otherwise valid until it expires.")
+def logout(authorization: Optional[str] = Header(None),
+           user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    payload = decode_token(authorization.split(" ", 1)[1])
+    jti = (payload or {}).get("jti")
+    if jti:
+        exp = payload.get("exp")
+        expires_at = (datetime.fromtimestamp(exp, tz=timezone.utc) if exp
+                      else datetime.now(timezone.utc) + timedelta(hours=24))
+        if not db.query(RevokedToken).filter(RevokedToken.jti == jti).first():
+            db.add(RevokedToken(jti=jti, expires_at=expires_at))
+        # Housekeeping: drop revocations whose tokens have expired anyway.
+        db.query(RevokedToken).filter(RevokedToken.expires_at < datetime.now(timezone.utc)).delete()
+        db.commit()
+    return {"ok": True}
+
+
 @app.get("/auth/me", tags=["auth"], summary="Get current user profile",
          description="Returns the authenticated user's stake address, display name, and roles.")
 def get_me(user: dict = Depends(require_user), db: Session = Depends(get_db)):
@@ -696,7 +745,7 @@ def health_check():
 def _viewer_is_admin(authorization: Optional[str], db: Session) -> bool:
     """True when the request carries a valid admin token. Used to decide whether
     hidden (under-review / removed) content is visible to the caller."""
-    user = get_current_user(authorization)
+    user = get_current_user(authorization, db)
     return bool(user and is_admin(user["sub"], db))
 
 
@@ -1426,10 +1475,32 @@ class EditorCreate(BaseModel):
     display_name: Optional[str] = None
 
 
+def _bootstrap_operators() -> set[str]:
+    """Operator stake addresses permitted to self-claim the first admin/editor
+    role during initial setup (env BOOTSTRAP_ADMIN_STAKE, comma-separated).
+
+    When unset this returns an empty set, which disables bootstrap entirely —
+    fail-closed (WC-08). Without this, anyone reaching a fresh, restored, or
+    reset deployment before the operator could claim admin/editor themselves."""
+    raw = _config.get("BOOTSTRAP_ADMIN_STAKE", "") or ""
+    return {s.strip() for s in raw.split(",") if s.strip()}
+
+
+def _require_bootstrap_operator(stake: str):
+    allow = _bootstrap_operators()
+    if not allow or stake not in allow:
+        raise HTTPException(
+            status_code=403,
+            detail="Bootstrap is disabled. A pre-configured operator stake address is required.",
+        )
+
+
 @app.post("/editors/bootstrap", status_code=201, tags=["editors"], summary="Claim the first editor role",
-          description="One-time bootstrap: allowed only when no editors exist yet. **Requires authentication.**")
+          description="One-time bootstrap for a pre-configured operator (BOOTSTRAP_ADMIN_STAKE), allowed "
+                      "only while no editors exist yet. **Requires authentication.**")
 def bootstrap_editor(user: dict = Depends(require_user), db: Session = Depends(get_db)):
-    """Allows the very first editor to self-register when no real editors exist yet."""
+    """Allows a pre-configured operator to self-register as the first editor."""
+    _require_bootstrap_operator(user["sub"])
     real_editors = db.query(Editor).filter(~Editor.stake_address.like("stake1dev_%")).count()
     if real_editors > 0:
         raise HTTPException(status_code=403, detail="Editors already exist. Ask an existing editor to add you.")
@@ -1483,9 +1554,11 @@ class AdminCreate(BaseModel):
 
 
 @app.post("/admins/bootstrap", status_code=201, tags=["admins"], summary="Claim the first admin role",
-          description="One-time bootstrap: allowed only when no admins exist yet. **Requires authentication.**")
+          description="One-time bootstrap for a pre-configured operator (BOOTSTRAP_ADMIN_STAKE), allowed "
+                      "only while no admins exist yet. **Requires authentication.**")
 def bootstrap_admin(user: dict = Depends(require_user), db: Session = Depends(get_db)):
-    """Allows the very first admin to self-register when no real admins exist yet."""
+    """Allows a pre-configured operator to self-register as the first admin."""
+    _require_bootstrap_operator(user["sub"])
     real_admins = db.query(Admin).filter(~Admin.stake_address.like("stake1dev_%")).count()
     if real_admins > 0:
         raise HTTPException(status_code=403, detail="Admins already exist. Ask an existing admin to add you.")
@@ -1742,24 +1815,6 @@ def reject_suggestion(number: int, suggestion_id: int,
     return suggestion_to_dict(s)
 
 
-# ── Seed endpoint (dev only) ───────────────────────────────────────────────────
-
-@app.post("/dev/seed-editor")
-def seed_editor(body: dict, db: Session = Depends(get_db)):
-    """Dev-only: add an editor by stake address without auth. Remove before production."""
-    if os.environ.get("ENVIRONMENT") == "production":
-        raise HTTPException(status_code=404)
-    sa = body.get("stake_address")
-    dn = body.get("display_name")
-    if not sa:
-        raise HTTPException(status_code=400, detail="stake_address required")
-    existing = db.query(Editor).filter(Editor.stake_address == sa).first()
-    if not existing:
-        db.add(Editor(stake_address=sa, display_name=dn))
-        db.commit()
-    return {"ok": True}
-
-
 # ── Guides ────────────────────────────────────────────────────────────────────
 
 class GuideUpdate(BaseModel):
@@ -1914,6 +1969,15 @@ def update_bug_report_status(report_id: int, body: BugReportStatusUpdate,
     report.status = body.status
     db.commit()
     return {"id": report.id, "status": report.status}
+
+
+# Defense in depth (WC-09): a production build must never expose a development
+# role-seeding route. If one is ever re-introduced, refuse to start rather than
+# rely on an env-var check inside the handler that can fail open.
+if _is_production:
+    _dev_routes = [r.path for r in app.routes if getattr(r, "path", "").startswith("/dev")]
+    if _dev_routes:
+        raise RuntimeError(f"Refusing to start in production with dev routes exposed: {_dev_routes}")
 
 
 if __name__ == '__main__':
