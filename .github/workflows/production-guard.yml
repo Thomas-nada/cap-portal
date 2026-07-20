@@ -1,0 +1,31 @@
+name: Production safety guard
+
+# WC-04: fail CI if a production-dangerous artifact is committed — the frontend
+# dev-login bypass (DEV_MODE=true, which also relaxes the mainnet check) or any
+# development-only /dev/ backend route. Runs on every push and PR.
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  guard:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Frontend must ship with dev login disabled
+        run: |
+          if grep -Eq 'DEV_MODE[[:space:]]*=[[:space:]]*true' frontend/js/config.js; then
+            echo "::error file=frontend/js/config.js::DEV_MODE is true — production must ship DEV_MODE = false (dev login + testnet bypass)"
+            exit 1
+          fi
+          echo "OK: DEV_MODE is not true"
+
+      - name: Backend must not expose any /dev/ route
+        run: |
+          if grep -Eq '@app\.(get|post|put|patch|delete)\("/dev/' backend/main.py; then
+            echo "::error file=backend/main.py::A /dev/ route is present — remove development-only endpoints before release"
+            exit 1
+          fi
+          echo "OK: no /dev/ routes"

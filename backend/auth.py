@@ -12,7 +12,10 @@ import config
 logger = logging.getLogger(__name__)
 
 ALGORITHM = "HS256"
-TOKEN_EXPIRE_HOURS = 24
+# Kept deliberately short (WC-05): the bearer token lives in localStorage, so a
+# shorter lifetime limits the window in which a token exfiltrated via XSS is
+# usable. Complemented by server-side revocation on logout (WC-03).
+TOKEN_EXPIRE_HOURS = 12
 
 # When no JWT_SECRET is configured (local dev) we fall back to a RANDOM
 # per-process secret — never a shared hardcoded string, which would let anyone
