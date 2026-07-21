@@ -701,6 +701,21 @@ def test_logout_revokes_token(client, db):
     assert r.status_code == 401
 
 
+def test_legacy_token_without_jti_is_rejected(client, db):
+    """WC-03 legacy cutover: a token minted before revocation support has no jti
+    and can never be revoked, so it must be rejected outright rather than trusted
+    until it expires."""
+    from jose import jwt
+    from datetime import datetime, timezone, timedelta
+    from auth import _jwt_secret, ALGORITHM
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    legacy = jwt.encode(
+        {"sub": AUTHOR_ADDR, "display_name": "Alice",
+         "exp": datetime.now(timezone.utc) + timedelta(hours=1)},  # no jti
+        _jwt_secret(), algorithm=ALGORITHM)
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {legacy}"}).status_code == 401
+
+
 def test_logout_only_revokes_that_token(client, db):
     """Revoking one session must not sign the user out of their other ones."""
     seed_user(db, AUTHOR_ADDR, "Alice")

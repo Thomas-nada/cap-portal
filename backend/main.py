@@ -276,8 +276,9 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
 # ── CORS ──────────────────────────────────────────────────────────────────────
 # Restricted to known origins rather than "*". Deployments should set
 # CORS_ORIGINS (comma-separated); without it we fall back to the known public
-# frontends. Any localhost/127.0.0.1 port is always allowed so local development
-# (and the test harness) keeps working.
+# frontends. localhost/127.0.0.1 is allowed ONLY outside production so local
+# development and the test harness keep working — in production the allowlist is
+# the sole set of permitted origins (WC-06).
 # Note: the API authenticates with Bearer tokens, not cookies, so credentials are
 # never sent cross-origin automatically — allow_credentials stays False.
 _cors_configured = _config.get("CORS_ORIGINS")
@@ -286,11 +287,12 @@ _cors_origins = (
     if _cors_configured
     else ["https://cap.intersectmbo.org", "https://cap-portal-c0cc.onrender.com"]
 )
+_cors_localhost_regex = None if _is_production else r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
 
 app.add_middleware(
     CORSMiddleware,
     allow_origins=_cors_origins,
-    allow_origin_regex=r"https?://(localhost|127\.0\.0\.1)(:\d+)?",
+    allow_origin_regex=_cors_localhost_regex,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -340,7 +342,14 @@ def get_current_user(authorization: Optional[str] = Header(None),
         return None
     token = authorization.split(" ", 1)[1]
     payload = decode_token(token)
-    if not payload or _token_revoked(payload, db):
+    if not payload:
+        return None
+    # WC-03 (legacy cutover): tokens minted before revocation support have no
+    # jti and therefore can never be revoked. Reject them so a pre-remediation
+    # token can't outlive a logout — the holder simply re-authenticates.
+    if not payload.get("jti"):
+        return None
+    if _token_revoked(payload, db):
         return None
     return payload
 

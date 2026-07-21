@@ -162,11 +162,14 @@ export function logout() {
  * WC-11: confirm the connected wallet still exposes the same mainnet identity
  * we authenticated as. Extensions can silently switch account or network while
  * a session is open, leaving the portal authorising the old wallet. Returns:
- *   { ok: true }                     — unchanged, still on mainnet
- *   { ok: false, reason: 'account' } — the reward address changed
- *   { ok: false, reason: 'network' } — the wallet left mainnet
- *   null                             — indeterminate (no wallet api / dev / hiccup)
- * A null result never invalidates the session — only a definite mismatch does.
+ *   { ok: true }                          — unchanged, still on mainnet
+ *   { ok: false, reason: 'account' }      — the reward address changed
+ *   { ok: false, reason: 'network' }      — the wallet left mainnet
+ *   { ok: false, reason: 'disconnected' } — the wallet is no longer connected /
+ *                                           exposes no reward address
+ *   null                                  — indeterminate (extension not present
+ *                                           yet / dev session / transient error)
+ * A null result never invalidates the session — only a definite change does.
  */
 export async function revalidateWalletIdentity() {
     const session = getSavedSession();
@@ -174,15 +177,18 @@ export async function revalidateWalletIdentity() {
     const walletId = session.wallet;
     if (!walletId || walletId === 'dev') return null;
     const walletObj = window.cardano?.[walletId];
-    if (!walletObj) return null;
+    if (!walletObj) return null;  // extension not injected — may be transient
     try {
-        if (!(await walletObj.isEnabled())) return null;  // not connected right now
+        // The user disconnected this dApp in the wallet — end the session (WC-11).
+        if (!(await walletObj.isEnabled())) return { ok: false, reason: 'disconnected' };
         const api = await walletObj.enable();
         const networkId = await api.getNetworkId();
         if (networkId !== 1 && !DEV_MODE) return { ok: false, reason: 'network' };
         const rewards = await api.getRewardAddresses();
         const current = rewards?.length ? (hexToBech32StakeAddress(rewards[0]) || rewards[0]) : null;
-        if (current && current !== session.stake_address) return { ok: false, reason: 'account' };
+        // No reward address exposed anymore — treat as a disconnect, not "unchanged".
+        if (!current) return { ok: false, reason: 'disconnected' };
+        if (current !== session.stake_address) return { ok: false, reason: 'account' };
         return { ok: true };
     } catch {
         return null;  // transient wallet error — don't sign the user out over a hiccup

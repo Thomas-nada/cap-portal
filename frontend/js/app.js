@@ -1769,6 +1769,8 @@ async function checkWalletIdentity() {
             updateUI();
             const msg = res.reason === 'network'
                 ? 'Your wallet switched off Cardano mainnet — you have been signed out. Reconnect on mainnet to continue.'
+                : res.reason === 'disconnected'
+                ? 'Your wallet disconnected — you have been signed out. Reconnect to continue.'
                 : 'Your wallet account changed — you have been signed out. Reconnect to continue as the new account.';
             const toast = document.createElement('div');
             toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-amber-600 text-white shadow-2xl';
