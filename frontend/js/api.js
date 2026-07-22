@@ -34,6 +34,12 @@ export async function verifyAuth(payload) {
     return req('POST', '/auth/verify', payload);
 }
 
+/** Revoke the current token server-side. Best-effort: the local session is
+ *  cleared regardless of whether this call succeeds. */
+export async function revokeToken() {
+    return req('POST', '/auth/logout', null, true);
+}
+
 export async function getMe() {
     return req('GET', '/auth/me', null, true);
 }
@@ -49,11 +55,6 @@ export async function updateProfile(display_name) {
 // Records server-side that the user accepted the current alpha User Agreement.
 export async function acceptAlphaAgreement() {
     return req('POST', '/alpha-agreement/accept', {}, true);
-}
-
-// Dev-only: seed an editor without auth
-export async function devSeedEditor(stake_address, display_name) {
-    return req('POST', '/dev/seed-editor', { stake_address, display_name });
 }
 
 // ── Proposals ─────────────────────────────────────────────────────────────────
@@ -202,6 +203,11 @@ export async function removeAdmin(stake_address) {
 
 export async function claimFirstAdmin() {
     return req('POST', '/admins/bootstrap', {}, true);
+}
+
+// Admin-only: delete ALL proposals and their attached data. Numbering restarts at 1.
+export async function resetProposals() {
+    return req('POST', '/admin/reset-proposals', { confirm: 'RESET' }, true);
 }
 
 // ── Versions ──────────────────────────────────────────────────────────────────

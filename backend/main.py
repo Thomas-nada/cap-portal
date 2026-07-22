@@ -42,7 +42,7 @@ from auth import verify_cip8_signature, derive_stake_addresses, create_token, de
 from database import engine, get_db, Base
 from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
                     User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
-                    ModerationCase, Notification, AlphaAgreement)
+                    ModerationCase, Notification, AlphaAgreement, RevokedToken)
 
 Base.metadata.create_all(bind=engine)
 
@@ -84,43 +84,20 @@ with engine.connect() as _conn:
 # ── Seed default guides (metadata only — content served from static files) ────
 _DEFAULT_GUIDES = [
     # section, section_label, sort_order, slug, title
-    ("editor-guides",    "Editor Guides",       0, "editor-guide",                       "Complete Editor Guide"),
-    ("editor-guides",    "Editor Guides",       1, "editor-role",                        "Editor Role & Scope"),
-    ("getting-started",  "Getting Started",     0, "about-the-cap-process",              "How the CAP Process Was Built"),
-    ("getting-started",  "Getting Started",     1, "intro-to-caps-and-cis",              "Introduction to CAPs & CIS"),
-    ("getting-started",  "Getting Started",     2, "how-to-participate",                 "How to Participate"),
-    ("getting-started",  "Getting Started",     3, "deliberation-process",               "The Deliberation Process"),
-    ("writing-caps",     "Writing CAPs",        0, "creating-a-cap",                     "Creating a CAP or CIS: Quick Checklist"),
-    ("writing-caps",     "Writing CAPs",        1, "cap-template-guide",                 "CAP Template Guide"),
-    ("writing-caps",     "Writing CAPs",        3, "common-mistakes",                    "Common Mistakes to Avoid"),
-    ("using-the-portal", "Using the Portal",    0, "connecting-your-wallet",             "Connecting Your Cardano Wallet"),
-    ("using-the-portal", "Using the Portal",    1, "submitting-with-the-wizard",         "Submitting a CAP, Step by Step"),
-    ("using-the-portal", "Using the Portal",    2, "browsing-the-constitution",          "Browsing & Comparing the Constitution"),
-    ("using-the-portal", "Using the Portal",    3, "commenting-and-discussing",          "Commenting & Discussion"),
-    ("using-the-portal", "Using the Portal",    4, "labels-and-workflow",                "Labels & Workflow"),
-    ("constitution",     "Constitution",        0, "article-by-article-breakdown",       "Article-by-Article Breakdown"),
-    ("faq",              "FAQ",                 0, "faq-what-is-a-cap",                  "What is a CAP?"),
-    ("faq",              "FAQ",                 1, "faq-what-is-a-cis",                  "What is a CIS?"),
-    ("faq",              "FAQ",                 2, "faq-who-can-create-a-cap",           "Who can create a CAP?"),
-    ("faq",              "FAQ",                 3, "faq-how-long-is-deliberation",       "How long is deliberation?"),
-    ("faq",              "FAQ",                 4, "faq-what-are-the-categories",        "What CAP categories exist?"),
-    ("faq",              "FAQ",                 5, "faq-can-i-edit-my-cap",              "Can I edit my CAP?"),
-    ("faq",              "FAQ",                 6, "faq-can-a-cis-become-a-cap",         "Can a CIS become a CAP?"),
-    ("faq",              "FAQ",                 7, "faq-what-happens-after-30-days",     "What happens after deliberation?"),
-    ("faq",              "FAQ",                 8, "faq-how-are-caps-approved",          "How are CAPs approved?"),
-    ("faq",              "FAQ",                 9, "faq-what-is-a-governance-action",    "What is a governance action?"),
-    ("faq",              "FAQ",                10, "faq-what-is-the-constitutional-committee", "What is the Constitutional Committee?"),
-    ("faq",              "FAQ",                11, "faq-what-is-a-drep",                 "What is a DRep?"),
-    ("faq",              "FAQ",                12, "faq-what-are-guardrails",            "What are the Guardrails?"),
-    ("faq",              "FAQ",                13, "faq-what-is-a-cap-editor",           "What is a CAP Editor?"),
-    ("faq",              "FAQ",                14, "faq-do-i-need-a-wallet",             "Do I need a Cardano wallet?"),
-    ("faq",              "FAQ",                15, "faq-what-is-the-amendment-wizard",   "How does the proposal form work?"),
+    ("getting-started", "Getting Started", 0, "getting-started",       "Getting Started & Using the Portal"),
+    ("getting-started", "Getting Started", 1, "intro-to-caps-and-cis", "CAPs and CISs Explained"),
+    ("editor-guides",   "Editor Guides",   0, "editor-role",           "Editor Role & Responsibilities"),
+    ("faq",             "FAQ",             0, "faq",                   "Frequently Asked Questions"),
 ]
 
+# Only reviewed launch material is public. Other guide rows and static files are
+# deliberately retained so they can be reviewed and published gradually.
+_LAUNCH_GUIDE_SLUGS = tuple(guide[3] for guide in _DEFAULT_GUIDES)
+
 with engine.connect() as _conn:
-    existing = _conn.execute(text("SELECT COUNT(*) FROM guides")).scalar()
-    if existing == 0:
-        for _sec, _sec_label, _order, _slug, _title in _DEFAULT_GUIDES:
+    existing_slugs = set(_conn.execute(text("SELECT slug FROM guides")).scalars())
+    for _sec, _sec_label, _order, _slug, _title in _DEFAULT_GUIDES:
+        if _slug not in existing_slugs:
             try:
                 _conn.execute(text(
                     "INSERT INTO guides (slug, title, content, section, section_label, sort_order) "
@@ -129,12 +106,14 @@ with engine.connect() as _conn:
                     "section_label": _sec_label, "order": _order})
             except Exception:
                 pass
-        _conn.commit()
+    _conn.commit()
     # Terminology migration: retitle the two "Wizard" guides on already-seeded
     # databases. Matches the old default title only, so editor edits are kept.
     for _slug, _old, _new in [
         ("submitting-with-the-wizard", "Submitting a CAP with the Wizard", "Submitting a CAP, Step by Step"),
         ("faq-what-is-the-amendment-wizard", "What is the Amendment Wizard?", "How does the proposal form work?"),
+        ("intro-to-caps-and-cis", "Introduction to CAPs & CIS", "CAPs and CISs Explained"),
+        ("editor-role", "Editor Role & Scope", "Editor Role & Responsibilities"),
     ]:
         try:
             _conn.execute(text("UPDATE guides SET title = :new WHERE slug = :slug AND title = :old"),
@@ -294,9 +273,26 @@ async def _validation_error_handler(request: Request, exc: RequestValidationErro
     msg = msg.replace("Value error, ", "")
     return _JSONResponse(status_code=400, content={"detail": msg})
 
+# ── CORS ──────────────────────────────────────────────────────────────────────
+# Restricted to known origins rather than "*". Deployments should set
+# CORS_ORIGINS (comma-separated); without it we fall back to the known public
+# frontends. localhost/127.0.0.1 is allowed ONLY outside production so local
+# development and the test harness keep working — in production the allowlist is
+# the sole set of permitted origins (WC-06).
+# Note: the API authenticates with Bearer tokens, not cookies, so credentials are
+# never sent cross-origin automatically — allow_credentials stays False.
+_cors_configured = _config.get("CORS_ORIGINS")
+_cors_origins = (
+    [o.strip() for o in _cors_configured.split(",") if o.strip()]
+    if _cors_configured
+    else ["https://cap.intersectmbo.org", "https://cap-portal-c0cc.onrender.com"]
+)
+_cors_localhost_regex = None if _is_production else r"https?://(localhost|127\.0\.0\.1)(:\d+)?"
+
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=_cors_origins,
+    allow_origin_regex=_cors_localhost_regex,
     allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -330,22 +326,44 @@ _migrate_constitution_files_to_db()
 
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
-def get_current_user(authorization: Optional[str] = Header(None)) -> Optional[dict]:
+def _token_revoked(payload: dict, db: Session) -> bool:
+    """True once an explicit logout has revoked this token. JWTs are stateless,
+    so without this check a token would stay usable until `exp` even after the
+    user disconnected their wallet."""
+    jti = payload.get("jti")
+    if not jti:
+        return False
+    return db.query(RevokedToken).filter(RevokedToken.jti == jti).first() is not None
+
+
+def get_current_user(authorization: Optional[str] = Header(None),
+                     db: Session = Depends(get_db)) -> Optional[dict]:
     if not authorization or not authorization.startswith("Bearer "):
         return None
     token = authorization.split(" ", 1)[1]
-    return decode_token(token)
+    payload = decode_token(token)
+    if not payload:
+        return None
+    # WC-03 (legacy cutover): tokens minted before revocation support have no
+    # jti and therefore can never be revoked. Reject them so a pre-remediation
+    # token can't outlive a logout — the holder simply re-authenticates.
+    if not payload.get("jti"):
+        return None
+    if _token_revoked(payload, db):
+        return None
+    return payload
 
 
-def require_user(authorization: Optional[str] = Header(None)) -> dict:
-    user = get_current_user(authorization)
+def require_user(authorization: Optional[str] = Header(None),
+                 db: Session = Depends(get_db)) -> dict:
+    user = get_current_user(authorization, db)
     if not user:
         raise HTTPException(status_code=401, detail="Authentication required")
     return user
 
 
 def require_editor(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
-    user = require_user(authorization)
+    user = require_user(authorization, db)
     editor = db.query(Editor).filter(Editor.stake_address == user["sub"]).first()
     if not editor:
         raise HTTPException(status_code=403, detail="Editor access required")
@@ -353,7 +371,7 @@ def require_editor(authorization: Optional[str] = Header(None), db: Session = De
 
 
 def require_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
-    user = require_user(authorization)
+    user = require_user(authorization, db)
     admin = db.query(Admin).filter(Admin.stake_address == user["sub"]).first()
     if not admin:
         raise HTTPException(status_code=403, detail="Admin access required")
@@ -361,7 +379,7 @@ def require_admin(authorization: Optional[str] = Header(None), db: Session = Dep
 
 
 def require_editor_or_admin(authorization: Optional[str] = Header(None), db: Session = Depends(get_db)) -> dict:
-    user = require_user(authorization)
+    user = require_user(authorization, db)
     is_editor = db.query(Editor).filter(Editor.stake_address == user["sub"]).first()
     is_admin = db.query(Admin).filter(Admin.stake_address == user["sub"]).first()
     if not is_editor and not is_admin:
@@ -566,8 +584,26 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
     if req.stake_address not in derive_stake_addresses(pub_key):
         raise HTTPException(status_code=401, detail="Signature key does not match the stake address")
 
-    # Consume challenge
-    db.delete(record)
+    # WC-10: the app is mainnet-only. The signing key legitimately derives a
+    # testnet address too, so enforce the mainnet HRP here — otherwise a direct
+    # API client could bypass the frontend's mainnet requirement with a valid
+    # testnet wallet.
+    if not req.stake_address.startswith("stake1"):
+        raise HTTPException(status_code=401, detail="Only Cardano mainnet wallets are supported.")
+
+    # WC-12: consume the challenge atomically. A conditional DELETE whose
+    # affected-row count must be exactly 1 guarantees single use even when two
+    # requests race — only the one whose DELETE removes the row proceeds; the
+    # loser sees 0 rows and is rejected. (Previously the read and delete were
+    # separate, so concurrent requests could both consume the same challenge.)
+    consumed = (
+        db.query(AuthChallenge)
+        .filter(AuthChallenge.challenge == req.challenge)
+        .delete(synchronize_session=False)
+    )
+    db.commit()
+    if consumed != 1:
+        raise HTTPException(status_code=400, detail="Invalid or expired challenge")
 
     # Look up or create user record; stored name takes priority over request name
     user_record = db.query(User).filter(User.stake_address == req.stake_address).first()
@@ -608,6 +644,25 @@ def verify_auth(request: Request, req: VerifyRequest, db: Session = Depends(get_
         "is_admin": admin,
         "alpha_agreed": has_accepted_alpha(req.stake_address, db),
     }
+
+
+@app.post("/auth/logout", tags=["auth"], summary="Revoke the current token",
+          description="Invalidates the presented Bearer token immediately. Call this when the user "
+                      "disconnects — a JWT is otherwise valid until it expires.")
+def logout(authorization: Optional[str] = Header(None),
+           user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    payload = decode_token(authorization.split(" ", 1)[1])
+    jti = (payload or {}).get("jti")
+    if jti:
+        exp = payload.get("exp")
+        expires_at = (datetime.fromtimestamp(exp, tz=timezone.utc) if exp
+                      else datetime.now(timezone.utc) + timedelta(hours=24))
+        if not db.query(RevokedToken).filter(RevokedToken.jti == jti).first():
+            db.add(RevokedToken(jti=jti, expires_at=expires_at))
+        # Housekeeping: drop revocations whose tokens have expired anyway.
+        db.query(RevokedToken).filter(RevokedToken.expires_at < datetime.now(timezone.utc)).delete()
+        db.commit()
+    return {"ok": True}
 
 
 @app.get("/auth/me", tags=["auth"], summary="Get current user profile",
@@ -717,7 +772,7 @@ def health_check():
 def _viewer_is_admin(authorization: Optional[str], db: Session) -> bool:
     """True when the request carries a valid admin token. Used to decide whether
     hidden (under-review / removed) content is visible to the caller."""
-    user = get_current_user(authorization)
+    user = get_current_user(authorization, db)
     return bool(user and is_admin(user["sub"], db))
 
 
@@ -1447,10 +1502,32 @@ class EditorCreate(BaseModel):
     display_name: Optional[str] = None
 
 
+def _bootstrap_operators() -> set[str]:
+    """Operator stake addresses permitted to self-claim the first admin/editor
+    role during initial setup (env BOOTSTRAP_ADMIN_STAKE, comma-separated).
+
+    When unset this returns an empty set, which disables bootstrap entirely —
+    fail-closed (WC-08). Without this, anyone reaching a fresh, restored, or
+    reset deployment before the operator could claim admin/editor themselves."""
+    raw = _config.get("BOOTSTRAP_ADMIN_STAKE", "") or ""
+    return {s.strip() for s in raw.split(",") if s.strip()}
+
+
+def _require_bootstrap_operator(stake: str):
+    allow = _bootstrap_operators()
+    if not allow or stake not in allow:
+        raise HTTPException(
+            status_code=403,
+            detail="Bootstrap is disabled. A pre-configured operator stake address is required.",
+        )
+
+
 @app.post("/editors/bootstrap", status_code=201, tags=["editors"], summary="Claim the first editor role",
-          description="One-time bootstrap: allowed only when no editors exist yet. **Requires authentication.**")
+          description="One-time bootstrap for a pre-configured operator (BOOTSTRAP_ADMIN_STAKE), allowed "
+                      "only while no editors exist yet. **Requires authentication.**")
 def bootstrap_editor(user: dict = Depends(require_user), db: Session = Depends(get_db)):
-    """Allows the very first editor to self-register when no real editors exist yet."""
+    """Allows a pre-configured operator to self-register as the first editor."""
+    _require_bootstrap_operator(user["sub"])
     real_editors = db.query(Editor).filter(~Editor.stake_address.like("stake1dev_%")).count()
     if real_editors > 0:
         raise HTTPException(status_code=403, detail="Editors already exist. Ask an existing editor to add you.")
@@ -1504,9 +1581,11 @@ class AdminCreate(BaseModel):
 
 
 @app.post("/admins/bootstrap", status_code=201, tags=["admins"], summary="Claim the first admin role",
-          description="One-time bootstrap: allowed only when no admins exist yet. **Requires authentication.**")
+          description="One-time bootstrap for a pre-configured operator (BOOTSTRAP_ADMIN_STAKE), allowed "
+                      "only while no admins exist yet. **Requires authentication.**")
 def bootstrap_admin(user: dict = Depends(require_user), db: Session = Depends(get_db)):
-    """Allows the very first admin to self-register when no real admins exist yet."""
+    """Allows a pre-configured operator to self-register as the first admin."""
+    _require_bootstrap_operator(user["sub"])
     real_admins = db.query(Admin).filter(~Admin.stake_address.like("stake1dev_%")).count()
     if real_admins > 0:
         raise HTTPException(status_code=403, detail="Admins already exist. Ask an existing admin to add you.")
@@ -1545,6 +1624,45 @@ def remove_admin(stake_address: str, user: dict = Depends(require_admin),
     db.query(Admin).filter(Admin.stake_address == stake_address).delete()
     db.commit()
     return {"ok": True}
+
+
+# ── Admin maintenance ─────────────────────────────────────────────────────────
+
+class ResetProposalsRequest(BaseModel):
+    # Belt-and-braces: the client must echo this exact phrase so the destructive
+    # call can't fire from a stray request or a mis-click.
+    confirm: str = Field(max_length=40)
+
+
+@app.post("/admin/reset-proposals", tags=["admins"], summary="Delete ALL proposals",
+          description="Irreversibly deletes every proposal and everything attached to it "
+                      "(comments, labels, audit, versions, suggestions, moderation cases, "
+                      "notifications, generated constitution drafts). Editors, admins, users, "
+                      "guides and the base Constitution are left intact, and proposal numbering "
+                      "restarts at 1. **Requires admin role** and the confirmation phrase `RESET`.")
+def reset_proposals(req: ResetProposalsRequest, user: dict = Depends(require_admin),
+                    db: Session = Depends(get_db)):
+    if req.confirm != "RESET":
+        raise HTTPException(status_code=400, detail="Type RESET to confirm.")
+
+    proposal_count = db.query(Proposal).count()
+
+    # Delete children before parents so foreign keys never block the delete.
+    db.query(Label).delete(synchronize_session=False)
+    db.query(Comment).delete(synchronize_session=False)
+    db.query(AuditEvent).delete(synchronize_session=False)
+    db.query(ProposalVersion).delete(synchronize_session=False)
+    db.query(Suggestion).delete(synchronize_session=False)
+    db.query(ModerationCase).delete(synchronize_session=False)
+    db.query(Notification).delete(synchronize_session=False)
+    db.query(ConstitutionDoc).delete(synchronize_session=False)  # generated cap-N drafts only
+    db.query(Proposal).delete(synchronize_session=False)
+    db.commit()
+
+    logger.warning("[admin] %s reset all proposals — %d proposal(s) deleted",
+                   user["sub"], proposal_count)
+    # Next proposal number is max(number)+1 → 1 now that the table is empty.
+    return {"ok": True, "deleted_proposals": proposal_count}
 
 
 # ── Proposal versions ─────────────────────────────────────────────────────────
@@ -1724,24 +1842,6 @@ def reject_suggestion(number: int, suggestion_id: int,
     return suggestion_to_dict(s)
 
 
-# ── Seed endpoint (dev only) ───────────────────────────────────────────────────
-
-@app.post("/dev/seed-editor")
-def seed_editor(body: dict, db: Session = Depends(get_db)):
-    """Dev-only: add an editor by stake address without auth. Remove before production."""
-    if os.environ.get("ENVIRONMENT") == "production":
-        raise HTTPException(status_code=404)
-    sa = body.get("stake_address")
-    dn = body.get("display_name")
-    if not sa:
-        raise HTTPException(status_code=400, detail="stake_address required")
-    existing = db.query(Editor).filter(Editor.stake_address == sa).first()
-    if not existing:
-        db.add(Editor(stake_address=sa, display_name=dn))
-        db.commit()
-    return {"ok": True}
-
-
 # ── Guides ────────────────────────────────────────────────────────────────────
 
 class GuideUpdate(BaseModel):
@@ -1753,14 +1853,18 @@ class GuideUpdate(BaseModel):
 
 @app.get("/guides", tags=["guides"], summary="List all guides")
 def list_guides(db: Session = Depends(get_db)):
-    guides = db.query(Guide).order_by(Guide.section, Guide.sort_order, Guide.slug).all()
+    guides = (db.query(Guide)
+              .filter(Guide.slug.in_(_LAUNCH_GUIDE_SLUGS))
+              .order_by(Guide.section, Guide.sort_order, Guide.slug).all())
     return [{"slug": g.slug, "title": g.title, "section": g.section,
              "section_label": g.section_label or g.section.replace('-', ' ').title(),
              "sort_order": g.sort_order} for g in guides]
 
 @app.get("/guides/{slug}", tags=["guides"], summary="Get a guide by slug")
 def get_guide(slug: str, db: Session = Depends(get_db)):
-    guide = db.query(Guide).filter(Guide.slug == slug).first()
+    guide = (db.query(Guide)
+             .filter(Guide.slug == slug, Guide.slug.in_(_LAUNCH_GUIDE_SLUGS))
+             .first())
     if not guide:
         raise HTTPException(status_code=404, detail="Guide not found")
     return {
@@ -1892,6 +1996,15 @@ def update_bug_report_status(report_id: int, body: BugReportStatusUpdate,
     report.status = body.status
     db.commit()
     return {"id": report.id, "status": report.status}
+
+
+# Defense in depth (WC-09): a production build must never expose a development
+# role-seeding route. If one is ever re-introduced, refuse to start rather than
+# rely on an env-var check inside the handler that can fail open.
+if _is_production:
+    _dev_routes = [r.path for r in app.routes if getattr(r, "path", "").startswith("/dev")]
+    if _dev_routes:
+        raise RuntimeError(f"Refusing to start in production with dev routes exposed: {_dev_routes}")
 
 
 if __name__ == '__main__':

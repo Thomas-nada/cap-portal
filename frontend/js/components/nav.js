@@ -17,7 +17,8 @@ export function renderNav(state) {
         <button onclick="window.toggleNotifications()" title="Notifications"
  class="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-white">
  <i data-lucide="bell" class="w-5 h-5"></i>
-            ${state.unreadCount > 0 ? `<span class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-secondary text-white text-sm font-black flex items-center justify-center">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>` : ''}
+            <span data-unread-badge
+ class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-secondary text-white text-sm font-black items-center justify-center ${state.unreadCount > 0 ? 'flex' : 'hidden'}">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>
         </button>
     ` : '';
 

@@ -1,0 +1,50 @@
+# ─────────────────────────────────────────────────────────────────────────────
+# REFERENCE ONLY — this is intentionally named render.yaml.example, NOT
+# render.yaml, so Render does NOT treat it as an active Blueprint. A live
+# render.yaml auto-provisions the services below on every push, which creates
+# duplicate services (e.g. "-6711" suffixed copies) alongside manually-created
+# ones. Services here are managed by hand in the Render dashboard.
+#
+# It's kept for documentation: the required env vars are BOOTSTRAP_ADMIN_STAKE
+# (operator stake for first-admin bootstrap) and CORS_ORIGINS, plus JWT_SECRET,
+# DATABASE_URL, and ENVIRONMENT=production.
+# ─────────────────────────────────────────────────────────────────────────────
+databases:
+  - name: cap-portal-db
+    plan: free
+    databaseName: cap_portal
+    user: cap_portal
+
+services:
+  # ── Backend API ──────────────────────────────────────────────────────────────
+  - type: web
+    name: cap-portal-api
+    runtime: python
+    rootDir: backend
+    buildCommand: pip install -r requirements.txt
+    startCommand: uvicorn main:app --host 0.0.0.0 --port $PORT
+    plan: free
+    envVars:
+      - key: PYTHON_VERSION
+        value: "3.11.0"
+      - key: DATABASE_URL
+        fromDatabase:
+          name: cap-portal-db
+          property: connectionString
+      - key: JWT_SECRET
+        generateValue: true
+      - key: ENVIRONMENT
+        value: production
+      # Operator stake address(es) permitted to self-claim the first admin/editor
+      # role (comma-separated). Required — bootstrap is fail-closed without it.
+      # Set to your own stake1... address in the Render dashboard.
+      - key: BOOTSTRAP_ADMIN_STAKE
+        sync: false
+      # Allowed CORS origins (comma-separated). Defaults to the known public
+      # frontends if unset; set explicitly to your production origin.
+      - key: CORS_ORIGINS
+        sync: false
+
+  # Frontend: create as a Static Site manually in the Render dashboard
+  # Publish directory: frontend
+  # Rewrite rule: /* -> /index.html

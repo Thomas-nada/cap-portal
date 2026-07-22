@@ -7,14 +7,17 @@
 
 const TEXTS = {
     en: {
-        badge1: 'Step 1 of 4 — Connect Wallet',
-        badge2: 'Step 2 of 4 — Browse & Select',
-        badge3: 'Step 3 of 4 — Submit',
-        badge4: 'Step 4 of 4 — Discuss & Track',
+        step0: 'Step 0 — Connect Wallet',
+        wizard1: 'Step 1 — Choose Type, Category & Title',
+        wizard2: 'Step 2 — Select Constitution Text',
+        wizard3: 'Step 3 — Propose Changes',
+        wizard4: 'Step 4 — Explain',
+        wizard5: 'Step 5 — Review & Submit',
+        published: 'Published — Discuss & Track',
         c1a: 'Click "Connect Wallet" and choose any Cardano wallet — Eternl, Lace, Vespr, or any CIP-30 wallet. Your stake address becomes your identity — no account or password needed.',
-        c2a: 'Once signed in, click "New CAP" to open the proposal form. Choose CAP, pick a category, and give your proposal a clear title.',
+        c2a: 'Once signed in, open Proposals and click "New Proposal". Choose CAP, pick a category, and give your proposal a clear title.',
         c2b: 'In Step 2, read the Constitution and highlight the exact passage you want to change. Choose "Replace" to swap the wording for new text.',
-        c2c: 'Highlight another passage and choose "Add After" to insert new text right after it — without removing the original wording.',
+        c2c: 'When needed, choose "Add After" to insert new text after a selected passage without removing the original wording.',
         c3a: 'For each selection, write your proposed text — the replacement wording, or the new text to insert after the passage.',
         c3b: 'Then explain your proposal: a short summary, why the change is needed, and its expected impact.',
         c3c: 'Step 5 previews exactly how your proposal will look once published. Review it, then click "Submit Proposal".',
@@ -184,7 +187,7 @@ function loadCues() {
         .catch(() => { cuesLoading = false; });
 }
 
-/** Markup for the video player with overlay + language toggle. */
+/** Markup for the video player with captions below the footage. */
 export function renderCaptionedVideo(videoUrl) {
     loadCues();
     const lang = getLang();
@@ -197,20 +200,20 @@ export function renderCaptionedVideo(videoUrl) {
             ${l.label}
         </button>`).join('')}
     </div>
-    <div class="aspect-video rounded-2xl overflow-hidden border border-slate-100 relative">
-        <video src="${videoUrl}" class="w-full h-full" controls
-               controlslist="nofullscreen" disablepictureinpicture
-               ontimeupdate="window.__vidCaptionTick(this)"
-               onseeked="window.__vidCaptionTick(this)"></video>
-        <div data-vid-overlay style="position:absolute;inset:0;pointer-events:none;overflow:hidden;">
-            <div data-vid-badge style="position:absolute;top:3.3%;left:50%;transform:translateX(-50%);
-                background:#ff5722;color:#fff;border-radius:999px;font-weight:700;
+    <div data-vid-player>
+        <div class="aspect-video rounded-2xl overflow-hidden border border-slate-100">
+            <video src="${videoUrl}" class="w-full h-full" controls
+                   controlslist="nofullscreen" disablepictureinpicture
+                   ontimeupdate="window.__vidCaptionTick(this)"
+                   onseeked="window.__vidCaptionTick(this)"></video>
+        </div>
+        <div data-vid-overlay class="mt-3 min-h-[88px] flex flex-col items-center justify-start gap-2 text-center" aria-live="polite">
+            <div data-vid-badge style="background:#ff5722;color:#fff;border-radius:999px;font-weight:700;
                 letter-spacing:.08em;text-transform:uppercase;white-space:nowrap;
                 font-family:'Segoe UI',sans-serif;display:none;"></div>
-            <div data-vid-caption style="position:absolute;top:10.5%;left:50%;transform:translateX(-50%);
-                background:rgba(2,40,170,0.95);color:#fff;font-weight:600;line-height:1.4;
-                letter-spacing:.01em;box-shadow:0 8px 30px rgba(0,0,0,0.35);
-                border:1px solid rgba(255,255,255,0.25);max-width:74%;text-align:center;
+            <div data-vid-caption style="background:rgba(2,40,170,0.95);color:#fff;font-weight:600;line-height:1.4;
+                letter-spacing:.01em;box-shadow:0 6px 20px rgba(0,0,0,0.2);
+                border:1px solid rgba(255,255,255,0.25);width:100%;text-align:center;
                 font-family:'Segoe UI',sans-serif;display:none;"></div>
         </div>
     </div>`;
@@ -222,13 +225,13 @@ window.setVideoCaptionLang = (lang) => {
         const active = btn.getAttribute('data-vidlang') === lang;
         btn.className = `px-3 py-1.5 rounded-lg text-sm font-black transition-all ${active ? 'bg-blue-600 text-white' : 'bg-white/80 border border-slate-200 text-slate-500 hover:text-slate-900'}`;
     });
-    const video = document.querySelector('[data-vid-overlay]')?.parentElement?.querySelector('video');
+    const video = document.querySelector('[data-vid-player] video');
     if (video) window.__vidCaptionTick(video);
 };
 
 window.__vidCaptionTick = (video) => {
     if (!cues) { loadCues(); return; }
-    const overlay = video.parentElement.querySelector('[data-vid-overlay]');
+    const overlay = video.closest('[data-vid-player]')?.querySelector('[data-vid-overlay]');
     if (!overlay) return;
     const t = video.currentTime;
     const lang = getLang();
@@ -244,9 +247,9 @@ window.__vidCaptionTick = (video) => {
 
     const badgeEl = overlay.querySelector('[data-vid-badge]');
     if (active.badge) {
-        badgeEl.textContent = texts[active.badge.key] || '';
-        badgeEl.style.fontSize = `${13 * scale}px`;
-        badgeEl.style.padding = `${6 * scale}px ${20 * scale}px`;
+        badgeEl.textContent = texts[active.badge.key] || TEXTS.en[active.badge.key] || '';
+        badgeEl.style.fontSize = `${Math.max(11, 13 * scale)}px`;
+        badgeEl.style.padding = `${Math.max(4, 6 * scale)}px ${Math.max(12, 20 * scale)}px`;
         badgeEl.style.display = 'block';
     } else {
         badgeEl.style.display = 'none';
@@ -255,9 +258,9 @@ window.__vidCaptionTick = (video) => {
     const capEl = overlay.querySelector('[data-vid-caption]');
     if (active.caption) {
         capEl.textContent = texts[active.caption.key] || '';
-        capEl.style.fontSize = `${20 * scale}px`;
-        capEl.style.padding = `${16 * scale}px ${36 * scale}px`;
-        capEl.style.borderRadius = `${24 * scale}px`;
+        capEl.style.fontSize = `${Math.max(13, 18 * scale)}px`;
+        capEl.style.padding = `${Math.max(10, 14 * scale)}px ${Math.max(16, 28 * scale)}px`;
+        capEl.style.borderRadius = `${Math.max(12, 18 * scale)}px`;
         capEl.style.display = 'block';
     } else {
         capEl.style.display = 'none';

@@ -102,6 +102,24 @@ def proposal_body(title="Test Proposal", **kwargs):
     }
 
 
+def test_launch_guides_hide_unreviewed_content(client, db):
+    from models import Guide
+
+    db.add_all([
+        Guide(slug="getting-started", title="Getting Started", content="Reviewed",
+              section="getting-started", section_label="Getting Started", sort_order=0),
+        Guide(slug="common-mistakes", title="Common Mistakes", content="Draft",
+              section="writing-caps", section_label="Writing CAPs", sort_order=0),
+    ])
+    db.commit()
+
+    listed = client.get("/guides")
+    assert listed.status_code == 200
+    assert [guide["slug"] for guide in listed.json()] == ["getting-started"]
+    assert client.get("/guides/getting-started").status_code == 200
+    assert client.get("/guides/common-mistakes").status_code == 404
+
+
 # ── Basic ─────────────────────────────────────────────────────────────────────
 
 def test_proposals_empty(client):
@@ -153,17 +171,54 @@ def test_update_profile_duplicate_name(client, db):
 
 # ── Bootstrap ─────────────────────────────────────────────────────────────────
 
-def test_claim_first_editor(client, db):
+def test_claim_first_editor(client, db, monkeypatch):
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_STAKE", AUTHOR_ADDR)
     seed_user(db, AUTHOR_ADDR, "Alice")
     r = client.post("/editors/bootstrap", headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code in (200, 201)
 
 
-def test_claim_second_editor_blocked(client, db):
+def test_claim_second_editor_blocked(client, db, monkeypatch):
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_STAKE", AUTHOR_ADDR)
     seed_editor(db)
     seed_user(db, AUTHOR_ADDR, "Alice")
     r = client.post("/editors/bootstrap", headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 403
+
+
+# ── WC-08: deployment-controlled bootstrap ────────────────────────────────────
+
+def test_bootstrap_disabled_when_operator_unset(client, db, monkeypatch):
+    """Fail-closed: with no configured operator, no one can self-claim admin —
+    even against an empty admins table."""
+    monkeypatch.delenv("BOOTSTRAP_ADMIN_STAKE", raising=False)
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = client.post("/admins/bootstrap", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 403
+    assert client.get("/auth/me", headers=auth(AUTHOR_ADDR, "Alice")).json()["is_admin"] is False
+
+
+def test_bootstrap_refused_for_non_operator(client, db, monkeypatch):
+    """A wallet that isn't the pre-configured operator can't claim admin."""
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_STAKE", ADMIN_ADDR)   # someone else
+    seed_user(db, AUTHOR_ADDR, "Attacker")
+    r = client.post("/admins/bootstrap", headers=auth(AUTHOR_ADDR, "Attacker"))
+    assert r.status_code == 403
+
+
+def test_bootstrap_allows_configured_operator(client, db, monkeypatch):
+    """The pre-configured operator can claim admin while the table is empty."""
+    monkeypatch.setenv("BOOTSTRAP_ADMIN_STAKE", f"stake1other,{AUTHOR_ADDR}")
+    seed_user(db, AUTHOR_ADDR, "Operator")
+    r = client.post("/admins/bootstrap", headers=auth(AUTHOR_ADDR, "Operator"))
+    assert r.status_code in (200, 201)
+    assert client.get("/auth/me", headers=auth(AUTHOR_ADDR, "Operator")).json()["is_admin"] is True
+
+
+def test_dev_seed_editor_route_is_gone(client):
+    """WC-09: the unauthenticated dev role-seeding endpoint must not exist."""
+    r = client.post("/dev/seed-editor", json={"stake_address": ADMIN_ADDR})
+    assert r.status_code in (404, 405)
 
 
 # ── Proposals ─────────────────────────────────────────────────────────────────
@@ -578,6 +633,201 @@ def test_oversized_comment_rejected(client, db):
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
     r = client.post("/proposals/1/comments", json={"body": "q" * 120_000}, headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 400
+
+
+# ── Admin: reset proposals ────────────────────────────────────────────────────
+
+def test_admin_reset_proposals_wipes_only_proposal_data(client, db):
+    seed_admin(db)
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    ah = auth(ADMIN_ADDR, "Admin")
+
+    # Two proposals with a comment each.
+    for _ in range(2):
+        n = client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice")).json()["number"]
+        client.post(f"/proposals/{n}/comments", json={"body": "a comment"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert len(client.get("/proposals").json()) == 2
+
+    r = client.post("/admin/reset-proposals", json={"confirm": "RESET"}, headers=ah)
+    assert r.status_code == 200
+    assert r.json()["deleted_proposals"] == 2
+
+    # Proposals + their data gone…
+    assert client.get("/proposals").json() == []
+    # …but editors/admins/users and guides are untouched.
+    assert client.get("/admins", headers=ah).json()          # admin still there
+    from models import User, Guide
+    assert db.query(User).filter(User.stake_address == AUTHOR_ADDR).first() is not None
+
+
+def test_reset_restarts_numbering_at_one(client, db):
+    seed_admin(db)
+    ah = auth(ADMIN_ADDR, "Admin")
+    ph = auth(AUTHOR_ADDR, "Alice")
+    assert client.post("/proposals", json=proposal_body(), headers=ph).json()["number"] == 1
+    assert client.post("/proposals", json=proposal_body(), headers=ph).json()["number"] == 2
+
+    client.post("/admin/reset-proposals", json={"confirm": "RESET"}, headers=ah)
+
+    # First proposal after a reset is #1 again.
+    assert client.post("/proposals", json=proposal_body(), headers=ph).json()["number"] == 1
+
+
+def test_reset_requires_admin_and_confirmation(client, db):
+    seed_admin(db)
+    seed_editor(db)
+    # Non-admin (editor) is refused.
+    assert client.post("/admin/reset-proposals", json={"confirm": "RESET"}, headers=auth(EDITOR_ADDR)).status_code == 403
+    # Anonymous is refused.
+    assert client.post("/admin/reset-proposals", json={"confirm": "RESET"}).status_code == 401
+    # Admin without the exact phrase is refused (nothing deleted).
+    assert client.post("/admin/reset-proposals", json={"confirm": "nope"}, headers=auth(ADMIN_ADDR)).status_code == 400
+
+
+# ── Security audit regressions ────────────────────────────────────────────────
+
+def test_logout_revokes_token(client, db):
+    """WC-03: a JWT must stop working the moment the user logs out, rather than
+    staying valid until it expires."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    h = auth(AUTHOR_ADDR, "Alice")
+
+    assert client.get("/auth/me", headers=h).status_code == 200      # works before
+    assert client.post("/auth/logout", headers=h).status_code == 200
+    assert client.get("/auth/me", headers=h).status_code == 401      # dead after
+
+    # A revoked token must not authenticate anywhere else either.
+    r = client.post("/proposals", json=proposal_body(), headers=h)
+    assert r.status_code == 401
+
+
+def test_legacy_token_without_jti_is_rejected(client, db):
+    """WC-03 legacy cutover: a token minted before revocation support has no jti
+    and can never be revoked, so it must be rejected outright rather than trusted
+    until it expires."""
+    from jose import jwt
+    from datetime import datetime, timezone, timedelta
+    from auth import _jwt_secret, ALGORITHM
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    legacy = jwt.encode(
+        {"sub": AUTHOR_ADDR, "display_name": "Alice",
+         "exp": datetime.now(timezone.utc) + timedelta(hours=1)},  # no jti
+        _jwt_secret(), algorithm=ALGORITHM)
+    assert client.get("/auth/me", headers={"Authorization": f"Bearer {legacy}"}).status_code == 401
+
+
+def test_logout_only_revokes_that_token(client, db):
+    """Revoking one session must not sign the user out of their other ones."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    h1 = auth(AUTHOR_ADDR, "Alice")
+    h2 = auth(AUTHOR_ADDR, "Alice")   # a second, independent session
+
+    assert client.post("/auth/logout", headers=h1).status_code == 200
+    assert client.get("/auth/me", headers=h1).status_code == 401
+    assert client.get("/auth/me", headers=h2).status_code == 200
+
+
+def test_tokens_carry_a_unique_id(db):
+    """Revocation relies on each token having its own jti."""
+    from auth import decode_token
+    a = decode_token(create_token(AUTHOR_ADDR, "Alice"))
+    b = decode_token(create_token(AUTHOR_ADDR, "Alice"))
+    assert a["jti"] and b["jti"] and a["jti"] != b["jti"]
+
+
+def _sign_cose(payload: bytes, priv=None):
+    """Build a genuine CIP-8 COSE_Sign1 over `payload`, exactly as a wallet would.
+    Returns (signature_hex, key_hex, public_key_bytes)."""
+    import cbor2
+    from cryptography.hazmat.primitives import serialization
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
+
+    priv = priv or Ed25519PrivateKey.generate()
+    pub = priv.public_key().public_bytes(
+        serialization.Encoding.Raw, serialization.PublicFormat.Raw)
+    protected = cbor2.dumps({1: -8})                                  # alg: EdDSA
+    sig = priv.sign(cbor2.dumps(["Signature1", protected, b"", payload]))
+    cose = cbor2.dumps([protected, {}, payload, sig])
+    cose_key = cbor2.dumps({-2: pub})                                 # COSE_Key: x
+    return cose.hex(), cose_key.hex(), pub
+
+
+def test_challenge_must_match_exactly_not_substring():
+    """WC-02: the signed payload must equal the challenge. A correctly-signed
+    payload that merely *contains* the challenge must still be rejected."""
+    from auth import verify_cip8_signature
+
+    # Sanity: an exact payload verifies (proves the harness builds valid COSE).
+    sig, key, pub = _sign_cose(b"chal-123")
+    assert verify_cip8_signature(sig, key, "chal-123") == pub
+
+    # The real check: a validly-signed superset payload must NOT verify.
+    sig2, key2, _ = _sign_cose(b"attacker-prefix:chal-123:suffix")
+    assert verify_cip8_signature(sig2, key2, "chal-123") is None
+
+
+def test_verify_binds_token_to_the_signing_key(client, db):
+    """WC-01 (critical): the JWT subject is bound to the key that actually
+    signed. A perfectly valid signature must not mint a token for someone
+    else's stake address."""
+    from models import AuthChallenge
+    from auth import derive_stake_addresses
+
+    from auth import decode_token
+
+    # Same valid signature, but claiming an address the key does not hash to.
+    sig, key, _ = _sign_cose(b"chal-wc01")
+    db.add(AuthChallenge(challenge="chal-wc01")); db.commit()
+    r = client.post("/auth/verify", json={
+        "stake_address": "stake1victim000000000000000000000000000000000000000000000",
+        "challenge": "chal-wc01", "signature": sig, "key": key,
+    })
+    assert r.status_code == 401
+    assert "token" not in r.json()
+
+    # The address the key really derives to is accepted, and the token's subject
+    # is that address — never a client-supplied string.
+    sig2, key2, pub2 = _sign_cose(b"chal-wc01b")
+    mine = next(a for a in derive_stake_addresses(pub2) if a.startswith("stake1"))
+    db.add(AuthChallenge(challenge="chal-wc01b")); db.commit()
+    r2 = client.post("/auth/verify", json={
+        "stake_address": mine, "challenge": "chal-wc01b", "signature": sig2, "key": key2,
+    })
+    assert r2.status_code == 200, r2.text
+    assert decode_token(r2.json()["token"])["sub"] == mine
+
+
+def test_verify_rejects_testnet_wallet(client, db):
+    """WC-10: the app is mainnet-only. A validly-signed testnet identity must be
+    rejected even though the key legitimately derives one."""
+    from models import AuthChallenge
+    from auth import derive_stake_addresses
+
+    sig, key, pub = _sign_cose(b"chal-wc10")
+    testnet = next(a for a in derive_stake_addresses(pub) if a.startswith("stake_test1"))
+    db.add(AuthChallenge(challenge="chal-wc10")); db.commit()
+    r = client.post("/auth/verify", json={
+        "stake_address": testnet, "challenge": "chal-wc10", "signature": sig, "key": key,
+    })
+    assert r.status_code == 401
+    assert "token" not in r.json()
+
+
+def test_challenge_is_single_use(client, db):
+    """WC-12: a challenge is consumed on use — the same challenge/signature can't
+    be verified twice."""
+    from models import AuthChallenge
+    from auth import derive_stake_addresses
+
+    sig, key, pub = _sign_cose(b"chal-wc12")
+    mine = next(a for a in derive_stake_addresses(pub) if a.startswith("stake1"))
+    db.add(AuthChallenge(challenge="chal-wc12")); db.commit()
+    body = {"stake_address": mine, "challenge": "chal-wc12", "signature": sig, "key": key}
+
+    assert client.post("/auth/verify", json=body).status_code == 200   # first use works
+    assert client.post("/auth/verify", json=body).status_code == 400   # replay rejected
+    # And the challenge row is gone.
+    assert db.query(AuthChallenge).filter(AuthChallenge.challenge == "chal-wc12").first() is None
 
 
 # ── Alpha User Agreement ──────────────────────────────────────────────────────

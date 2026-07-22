@@ -1,18 +1,23 @@
 [
-  { "kind": "badge",   "key": "badge1", "start": 0.8,  "end": 11.0 },
-  { "kind": "caption", "key": "c1a",    "start": 1.5,  "end": 11.0 },
+  { "kind": "badge",   "key": "step0",     "start": 0.3,  "end": 20.6 },
+  { "kind": "caption", "key": "c1a",       "start": 0.8,  "end": 18.5 },
 
-  { "kind": "badge",   "key": "badge2", "start": 11.0, "end": 49.5 },
-  { "kind": "caption", "key": "c2a",    "start": 12.0, "end": 31.0 },
-  { "kind": "caption", "key": "c2b",    "start": 32.0, "end": 42.0 },
-  { "kind": "caption", "key": "c2c",    "start": 42.0, "end": 49.5 },
+  { "kind": "badge",   "key": "wizard1",   "start": 20.6, "end": 34.7 },
+  { "kind": "caption", "key": "c2a",       "start": 20.6, "end": 34.7 },
 
-  { "kind": "badge",   "key": "badge3", "start": 49.5, "end": 95.5 },
-  { "kind": "caption", "key": "c3a",    "start": 50.0, "end": 65.0 },
-  { "kind": "caption", "key": "c3b",    "start": 66.0, "end": 89.0 },
-  { "kind": "caption", "key": "c3c",    "start": 89.5, "end": 95.5 },
+  { "kind": "badge",   "key": "wizard2",   "start": 34.7, "end": 42.8 },
+  { "kind": "caption", "key": "c2b",       "start": 34.7, "end": 42.8 },
 
-  { "kind": "badge",   "key": "badge4", "start": 95.5, "end": 118.0 },
-  { "kind": "caption", "key": "c4a",    "start": 96.0,  "end": 108.0 },
-  { "kind": "caption", "key": "c4b",    "start": 108.0, "end": 118.0 }
+  { "kind": "badge",   "key": "wizard3",   "start": 42.8, "end": 51.5 },
+  { "kind": "caption", "key": "c3a",       "start": 42.8, "end": 51.5 },
+
+  { "kind": "badge",   "key": "wizard4",   "start": 51.5, "end": 72.7 },
+  { "kind": "caption", "key": "c3b",       "start": 51.5, "end": 72.7 },
+
+  { "kind": "badge",   "key": "wizard5",   "start": 72.7, "end": 81.9 },
+  { "kind": "caption", "key": "c3c",       "start": 72.7, "end": 81.9 },
+
+  { "kind": "badge",   "key": "published", "start": 81.9, "end": 99.5 },
+  { "kind": "caption", "key": "c4a",       "start": 81.9, "end": 89.5 },
+  { "kind": "caption", "key": "c4b",       "start": 89.5, "end": 99.5 }
 ]

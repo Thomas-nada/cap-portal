@@ -6,17 +6,17 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
          fetchConstitutionVersions, fetchConstitutionContent,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
-         fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin,
+         fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin, resetProposals,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchVersions, fetchVersion,
-         getMe, devSeedEditor, setDisplayName, updateProfile, acceptAlphaAgreement,
+         getMe, revokeToken, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
          fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
-         showDisplayNameStep, devLogin, shortAddress,
-         getAvailableWallets } from './wallet.js';
+         showDisplayNameStep, devLogin, shortAddress, revalidateWalletIdentity,
+         getAvailableWallets, walletErrorMessage } from './wallet.js';
 
 import { DEV_MODE, API_BASE } from './config.js';
 import { computeStageCounts } from './lifecycle.js';
@@ -92,6 +92,19 @@ export const state = {
 };
 
 window.state = state;
+
+// Full renders replace #app. Only animate when the actual page changes;
+// background data updates on the same page must not replay the entrance effect.
+let lastRenderedView = null;
+
+function finishRender(root) {
+    if (lastRenderedView === state.view) {
+        root.querySelectorAll('.fade-in').forEach(el => el.classList.remove('fade-in'));
+    }
+    lastRenderedView = state.view;
+    lucide.createIcons();
+    if (window.fixPreCode) window.fixPreCode();
+}
 
 // ── Keep-alive ping (prevents Render free tier spin-down) ─────────────────────
 setInterval(() => fetch(`${API_BASE}/health`).catch(() => {}), 10 * 60 * 1000);
@@ -169,8 +182,7 @@ export function updateUI(rerender = false) {
         </div>
  <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
         ` + notif + errorToast;
-        lucide.createIcons();
-        if (window.fixPreCode) window.fixPreCode();
+        finishRender(root);
         return;
     }
 
@@ -213,8 +225,7 @@ export function updateUI(rerender = false) {
         ${notif}
         ${errorToast}`;
 
-    lucide.createIcons();
-    if (window.fixPreCode) window.fixPreCode();
+    finishRender(root);
 }
 
 window.updateUI = updateUI;
@@ -311,15 +322,20 @@ window.setView = (view) => {
         constitution: '#/constitution',
         wizard: '#/new', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
     };
-    if (map[view]) window.location.hash = map[view];
-    updateUI();
+    const target = map[view];
+    if (target && window.location.hash !== target) {
+        window.location.hash = target;
+    } else {
+        window.handleRouting();
+    }
 };
 
 // List | Board toggle on the Proposals page.
 window.setProposalsTab = (tab) => {
     state.proposalsTab = tab === 'board' ? 'board' : 'list';
-    window.location.hash = state.proposalsTab === 'board' ? '#/board' : '#/proposals';
-    updateUI();
+    const target = state.proposalsTab === 'board' ? '#/board' : '#/proposals';
+    if (window.location.hash !== target) window.location.hash = target;
+    else window.handleRouting();
 };
 
 window.toggleMobileNav = () => {
@@ -334,24 +350,24 @@ window.handleRouting = async () => {
 
     if (hash === '#/home' || hash === '#/') {
         state.view = 'dashboard';
-        loadProposals();
+        await loadProposals();
     } else if (hash === '#/proposals' || hash === '#/registry') {
         state.view = 'list';
         state.proposalsTab = 'list';
-        loadProposals();
+        await loadProposals();
     } else if (hash === '#/board' || hash === '#/kanban') {
         state.view = 'list';
         state.proposalsTab = 'board';
-        loadProposals();
+        await loadProposals();
     } else if (hash === '#/constitution') {
         state.view = 'constitution';
-        loadConstitution();
+        await loadConstitution();
     } else if (hash === '#/new' || hash === '#/wizard') {
         state.view = 'wizard';
         updateUI();
     } else if (hash.startsWith('#/detail/')) {
         const number = parseInt(hash.split('/').pop());
-        openProposal(number, false);
+        await openProposal(number, false);
     } else if (hash.startsWith('#/edit/')) {
         const number = parseInt(hash.split('/').pop());
         if (state.view === 'edit' && state.currentProposal?.number === number) {
@@ -366,10 +382,10 @@ window.handleRouting = async () => {
         const slug = hash.replace('#/guides/', '').replace('#/learn/', '');
         state.view = 'learn';
         if (slug) {
-            if (!state.guidesLoaded) loadGuides().then(() => window.openGuide(slug));
-            else window.openGuide(slug);
+            if (!state.guidesLoaded) await loadGuides();
+            await window.openGuide(slug);
         } else {
-            if (!state.guidesLoaded) loadGuides();
+            if (!state.guidesLoaded) await loadGuides();
             else updateUI();
         }
     } else if (hash === '#/guides' || hash === '#/learn') {
@@ -383,16 +399,16 @@ window.handleRouting = async () => {
         else updateUI();
     } else if (hash === '#/editors') {
         state.view = 'editors';
-        loadEditors();
+        await loadEditors();
     } else if (hash === '#/moderation') {
         state.view = 'moderation';
-        loadModerationCases();
+        await loadModerationCases();
     } else if (hash === '#/bugs') {
         state.view = 'bugs';
-        loadBugReports();
+        await loadBugReports();
     } else {
         state.view = 'dashboard';
-        loadProposals();
+        await loadProposals();
     }
 };
 
@@ -430,6 +446,65 @@ window.setModerationFilter = (f) => {
     loadModerationCases();
 };
 
+// Admin: reset all proposals. Two gates — a typed "RESET" and the server also
+// requires the same phrase — so it can't fire by accident.
+window.confirmResetProposals = () => {
+    if (!state.user?.is_admin) return;
+    const backdrop = document.createElement('div');
+    backdrop.id = 'reset-proposals-backdrop';
+    backdrop.className = 'fixed inset-0 z-[60] flex items-center justify-center p-4 bg-slate-900/50 backdrop-blur-sm';
+    backdrop.innerHTML = `
+        <div class="bg-white rounded-[2rem] shadow-2xl w-full max-w-md p-6 sm:p-8" onclick="event.stopPropagation()">
+            <div class="flex items-center gap-3 mb-4">
+                <div class="w-10 h-10 rounded-xl bg-red-100 text-red-600 flex items-center justify-center flex-shrink-0"><i data-lucide="alert-triangle" class="w-5 h-5"></i></div>
+                <h2 class="text-xl font-black text-slate-900">Reset all proposals?</h2>
+            </div>
+            <p class="text-sm text-slate-500 mb-2">This permanently deletes <b>every proposal</b> and all comments, labels, audit history, versions and suggestions. Editors, admins, users and guides are kept. Numbering restarts at #1.</p>
+            <p class="text-sm text-slate-500 mb-4">This cannot be undone. Type <b class="text-slate-900">RESET</b> to confirm:</p>
+            <input id="reset-proposals-input" type="text" placeholder="RESET" autocomplete="off"
+                oninput="window._resetProposalsCheck(this.value)"
+                onkeydown="if(event.key==='Enter') window._doResetProposals()"
+                class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white text-slate-900 outline-none focus:border-red-400 mb-4 font-bold tracking-widest text-center">
+            <div class="flex gap-3">
+                <button onclick="document.getElementById('reset-proposals-backdrop').remove()"
+                    class="flex-1 py-3 rounded-2xl bg-slate-100 text-slate-600 font-black hover:bg-slate-200 transition-colors">Cancel</button>
+                <button id="reset-proposals-go" onclick="window._doResetProposals()" disabled
+                    class="flex-1 py-3 rounded-2xl bg-red-600 text-white font-black transition-colors disabled:opacity-40 disabled:cursor-not-allowed hover:bg-red-700">Reset</button>
+            </div>
+        </div>`;
+    backdrop.onclick = () => backdrop.remove();
+    document.body.appendChild(backdrop);
+    if (window.lucide) lucide.createIcons();
+    document.getElementById('reset-proposals-input')?.focus();
+};
+
+window._resetProposalsCheck = (v) => {
+    const go = document.getElementById('reset-proposals-go');
+    if (go) go.disabled = v.trim() !== 'RESET';
+};
+
+window._doResetProposals = async () => {
+    const input = document.getElementById('reset-proposals-input');
+    if (!input || input.value.trim() !== 'RESET') return;
+    const go = document.getElementById('reset-proposals-go');
+    if (go) { go.disabled = true; go.textContent = 'Resetting…'; }
+    try {
+        const res = await resetProposals();
+        document.getElementById('reset-proposals-backdrop')?.remove();
+        await loadProposals();
+        const toast = document.createElement('div');
+        toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-center gap-3 px-5 py-4 rounded-2xl bg-green-600 text-white shadow-2xl';
+        toast.innerHTML = `<i data-lucide="check-circle" class="w-5 h-5"></i><p class="text-sm font-bold">Reset complete — ${res.deleted_proposals} proposal${res.deleted_proposals === 1 ? '' : 's'} deleted. Numbering restarts at #1.</p>`;
+        document.body.appendChild(toast);
+        if (window.lucide) lucide.createIcons();
+        setTimeout(() => toast.remove(), 5000);
+    } catch (e) {
+        state.error = `Reset failed: ${e.message}`;
+        document.getElementById('reset-proposals-backdrop')?.remove();
+        updateUI();
+    }
+};
+
 window.moderationResolve = (caseId, decision) => {
     if (!state.user?.is_admin) return;
     const isRemove = decision === 'remove';
@@ -458,7 +533,11 @@ async function refreshUnreadCount() {
     try {
         const { count } = await fetchUnreadCount();
         state.unreadCount = count;
-        updateUI();
+        document.querySelectorAll('[data-unread-badge]').forEach(badge => {
+            badge.textContent = count > 9 ? '9+' : String(count);
+            badge.classList.toggle('hidden', count === 0);
+            badge.classList.toggle('flex', count > 0);
+        });
     } catch { /* ignore */ }
 }
 window.refreshUnreadCount = refreshUnreadCount;
@@ -510,7 +589,7 @@ async function loadGuides() {
 
 async function loadProposals() {
     state.loading.proposals = true;
-    updateUI();
+    if (!state.loading.init) updateUI();
     try {
         const ps = await fetchAllProposals();
         state.proposals = ps;
@@ -600,10 +679,20 @@ window.downloadConstitution = () => {
 };
 
 window.enableDiffMode = async () => {
-    const others = state.constitutionVersions.filter(v => v.name !== state.constitutionCurrentVersion);
-    if (!others.length) return;
-    state.constitutionCompareVersion = others[0].name;
-    try { await loadConstitutionVersionByName(others[0].name); } catch (e) { state.error = e.message; }
+    // The ratified base is always the "Before" side; compare it against a draft —
+    // preferring the version currently being viewed if that's a draft.
+    const base = state.constitutionVersions.find(v => v.isCurrent) || state.constitutionVersions[0];
+    if (!base) return;
+    const cur = state.constitutionCurrentVersion;
+    const target = (cur && cur !== base.name)
+        ? cur
+        : state.constitutionVersions.find(v => v.name !== base.name)?.name;
+    if (!target) return; // only the ratified version exists — nothing to compare
+    state.constitutionCompareVersion = target;
+    try {
+        await loadConstitutionVersionByName(base.name);
+        await loadConstitutionVersionByName(target);
+    } catch (e) { state.error = e.message; }
     updateUI();
 };
 
@@ -614,7 +703,12 @@ window.disableDiffMode = () => {
 
 window.setCompareVersion = async (name) => {
     state.constitutionCompareVersion = name;
-    try { await loadConstitutionVersionByName(name); } catch (e) { state.error = e.message; }
+    // Keep the ratified base ("Before") loaded alongside the chosen draft.
+    const base = state.constitutionVersions.find(v => v.isCurrent) || state.constitutionVersions[0];
+    try {
+        if (base) await loadConstitutionVersionByName(base.name);
+        await loadConstitutionVersionByName(name);
+    } catch (e) { state.error = e.message; }
     updateUI();
 };
 
@@ -1583,7 +1677,7 @@ function showWalletModal() {
         } catch (e) {
             console.error('Wallet connection failed:', e);
             document.getElementById('wallet-modal-backdrop')?.remove();
-            state.error = `Wallet connection failed: ${e.message}`;
+            state.error = `Wallet connection failed: ${walletErrorMessage(e)}`;
             updateUI();
         }
     };
@@ -1645,7 +1739,10 @@ function showWalletModal() {
 
 window.loginWithWallet = showWalletModal;
 
-window.logoutWallet = () => {
+window.logoutWallet = async () => {
+    // Revoke server-side first (needs the token), then clear the local session.
+    // Best-effort: a failed call must never trap the user in a signed-in state.
+    try { await revokeToken(); } catch (_) { /* offline or already expired */ }
     logout();
     state.user = null;
     state.notifications = [];
@@ -1653,6 +1750,41 @@ window.logoutWallet = () => {
     state.unreadCount = 0;
     updateUI();
 };
+
+// WC-11: keep the session in sync with the wallet. If the extension silently
+// switches account or leaves mainnet while we're signed in, sign the user out
+// so they can't act as an identity the wallet no longer exposes. Checked when
+// the tab regains focus/visibility (cheap, and covers the common case of
+// switching accounts in the extension and returning to the tab).
+let _walletCheckPending = false;
+async function checkWalletIdentity() {
+    if (!state.user || _walletCheckPending) return;
+    _walletCheckPending = true;
+    try {
+        const res = await revalidateWalletIdentity();
+        if (res && res.ok === false) {
+            try { await revokeToken(); } catch (_) { /* best-effort */ }
+            logout();
+            state.user = null; state.notifications = []; state.notificationsOpen = false; state.unreadCount = 0;
+            updateUI();
+            const msg = res.reason === 'network'
+                ? 'Your wallet switched off Cardano mainnet — you have been signed out. Reconnect on mainnet to continue.'
+                : res.reason === 'disconnected'
+                ? 'Your wallet disconnected — you have been signed out. Reconnect to continue.'
+                : 'Your wallet account changed — you have been signed out. Reconnect to continue as the new account.';
+            const toast = document.createElement('div');
+            toast.className = 'fixed bottom-6 left-1/2 -translate-x-1/2 z-[70] flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-amber-600 text-white shadow-2xl';
+            toast.innerHTML = `<i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i><p class="text-sm font-bold leading-snug">${msg}</p>`;
+            document.body.appendChild(toast);
+            if (window.lucide) lucide.createIcons();
+            setTimeout(() => toast.remove(), 8000);
+        }
+    } finally {
+        _walletCheckPending = false;
+    }
+}
+document.addEventListener('visibilitychange', () => { if (!document.hidden) checkWalletIdentity(); });
+window.addEventListener('focus', checkWalletIdentity);
 
 window.openProfile = () => {
     const existing = document.getElementById('profile-modal-backdrop');
@@ -1916,6 +2048,16 @@ window.returnToWizardFromConstitution = () => {
 // ── Learn / guides ────────────────────────────────────────────────────────────
 
 window.openGuide = async (slug) => {
+    // The API list is the publication boundary. Do not let an old bookmarked
+    // slug bypass launch review by falling back directly to its static file.
+    if (state.guidesLoaded && !state.guides.some(guide => guide.slug === slug)) {
+        state.activeGuide = null;
+        state.guideHtml = null;
+        window.location.hash = '#/guides';
+        updateUI();
+        return;
+    }
+
     state.activeGuide = slug;
     state.guideHtml = null;
     state.view = 'learn';
@@ -2221,9 +2363,9 @@ async function init() {
         };
     }
 
-    state.loading.init = false;
     window.addEventListener('hashchange', window.handleRouting);
     await window.handleRouting();
+    state.loading.init = false;
     if (state.user) {
         // A restored session whose account has no server-side acceptance record
         // still sees the agreement once (dev sessions have no such field → skip).

@@ -31,6 +31,48 @@ function capitalize(str) {
 }
 
 /**
+ * CIP-30 wallets reject with plain objects such as { code, info }, not
+ * necessarily Error instances. Extract a useful message for the UI.
+ */
+export function walletErrorMessage(error, fallback = 'The wallet request failed') {
+    if (typeof error === 'string' && error.trim()) return error.trim();
+    if (error && typeof error === 'object') {
+        for (const key of ['message', 'info', 'detail', 'reason']) {
+            const value = error[key];
+            if (typeof value === 'string' && value.trim()) return value.trim();
+        }
+    }
+    return fallback;
+}
+
+function walletStepError(step, error, codeMessages = {}) {
+    const code = error && typeof error === 'object' ? error.code : undefined;
+    const fallback = codeMessages[code] || 'The wallet did not provide an explanation';
+    return new Error(`${step}: ${walletErrorMessage(error, fallback)}`);
+}
+
+async function walletStep(step, action, codeMessages = {}) {
+    try {
+        return await action();
+    } catch (error) {
+        throw walletStepError(step, error, codeMessages);
+    }
+}
+
+const API_ERROR_MESSAGES = {
+    [-1]: 'The wallet received an invalid request',
+    [-2]: 'The wallet encountered an internal error',
+    [-3]: 'The wallet refused access',
+    [-4]: 'The active wallet account changed; please try connecting again',
+};
+
+const DATA_SIGN_ERROR_MESSAGES = {
+    1: 'The wallet could not generate the login signature',
+    2: 'This account cannot sign with its stake address',
+    3: 'The signing request was declined in the wallet',
+};
+
+/**
  * Connect a wallet and authenticate via CIP-8 challenge-response.
  * Requests CIP-95 extensions if available. Verifies mainnet (networkId=1).
  * Returns {token, stake_address, display_name, is_editor} on success.
@@ -44,18 +86,31 @@ export async function connectAndAuth(walletId, displayName = null) {
     try {
         api = await walletObj.enable({ extensions: [{ cip: 95 }] });
     } catch {
-        // Fall back to standard CIP-30 enable if CIP-95 not supported
-        api = await walletObj.enable();
+        // Fall back to standard CIP-30 enable if CIP-95 not supported.
+        api = await walletStep(
+            `Could not connect to ${walletObj.name || capitalize(walletId)}`,
+            () => walletObj.enable(),
+            API_ERROR_MESSAGES,
+        );
     }
+    if (!api) throw new Error(`${walletObj.name || capitalize(walletId)} did not return a wallet connection`);
 
     // Verify network — mainnet=1, testnet=0
-    const networkId = await api.getNetworkId();
+    const networkId = await walletStep(
+        'Could not read the wallet network',
+        () => api.getNetworkId(),
+        API_ERROR_MESSAGES,
+    );
     if (networkId !== 1 && !DEV_MODE) {
         throw new Error('Please switch your wallet to Cardano mainnet and try again.');
     }
 
     // Get stake address (reward address) — returned as hex-encoded address bytes
-    const rewardAddresses = await api.getRewardAddresses();
+    const rewardAddresses = await walletStep(
+        'Could not read the wallet stake address',
+        () => api.getRewardAddresses(),
+        API_ERROR_MESSAGES,
+    );
     if (!rewardAddresses?.length) {
         throw new Error('No stake address found in wallet');
     }
@@ -69,7 +124,15 @@ export async function connectAndAuth(walletId, displayName = null) {
 
     // Sign challenge — wallets expect payload as hex
     const challengeHex = stringToHex(challenge);
-    const { signature, key } = await api.signData(stakeAddressHex, challengeHex);
+    const signed = await walletStep(
+        'Could not approve the login signature',
+        () => api.signData(stakeAddressHex, challengeHex),
+        DATA_SIGN_ERROR_MESSAGES,
+    );
+    const { signature, key } = signed || {};
+    if (!signature || !key) {
+        throw new Error('The wallet returned an incomplete login signature');
+    }
 
     // Verify on server and get token
     const result = await verifyAuth({
@@ -93,6 +156,43 @@ export function logout() {
     localStorage.removeItem('cap_wallet');
     localStorage.removeItem('cap_stake_address');
     // cap_display_name is intentionally kept so returning users skip the name prompt
+}
+
+/**
+ * WC-11: confirm the connected wallet still exposes the same mainnet identity
+ * we authenticated as. Extensions can silently switch account or network while
+ * a session is open, leaving the portal authorising the old wallet. Returns:
+ *   { ok: true }                          — unchanged, still on mainnet
+ *   { ok: false, reason: 'account' }      — the reward address changed
+ *   { ok: false, reason: 'network' }      — the wallet left mainnet
+ *   { ok: false, reason: 'disconnected' } — the wallet is no longer connected /
+ *                                           exposes no reward address
+ *   null                                  — indeterminate (extension not present
+ *                                           yet / dev session / transient error)
+ * A null result never invalidates the session — only a definite change does.
+ */
+export async function revalidateWalletIdentity() {
+    const session = getSavedSession();
+    if (!session?.stake_address) return null;
+    const walletId = session.wallet;
+    if (!walletId || walletId === 'dev') return null;
+    const walletObj = window.cardano?.[walletId];
+    if (!walletObj) return null;  // extension not injected — may be transient
+    try {
+        // The user disconnected this dApp in the wallet — end the session (WC-11).
+        if (!(await walletObj.isEnabled())) return { ok: false, reason: 'disconnected' };
+        const api = await walletObj.enable();
+        const networkId = await api.getNetworkId();
+        if (networkId !== 1 && !DEV_MODE) return { ok: false, reason: 'network' };
+        const rewards = await api.getRewardAddresses();
+        const current = rewards?.length ? (hexToBech32StakeAddress(rewards[0]) || rewards[0]) : null;
+        // No reward address exposed anymore — treat as a disconnect, not "unchanged".
+        if (!current) return { ok: false, reason: 'disconnected' };
+        if (current !== session.stake_address) return { ok: false, reason: 'account' };
+        return { ok: true };
+    } catch {
+        return null;  // transient wallet error — don't sign the user out over a hiccup
+    }
 }
 
 export function getSavedSession() {
