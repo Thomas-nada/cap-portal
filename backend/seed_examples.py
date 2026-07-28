@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal, engine, Base  # noqa: E402
 from models import (  # noqa: E402
-    Proposal, Label, Comment, AuditEvent, ProposalVersion,
+    Proposal, Label, Comment, AuditEvent, ProposalVersion, Editor, Admin,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -74,6 +74,24 @@ def actor(key):
     name, addr = AUTHORS[key]
     return {"sub": addr, "display_name": name}
 
+
+# ── Operator wallets granted persistent roles ───────────────────────────────
+# Real stake addresses (public) that should hold roles on every fresh boot of
+# the ephemeral test environment. Editors can label / suggest / flag; the admin
+# also manages roles and moderation. Because a real admin is seeded here, the
+# self-claim bootstrap stays locked, which is intended — these operators are the
+# source of truth.
+OPERATOR_EDITORS = [
+    ("stake1uyez89upss0p6a7yj50h8f53kgzxphyqzhzwt0ndqntjt3sxh8jp2", "Test Editor 1"),
+    ("stake1uxen2hw48lkgzfrl5xrphdw80yu0a7hsldwg2y55aqryx0sllk8uj", "Test Editor 2"),
+    ("stake1u8dknvrfz38gr8afd0c8vskmz7dkd79gn05gr8mh6ym3cjs7886dj", "Test Admin"),
+]
+OPERATOR_ADMINS = [
+    ("stake1u8dknvrfz38gr8afd0c8vskmz7dkd79gn05gr8mh6ym3cjs7886dj", "Test Admin"),
+]
+OPERATOR_STAKE_ADDRESSES = (
+    {a for a, _ in OPERATOR_EDITORS} | {a for a, _ in OPERATOR_ADMINS}
+)
 
 NOW = datetime.now(timezone.utc)
 
@@ -1099,8 +1117,12 @@ def reset(db):
     for p in q.all():
         # comments / labels / versions / audit cascade via relationships
         db.delete(p)
+    e = db.query(Editor).filter(Editor.stake_address.in_(OPERATOR_STAKE_ADDRESSES)).delete(
+        synchronize_session=False)
+    a = db.query(Admin).filter(Admin.stake_address.in_(OPERATOR_STAKE_ADDRESSES)).delete(
+        synchronize_session=False)
     db.commit()
-    print(f"Removed {n} previously-seeded example proposal(s).")
+    print(f"Removed {n} example proposal(s), {e} editor(s), {a} admin(s).")
 
 
 def already_seeded(db):
@@ -1127,7 +1149,25 @@ def version_hash(title, body, previous_hash):
     return hashlib.sha256(f"{title}|{body}|{previous_hash}".encode()).hexdigest()
 
 
+def seed_roles(db):
+    """Grant persistent editor/admin roles to the operator wallets. Idempotent:
+    skips any address that already holds the role."""
+    added_e = added_a = 0
+    for addr, name in OPERATOR_EDITORS:
+        if not db.query(Editor).filter(Editor.stake_address == addr).first():
+            db.add(Editor(stake_address=addr, display_name=name, added_at=NOW))
+            added_e += 1
+    for addr, name in OPERATOR_ADMINS:
+        if not db.query(Admin).filter(Admin.stake_address == addr).first():
+            db.add(Admin(stake_address=addr, display_name=name, added_at=NOW))
+            added_a += 1
+    db.commit()
+    if added_e or added_a:
+        print(f"Seeded {added_e} editor(s) and {added_a} admin(s).")
+
+
 def seed(db):
+    seed_roles(db)
     last = db.query(Proposal).order_by(Proposal.number.desc()).first()
     number = (last.number + 1) if last else 1
 
