@@ -30,6 +30,12 @@ services:
       # Keep production safeguards enabled on every internet-accessible host.
       - key: ENVIRONMENT
         value: production
+      # Repopulate example CAP/CIS proposals on boot. The ephemeral SQLite
+      # database is empty after every sleep/redeploy, so the API re-seeds
+      # itself to keep the test portal populated. No-op once the table is
+      # non-empty, so it never duplicates or touches real submissions.
+      - key: SEED_EXAMPLES
+        value: "1"
 
   - type: web
     runtime: static

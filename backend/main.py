@@ -324,6 +324,26 @@ def _migrate_constitution_files_to_db():
 _migrate_constitution_files_to_db()
 
 
+def _seed_examples_if_requested():
+    """Populate example proposals on the ephemeral test environment.
+
+    Gated behind SEED_EXAMPLES so it only runs where explicitly enabled (the
+    test Blueprint). The seed itself is a no-op unless the proposals table is
+    empty, so production and any populated database are never touched. A failure
+    here must never stop the API from starting."""
+    if os.environ.get("SEED_EXAMPLES", "").lower() not in ("1", "true", "yes"):
+        return
+    try:
+        from seed_examples import seed_if_empty
+        if seed_if_empty():
+            logger.info("Seeded example proposals (empty test database).")
+    except Exception as e:
+        logger.warning("Example seeding skipped: %s", e)
+
+
+_seed_examples_if_requested()
+
+
 # ── Auth helpers ─────────────────────────────────────────────────────────────
 
 def _token_revoked(payload: dict, db: Session) -> bool:
