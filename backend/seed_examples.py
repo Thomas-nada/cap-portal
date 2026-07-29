@@ -34,7 +34,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 from database import SessionLocal, engine, Base  # noqa: E402
 from models import (  # noqa: E402
-    Proposal, Label, Comment, AuditEvent, ProposalVersion, Editor, Admin,
+    Proposal, Label, Comment, AuditEvent, ProposalVersion, Editor, Admin, Feedback,
 )
 
 Base.metadata.create_all(bind=engine)
@@ -1111,6 +1111,17 @@ PROPOSALS = [
 ]
 
 
+# Example feedback shown on the test/demo Feedback page: (author, category, rating, days_ago, message)
+SEED_FEEDBACK = [
+    ("marek", "ui", 5, 3, "The side-by-side diff against the current constitution text is genuinely the clearest amendment view I've seen in any governance tool."),
+    ("eva", "proposals", 4, 2, "Submitting a CAP through the wizard was smooth. One ask: let me save a draft before I've written every section."),
+    ("blockwatch", "governance", 5, 2, "Love that abstain is treated as a real, counted vote in the examples. That framing alone will improve threshold debates."),
+    ("nadia", "idea", None, 1, "Could the board show a countdown to the recommended review date? Would make the consultation stage feel more alive."),
+    ("kaito", "performance", 4, 1, "Snappy once loaded. The free tier cold start is the only lag — not a portal problem."),
+    ("owl", "praise", 5, 0, "This is exactly the kind of transparent, structured deliberation Cardano governance needs. Great demo."),
+]
+
+
 def reset(db):
     q = db.query(Proposal).filter(Proposal.author_stake_address.in_(SEED_STAKE_ADDRESSES))
     n = q.count()
@@ -1121,8 +1132,10 @@ def reset(db):
         synchronize_session=False)
     a = db.query(Admin).filter(Admin.stake_address.in_(OPERATOR_STAKE_ADDRESSES)).delete(
         synchronize_session=False)
+    f = db.query(Feedback).filter(Feedback.author_stake_address.in_(SEED_STAKE_ADDRESSES)).delete(
+        synchronize_session=False)
     db.commit()
-    print(f"Removed {n} example proposal(s), {e} editor(s), {a} admin(s).")
+    print(f"Removed {n} example proposal(s), {e} editor(s), {a} admin(s), {f} feedback entry(ies).")
 
 
 def already_seeded(db):
@@ -1166,8 +1179,23 @@ def seed_roles(db):
         print(f"Seeded {added_e} editor(s) and {added_a} admin(s).")
 
 
+def seed_feedback(db):
+    if db.query(Feedback).first() is not None:
+        return
+    for key, category, rating, cdays, message in SEED_FEEDBACK:
+        a = actor(key)
+        db.add(Feedback(
+            message=message, rating=rating, category=category, page="#/feedback",
+            author_stake_address=a["sub"], author_display_name=a["display_name"],
+            created_at=days_ago(cdays),
+        ))
+    db.commit()
+    print(f"Seeded {len(SEED_FEEDBACK)} feedback entries.")
+
+
 def seed(db):
     seed_roles(db)
+    seed_feedback(db)
     last = db.query(Proposal).order_by(Proposal.number.desc()).first()
     number = (last.number + 1) if last else 1
 

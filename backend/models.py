@@ -241,6 +241,24 @@ class AlphaAgreement(Base):
     accepted_at = Column(DateTime(timezone=True), default=now)
 
 
+class Feedback(Base):
+    """Demo feedback submitted from the test portal's Feedback page.
+
+    Deliberately lightweight: a short message, an optional 1–5 star rating, and
+    a category, attached to the submitting wallet. Exists to gather impressions
+    during demos of the test environment."""
+    __tablename__ = "feedback"
+
+    id = Column(Integer, primary_key=True, index=True)
+    rating = Column(Integer, nullable=True)                 # 1..5, optional
+    category = Column(String, nullable=False, default="general")
+    message = Column(Text, nullable=False)
+    page = Column(String, nullable=True)                    # where the user was
+    author_stake_address = Column(String, nullable=False)
+    author_display_name = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+
+
 class Notification(Base):
     """In-app notification shown in a user's profile/notifications panel."""
     __tablename__ = "notifications"

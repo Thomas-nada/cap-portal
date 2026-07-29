@@ -252,6 +252,20 @@ export async function updateBugStatus(id, status) {
     return req('PATCH', `/bug-reports/${id}/status`, { status }, true);
 }
 
+// ── Feedback (test/demo) ────────────────────────────────────────────────────────
+
+export async function submitFeedback({ message, rating = null, category = 'general', page = null }) {
+    return req('POST', '/feedback', { message, rating, category, page }, true);
+}
+
+export async function fetchFeedback() {
+    return req('GET', '/feedback');
+}
+
+export async function deleteFeedback(id) {
+    return req('DELETE', `/feedback/${id}`, null, true);
+}
+
 // ── Guides ────────────────────────────────────────────────────────────────────
 
 export async function fetchGuides() {

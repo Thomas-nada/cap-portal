@@ -42,7 +42,8 @@ from auth import verify_cip8_signature, derive_stake_addresses, create_token, de
 from database import engine, get_db, Base
 from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
                     User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
-                    ModerationCase, Notification, AlphaAgreement, RevokedToken)
+                    ModerationCase, Notification, AlphaAgreement, RevokedToken,
+                    Feedback)
 
 Base.metadata.create_all(bind=engine)
 
@@ -2016,6 +2017,89 @@ def update_bug_report_status(report_id: int, body: BugReportStatusUpdate,
     report.status = body.status
     db.commit()
     return {"id": report.id, "status": report.status}
+
+
+# ── Feedback (test/demo) ────────────────────────────────────────────────────
+# A lightweight, public feedback stream for demoing the test portal. Submitting
+# requires a connected wallet (like every other write); reading is public so the
+# whole room can watch feedback arrive live during a demo. This feature is
+# exposed only on the test frontend (gated there by IS_TEST) and is not part of
+# the production experience.
+
+FEEDBACK_CATEGORIES = {
+    "general", "ui", "proposals", "governance", "performance", "idea", "praise",
+}
+
+
+class FeedbackCreate(BaseModel):
+    message: str = Field(min_length=1, max_length=4_000)
+    rating: Optional[int] = None
+    category: str = "general"
+    page: Optional[str] = Field(default=None, max_length=MAX_TITLE)
+
+    @field_validator("rating")
+    @classmethod
+    def _v_rating(cls, v):
+        if v is not None and not (1 <= v <= 5):
+            raise ValueError("Rating must be between 1 and 5")
+        return v
+
+    @field_validator("category")
+    @classmethod
+    def _v_category(cls, v):
+        return v if v in FEEDBACK_CATEGORIES else "general"
+
+
+def _feedback_dict(f: Feedback) -> dict:
+    return {
+        "id": f.id,
+        "rating": f.rating,
+        "category": f.category,
+        "message": f.message,
+        "page": f.page,
+        "author_stake_address": f.author_stake_address,
+        "author_display_name": f.author_display_name,
+        "created_at": to_iso(f.created_at),
+    }
+
+
+@app.post("/feedback", status_code=201, tags=["feedback"], summary="Submit feedback",
+          description="Submit demo feedback (optional 1–5 rating, category, message). **Requires authentication.**")
+@limiter.limit("20/minute")
+def submit_feedback(request: Request, body: FeedbackCreate,
+                    user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    if not body.message.strip():
+        raise HTTPException(status_code=400, detail="Message is required")
+    fb = Feedback(
+        message=body.message.strip(),
+        rating=body.rating,
+        category=body.category,
+        page=body.page,
+        author_stake_address=user["sub"],
+        author_display_name=user.get("display_name"),
+    )
+    db.add(fb)
+    db.commit()
+    db.refresh(fb)
+    return _feedback_dict(fb)
+
+
+@app.get("/feedback", tags=["feedback"], summary="List feedback",
+         description="Public feedback stream, newest first.")
+def list_feedback(db: Session = Depends(get_db)):
+    rows = db.query(Feedback).order_by(Feedback.created_at.desc()).all()
+    return [_feedback_dict(f) for f in rows]
+
+
+@app.delete("/feedback/{feedback_id}", tags=["feedback"], summary="Delete feedback",
+            description="Remove a feedback entry. **Requires admin role.**")
+def delete_feedback(feedback_id: int, user: dict = Depends(require_admin),
+                    db: Session = Depends(get_db)):
+    deleted = db.query(Feedback).filter(Feedback.id == feedback_id).delete()
+    db.commit()
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Feedback not found")
+    return {"ok": True}
 
 
 # Defense in depth (WC-09): a production build must never expose a development

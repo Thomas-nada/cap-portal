@@ -12,6 +12,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          getMe, revokeToken, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
+         submitFeedback, fetchFeedback, deleteFeedback,
          fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
@@ -32,6 +33,7 @@ import { renderLearnHub as renderLearn } from './components/learn.js';
 import { renderEditors }      from './components/editors.js';
 import { renderModeration }   from './components/moderation.js';
 import { renderBugs }         from './components/bugs.js';
+import { renderFeedback }     from './components/feedback.js';
 
 // ── Global state ──────────────────────────────────────────────────────────────
 
@@ -46,6 +48,8 @@ export const state = {
     editors: [],
     admins: [],
     bugReports: [],
+    feedback: [],
+    feedbackDraft: { category: 'general', rating: 0, message: '' },
     moderationCases: [],
     moderationFilter: 'open',
     notifications: [],
@@ -130,6 +134,7 @@ export function updateUI(rerender = false) {
         case 'editors':      content = renderEditors(state); break;
         case 'moderation':   content = renderModeration(state); break;
         case 'bugs':         content = renderBugs(state); break;
+        case 'feedback':     content = renderFeedback(state); break;
         default:             content = renderDashboard(state);
     }
 
@@ -406,6 +411,9 @@ window.handleRouting = async () => {
     } else if (hash === '#/bugs') {
         state.view = 'bugs';
         await loadBugReports();
+    } else if (hash === '#/feedback') {
+        state.view = 'feedback';
+        await loadFeedback();
     } else {
         state.view = 'dashboard';
         await loadProposals();
@@ -575,6 +583,70 @@ async function loadBugReports() {
     }
     updateUI();
 }
+
+async function loadFeedback() {
+    try {
+        state.feedback = await fetchFeedback();
+    } catch (e) {
+        state.feedback = [];
+    }
+    updateUI();
+}
+
+// ── Feedback handlers ──────────────────────────────────────────────────────────
+window.setFeedbackRating = (n) => {
+    state.feedbackDraft = { ...state.feedbackDraft, rating: n };
+    updateUI();
+};
+
+window.setFeedbackCategory = (id) => {
+    // Preserve whatever the user has typed so far before re-rendering the form.
+    const ta = document.getElementById('feedback-message');
+    state.feedbackDraft = { ...state.feedbackDraft, category: id, message: ta ? ta.value : state.feedbackDraft.message };
+    updateUI();
+};
+
+window.submitFeedbackForm = async () => {
+    if (!state.user) { showWalletModal(); return; }
+    const ta = document.getElementById('feedback-message');
+    const errEl = document.getElementById('feedback-error');
+    const message = (ta?.value || '').trim();
+    if (!message) {
+        if (errEl) { errEl.textContent = 'Please write a little feedback first.'; errEl.classList.remove('hidden'); }
+        return;
+    }
+    const draft = state.feedbackDraft || {};
+    state.loading = { ...state.loading, feedback: true };
+    // Keep the typed message in state so the re-render (disabled button) doesn't lose it.
+    state.feedbackDraft = { ...draft, message };
+    updateUI();
+    try {
+        await submitFeedback({
+            message,
+            rating: draft.rating || null,
+            category: draft.category || 'general',
+            page: window.location.hash || null,
+        });
+        state.feedbackDraft = { category: 'general', rating: 0, message: '' };
+        state.loading = { ...state.loading, feedback: false };
+        await loadFeedback();
+    } catch (e) {
+        state.loading = { ...state.loading, feedback: false };
+        updateUI();
+        const el = document.getElementById('feedback-error');
+        if (el) { el.textContent = e.message || 'Failed to send feedback. Please try again.'; el.classList.remove('hidden'); }
+    }
+};
+
+window.removeFeedback = async (id) => {
+    if (!state.user?.is_admin) return;
+    try {
+        await deleteFeedback(id);
+        await loadFeedback();
+    } catch (e) {
+        alert('Failed to delete feedback: ' + e.message);
+    }
+};
 
 async function loadGuides() {
     try {

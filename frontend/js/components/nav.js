@@ -1,4 +1,5 @@
 import { shortAddress } from '../wallet.js';
+import { IS_TEST } from '../config.js';
 
 export function renderNav(state) {
     const isLoggedIn = !!state.user;
@@ -9,6 +10,7 @@ export function renderNav(state) {
         { id: 'list',         label: 'Proposals',    icon: 'database' },
         { id: 'constitution', label: 'Constitution', icon: 'book-open' },
         { id: 'learn',        label: 'Guides',       icon: 'book' },
+        ...(IS_TEST ? [{ id: 'feedback', label: 'Feedback', icon: 'megaphone' }] : []),
         ...(state.user?.is_admin ? [{ id: 'moderation', label: 'Moderation', icon: 'gavel' }] : []),
         ...(state.user?.is_admin ? [{ id: 'bugs', label: 'Bugs', icon: 'bug' }] : []),
     ];
