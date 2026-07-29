@@ -326,6 +326,7 @@ window.setView = (view) => {
         list: state.proposalsTab === 'board' ? '#/board' : '#/proposals',
         constitution: '#/constitution',
         wizard: '#/new', learn: '#/guides', editors: '#/editors', moderation: '#/moderation', bugs: '#/bugs',
+        feedback: '#/feedback',
     };
     const target = map[view];
     if (target && window.location.hash !== target) {
