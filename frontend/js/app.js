@@ -2315,7 +2315,7 @@ function showAlphaAgreement() {
         overlay.id = 'alpha-agreement';
         overlay.style.cssText = 'position:fixed;inset:0;z-index:99999;background:rgba(0,0,0,0.7);display:flex;align-items:center;justify-content:center;padding:1rem;';
         overlay.innerHTML = `
-            <div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;padding:2.5rem;box-shadow:0 25px 60px rgba(0,0,0,0.3);">
+            <div style="background:white;border-radius:1.5rem;max-width:560px;width:100%;padding:2.5rem;box-shadow:0 25px 60px rgba(0,0,0,0.3);max-height:calc(100vh - 2rem);max-height:calc(100dvh - 2rem);overflow-y:auto;-webkit-overflow-scrolling:touch;">
                 <div style="display:flex;align-items:center;gap:0.75rem;margin-bottom:1.25rem;">
                     <span style="background:#ff5722;color:white;font-size:14px;font-weight:800;letter-spacing:.08em;padding:3px 10px;border-radius:999px;text-transform:uppercase;">Alpha</span>
                     <h2 style="margin:0;font-size:1.25rem;font-weight:700;color:#0f172a;font-family:'Poppins',sans-serif;">User Agreement</h2>
