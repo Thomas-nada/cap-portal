@@ -1008,3 +1008,47 @@ def test_audit_trail_populated(client, db):
     events = r.json()
     assert len(events) >= 1
     assert events[0]["event_type"] == "proposal_created"
+
+
+# ── Draft-constitution matcher (whitespace / list-marker tolerance) ────────────
+
+def test_match_span_exact():
+    """An exactly-present passage is located unchanged (fast path)."""
+    doc = "Alpha.\n\n5.  Bravo clause here.\n\n6.  Charlie."
+    s, e = main._match_span(doc, "Bravo clause here.")
+    assert doc[s:e] == "Bravo clause here."
+
+
+def test_match_span_tolerates_missing_list_markers():
+    """A passage copied from the rendered page (ordered-list numbers stripped)
+    still matches the markdown source that contains '5.  ' / '6.  ' markers.
+    This is the CAP-2 regression: an exact substring search returned nothing,
+    so the generated draft was identical to the base and the diff looked empty.
+    """
+    doc = ("4.  Withdrawals shall require an audit.\n\n"
+           "5.  Withdrawals shall designate an administrator.\n\n"
+           "6.  Any ada received must be kept separate.")
+    # Rendered copy: same words, list numbers dropped, paragraphs joined.
+    pasted = ("Withdrawals shall require an audit.\n\n"
+              "Withdrawals shall designate an administrator.\n\n"
+              "Any ada received must be kept separate.")
+    assert pasted not in doc  # exact match genuinely fails
+    span = main._match_span(doc, pasted)
+    assert span is not None
+    s, e = span
+    # The matched span covers the whole block including the intervening markers.
+    assert doc[s:e].startswith("Withdrawals shall require an audit.")
+    assert doc[s:e].endswith("must be kept separate.")
+
+
+def test_match_span_refuses_ambiguous_match():
+    """When a passage could match more than one place, we refuse rather than
+    guess which clause the author meant to change."""
+    doc = "The council shall vote.\n\nThe council shall vote.\n\nDone."
+    # Force the tolerant path with a whitespace difference; two candidates exist.
+    assert main._match_span(doc, "The  council  shall  vote.") is None
+
+
+def test_match_span_empty_needle():
+    assert main._match_span("anything", "") is None
+    assert main._match_span("anything", "   ") is None

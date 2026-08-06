@@ -2,6 +2,7 @@ import hashlib
 import json
 import logging
 import os
+import re
 import uuid
 
 logger = logging.getLogger(__name__)
@@ -1432,6 +1433,41 @@ def get_constitution(filename: str, db: Session = Depends(get_db)):
     return {"filename": filename, "content": path.read_text(encoding="utf-8")}
 
 
+def _match_span(haystack: str, needle: str):
+    """Locate `needle` inside `haystack`, returning (start, end) or None.
+
+    A proposal's `original`/`insert_after` text must be found in the current
+    constitution before it can be substituted. We first try an exact match
+    (unchanged behaviour for well-formed submissions). If that fails we fall
+    back to a whitespace- and list-marker-tolerant search: authors frequently
+    copy the *rendered* constitution, which drops the markdown ordered-list
+    prefixes ("5.  ") that sit between clauses, so an otherwise-correct passage
+    fails a byte-exact comparison. The fallback only accepts a single,
+    unambiguous match — we never guess which of several passages was meant.
+    """
+    needle = (needle or "").strip()
+    if not needle:
+        return None
+    # Fast path: exact substring — identical to the original .find()/.replace().
+    idx = haystack.find(needle)
+    if idx != -1:
+        return (idx, idx + len(needle))
+    # Fallback: literal words joined by a separator that tolerates any run of
+    # whitespace plus an optional markdown list marker (ordered "5." or an
+    # unordered -/*/+ bullet) between them. Every word is re.escape()d, so the
+    # pattern is injection-safe and — because the words are literal, not
+    # quantified — free of catastrophic backtracking.
+    tokens = needle.split()
+    if not tokens:
+        return None
+    sep = r"\s+(?:(?:\d+\.|[-*+])\s+)?"
+    pattern = sep.join(re.escape(t) for t in tokens)
+    found = list(re.finditer(pattern, haystack))
+    if len(found) == 1:
+        return (found[0].start(), found[0].end())
+    return None
+
+
 @app.post("/proposals/{number}/generate-draft-constitution", tags=["constitution"], summary="Generate a draft constitution from a proposal",
           description="**Requires authentication.**")
 def generate_draft_constitution(number: int, user: dict = Depends(require_user),
@@ -1460,7 +1496,7 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
 
     content = files[0].read_text(encoding="utf-8")
 
-    # Apply each revision: simple text substitution
+    # Apply each revision: text substitution, whitespace/list-marker tolerant.
     modified = content
     applied = 0
     for rev in revisions:
@@ -1469,13 +1505,17 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
             continue
         if rev.get("type") == "addition":
             anchor = rev.get("insert_after", "").strip()
-            if anchor and anchor in modified:
-                modified = modified.replace(anchor, anchor + "\n\n" + proposed, 1)
+            span = _match_span(modified, anchor) if anchor else None
+            if span:
+                end = span[1]
+                modified = modified[:end] + "\n\n" + proposed + modified[end:]
                 applied += 1
         else:
             original = rev.get("original", "").strip()
-            if original and original in modified:
-                modified = modified.replace(original, proposed, 1)
+            span = _match_span(modified, original) if original else None
+            if span:
+                start, end = span
+                modified = modified[:start] + proposed + modified[end:]
                 applied += 1
 
     filename = f"cap-{number}-proposed.md"

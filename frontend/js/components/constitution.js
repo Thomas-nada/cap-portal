@@ -274,6 +274,14 @@ export function renderConstitution(state) {
             </aside>
 
  <div id="constitution-col" class="lg:col-span-3">
+                ${isDiffMode && state.constitutionDiffNotice ? `
+                <div class="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-5 py-4">
+                    <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+                    <div class="text-sm">
+                        <p class="font-bold">Some proposed changes couldn't be matched to the current constitution.</p>
+                        <p class="mt-1">${state.constitutionDiffNotice.applied} of ${state.constitutionDiffNotice.total} revision${state.constitutionDiffNotice.total !== 1 ? 's' : ''} were applied. This usually means a revision's original passage was copied from the rendered page and no longer matches the source text exactly (e.g. missing list numbering). The diff below may be partial.</p>
+                    </div>
+                </div>` : ''}
                 ${isDiffMode ? renderDiffView(baseVersion, compareVersion) : renderSingleView(currentVersion)}
             </div>
         </div>

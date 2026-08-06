@@ -1950,6 +1950,7 @@ window.viewProposalDiff = async (proposalNumber) => {
     state.constitutionVersions = [];
     state.constitutionCurrentVersion = null;
     state.constitutionCompareVersion = null;
+    state.constitutionDiffNotice = null;
     state.view = 'constitution';
     state.loading = { ...state.loading, constitution: true };
     // Update the URL without firing 'hashchange' — that event triggers
@@ -1966,12 +1967,31 @@ window.viewProposalDiff = async (proposalNumber) => {
             content: null,
         }));
         let raw = await fetchConstitutionVersions();
-        // Viewing a diff is a read. Only if the draft doesn't exist yet do we
-        // attempt to generate it (a write that requires author/editor rights);
-        // for everyone else the existing draft simply loads.
-        if (!raw.some(v => v.filename === draftFilename)) {
-            try { await generateDraftConstitution(proposalNumber); raw = await fetchConstitutionVersions(); }
-            catch (_) { /* not permitted or nothing to generate — handled below */ }
+        // Regenerate the proposed draft from the *current* submission whenever an
+        // author/editor opens the diff. The draft (cap-N-proposed.md) is derived
+        // data — it is rebuilt from the proposal and never writes back to the
+        // submission — so refreshing it is safe and guarantees the comparison
+        // reflects the latest revisions and matching logic instead of a stale
+        // draft (e.g. one produced before a matcher fix, which would show an
+        // empty diff). Read-only viewers get a 403 here (caught) and simply load
+        // whichever draft already exists; if none exists we generate it once.
+        try {
+            const gen = await generateDraftConstitution(proposalNumber);
+            // The backend reports how many revisions it could locate in the
+            // current constitution. If some couldn't be matched, the diff will be
+            // partial or empty — warn instead of silently showing "identical".
+            if (gen && typeof gen.applied === 'number' && gen.applied < gen.total) {
+                state.constitutionDiffNotice = { applied: gen.applied, total: gen.total };
+            }
+            raw = await fetchConstitutionVersions();
+        } catch (_) {
+            // Not permitted (read-only viewer) or nothing to generate. Fall back
+            // to generating a missing draft only if we can; otherwise the checks
+            // below surface the appropriate message.
+            if (!raw.some(v => v.filename === draftFilename)) {
+                try { await generateDraftConstitution(proposalNumber); raw = await fetchConstitutionVersions(); }
+                catch (_) { /* handled below */ }
+            }
         }
         state.constitutionVersions = mapVersions(raw);
         const base  = state.constitutionVersions.find(v => !v.filename.startsWith('cap-'));
