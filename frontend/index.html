@@ -3,6 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <!--
+      Content Security Policy (defence in depth behind output encoding).
+      'unsafe-inline' is unavoidable while the app uses inline event handlers and
+      inline <script>, so this does NOT stop an injected inline handler on its
+      own. What it does buy us: no external or eval'd script can load, plugins
+      and <base> injection are blocked, and — most usefully — connect-src is
+      pinned to our own API, so a stolen token cannot be POSTed/fetched to an
+      attacker's host. frame-ancestors, X-Frame-Options, X-Content-Type-Options
+      and HSTS cannot be set from a <meta> tag; add those at the serving layer
+      (nginx / Render) — see the recommended header block in the deploy config.
+    -->
+    <meta http-equiv="Content-Security-Policy" content="default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob: https:; connect-src 'self' https://cap-portal-api.onrender.com http://localhost:8000; object-src 'none'; base-uri 'none'; form-action 'self'">
+    <meta name="referrer" content="strict-origin-when-cross-origin">
     <title>Constitutional Amendment Portal — Cardano Constitution</title>
 
     <link rel="stylesheet" href="styles.css">

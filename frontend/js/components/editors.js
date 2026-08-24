@@ -1,7 +1,7 @@
 import { shortAddress } from '../wallet.js';
 
 function escapeHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function personCard({ person, user, isAdmin, onRemove, accentFrom, accentTo, icon }) {
@@ -17,7 +17,7 @@ function personCard({ person, user, isAdmin, onRemove, accentFrom, accentTo, ico
  ${isSelf ? `<span class="text-sm font-black text-blue-500 uppercase tracking-widest">You</span>` : ''}
         </div>
         ${isAdmin && !isSelf ? `
-        <button onclick="${onRemove}('${escapeHtml(person.stake_address)}', '${escapeHtml(person.display_name || person.stake_address)}')"
+        <button onclick="${onRemove}('${escapeHtml(person.stake_address)}')"
  class="opacity-0 group-hover:opacity-100 flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-400 hover:text-red-600 transition-all">
  <i data-lucide="user-minus" class="w-4 h-4"></i>
  </button>` : '<div class="w-9"></div>'}

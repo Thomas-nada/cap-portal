@@ -231,7 +231,8 @@ export function updateUI(rerender = false) {
 window.updateUI = updateUI;
 
 function escapeHtmlGlobal(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Quotes escaped too, so values are safe inside attribute contexts.
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 function timeAgoShort(iso) {
@@ -870,7 +871,10 @@ window.submitAddAdmin = async () => {
     }
 };
 
-window.removeAdminConfirm = async (stakeAddress, displayName) => {
+window.removeAdminConfirm = async (stakeAddress) => {
+    // Name is looked up from state, not passed through the inline onclick, so an
+    // attacker-controlled display name can never reach a JS-string context.
+    const displayName = (state.admins || []).find(a => a.stake_address === stakeAddress)?.display_name || stakeAddress;
     if (!confirm(`Remove ${displayName} as an admin?`)) return;
     try {
         await removeAdmin(stakeAddress);
@@ -899,7 +903,8 @@ window.submitAddEditor = async () => {
     }
 };
 
-window.removeEditorConfirm = async (stakeAddress, displayName) => {
+window.removeEditorConfirm = async (stakeAddress) => {
+    const displayName = (state.editors || []).find(e => e.stake_address === stakeAddress)?.display_name || stakeAddress;
     if (!confirm(`Remove ${displayName} as an editor?`)) return;
     try {
         await removeEditor(stakeAddress);

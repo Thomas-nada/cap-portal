@@ -1052,3 +1052,38 @@ def test_match_span_refuses_ambiguous_match():
 def test_match_span_empty_needle():
     assert main._match_span("anything", "") is None
     assert main._match_span("anything", "   ") is None
+
+
+# ── Security: display-name and screenshot validation (XSS hardening) ───────────
+
+import pytest as _pytest
+from pydantic import ValidationError as _ValidationError
+
+
+def test_display_name_rejects_html_chars():
+    for bad in ["<img src=x onerror=alert(1)>", "a<b", "a>b", 'a"b', "a\x00b"]:
+        with _pytest.raises(ValueError):
+            main._validate_display_name(bad)
+
+
+def test_display_name_allows_normal_and_apostrophe():
+    for ok in ["Thomas", "O'Brien", "wakuda", "Styg 123", None]:
+        assert main._validate_display_name(ok) == ok
+
+
+def test_setname_model_rejects_injection():
+    with _pytest.raises(_ValidationError):
+        main.SetNameRequest(display_name="<script>alert(1)</script>")
+    # A legitimate name still passes.
+    assert main.SetNameRequest(display_name="Jo Allum").display_name == "Jo Allum"
+
+
+def test_screenshot_must_be_image_data_url():
+    # Quote-bearing value that would break out of <img src="…"> is rejected.
+    with _pytest.raises(_ValidationError):
+        main.BugReportCreate(title="t", description="d",
+                             screenshots=['x" onerror=alert(document.domain)'])
+    # A well-formed image data URL is accepted.
+    ok = main.BugReportCreate(title="t", description="d",
+                              screenshots=["data:image/png;base64,iVBORw0KGgo="])
+    assert ok.screenshots == ["data:image/png;base64,iVBORw0KGgo="]

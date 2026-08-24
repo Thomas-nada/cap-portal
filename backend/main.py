@@ -240,6 +240,26 @@ MAX_NAME = 100
 
 _PROPOSAL_TEXT_FIELDS = ("abstract", "motivation", "analysis", "impact", "exhibits")
 
+# A bug-report screenshot must be a well-formed image data URL. Rejecting
+# anything else stops a value containing a quote from reaching the admin bug
+# panel, where it would break out of the <img src="…"> attribute (stored XSS).
+_IMAGE_DATA_URL_RE = re.compile(
+    r"^data:image/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$", re.IGNORECASE
+)
+
+# Display names are shown in many contexts. Keeping angle brackets, double
+# quotes and control characters out is defence in depth behind output encoding.
+# Apostrophes stay allowed (legitimate in names) and are encoded on render.
+_NAME_FORBIDDEN_RE = re.compile(r"[<>\"\x00-\x1f\x7f]")
+
+
+def _validate_display_name(v):
+    if v is None:
+        return v
+    if _NAME_FORBIDDEN_RE.search(v):
+        raise ValueError('Display name may not contain < > " or control characters')
+    return v
+
 
 def _validate_structured(v):
     if not isinstance(v, dict):
@@ -551,6 +571,11 @@ class VerifyRequest(BaseModel):
     key: str = Field(max_length=20_000)
     display_name: Optional[str] = Field(default=None, max_length=MAX_NAME)
 
+    @field_validator("display_name")
+    @classmethod
+    def _v_name(cls, v):
+        return _validate_display_name(v)
+
 
 @app.post("/auth/verify", tags=["auth"], summary="Verify wallet signature and receive JWT",
           description="Submit the CIP-30 `signData` result to obtain a Bearer token. Tokens expire after 24 hours.")
@@ -681,6 +706,11 @@ def get_me(user: dict = Depends(require_user), db: Session = Depends(get_db)):
 class SetNameRequest(BaseModel):
     display_name: str = Field(max_length=MAX_NAME)
 
+    @field_validator("display_name")
+    @classmethod
+    def _v_name(cls, v):
+        return _validate_display_name(v)
+
 
 @app.post("/auth/set-name", tags=["auth"], summary="Set display name (first-time setup)")
 def set_display_name(req: SetNameRequest, user: dict = Depends(require_user), db: Session = Depends(get_db)):
@@ -708,6 +738,11 @@ def set_display_name(req: SetNameRequest, user: dict = Depends(require_user), db
 
 class UpdateProfileRequest(BaseModel):
     display_name: str = Field(max_length=MAX_NAME)
+
+    @field_validator("display_name")
+    @classmethod
+    def _v_name(cls, v):
+        return _validate_display_name(v)
 
 
 @app.patch("/auth/profile", tags=["auth"], summary="Update display name")
@@ -1541,6 +1576,11 @@ class EditorCreate(BaseModel):
     stake_address: str
     display_name: Optional[str] = None
 
+    @field_validator("display_name")
+    @classmethod
+    def _v_name(cls, v):
+        return _validate_display_name(v)
+
 
 def _bootstrap_operators() -> set[str]:
     """Operator stake addresses permitted to self-claim the first admin/editor
@@ -1618,6 +1658,11 @@ def list_admins(db: Session = Depends(get_db)):
 class AdminCreate(BaseModel):
     stake_address: str
     display_name: Optional[str] = None
+
+    @field_validator("display_name")
+    @classmethod
+    def _v_name(cls, v):
+        return _validate_display_name(v)
 
 
 @app.post("/admins/bootstrap", status_code=201, tags=["admins"], summary="Claim the first admin role",
@@ -1972,6 +2017,8 @@ class BugReportCreate(BaseModel):
             for s in v:
                 if len(s) > MAX_SCREENSHOT:
                     raise ValueError("Each screenshot must be under ~3.7 MB")
+                if not _IMAGE_DATA_URL_RE.match(s or ""):
+                    raise ValueError("Screenshots must be image data URLs (data:image/...;base64,...)")
         return v
 
 class BugReportStatusUpdate(BaseModel):

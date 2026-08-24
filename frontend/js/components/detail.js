@@ -61,7 +61,8 @@ function renderStructuredBody(s, type) {
 }
 
 function escapeHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Quotes escaped too, so values are safe inside attribute contexts.
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
 const SUGGESTION_LABELS = {

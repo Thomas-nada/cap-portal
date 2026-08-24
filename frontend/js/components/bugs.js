@@ -1,5 +1,14 @@
 function escapeHtml(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    // Escape quotes too: values land in attribute contexts (href/src/value),
+    // where an unescaped " or ' breaks out of the attribute.
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+}
+
+// True only for well-formed image data: URLs. Anything else (in particular a
+// value containing a quote, which could break out of a src/href attribute) is
+// rejected before it reaches innerHTML.
+function isSafeImageDataUrl(s) {
+    return typeof s === 'string' && /^data:image\/(png|jpe?g|gif|webp);base64,[A-Za-z0-9+/=\s]+$/i.test(s);
 }
 
 function statusBadge(status) {
@@ -63,7 +72,7 @@ export function renderBugs(state) {
             </div>` : ''}
  ${(r.screenshots || []).length ? `
  <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
-                ${r.screenshots.map(s => `<a href="${s}" target="_blank" rel="noopener"><img src="${s}" class="w-full max-h-64 object-contain rounded-2xl border border-slate-200 hover:border-slate-300 transition-colors"></a>`).join('')}
+                ${r.screenshots.filter(isSafeImageDataUrl).map(s => `<a href="${s}" target="_blank" rel="noopener"><img src="${s}" class="w-full max-h-64 object-contain rounded-2xl border border-slate-200 hover:border-slate-300 transition-colors"></a>`).join('')}
             </div>` : ''}
  <div class="flex flex-wrap gap-2">
                 ${r.status !== 'open' ? `
