@@ -1535,6 +1535,28 @@ window.wizardPreviewHtml = () => {
     return buildPreviewHtml(w.title || '', structured, type);
 };
 
+// Rebuild a proposal's revisions from the Edit form's per-revision textareas.
+// Each revision object is copied whole (preserving type, section, and any other
+// keys) and only the author-editable text is overwritten from the DOM, and only
+// when the field is actually present. If there are no revisions to edit, the
+// input is returned unchanged. This never adds or drops revisions.
+function readEditedRevisions(existingRevisions) {
+    if (!Array.isArray(existingRevisions) || !existingRevisions.length) return existingRevisions;
+    return existingRevisions.map((r, i) => {
+        const next = { ...r };
+        const proposedEl = document.getElementById(`edit-rev-${i}-proposed`);
+        if (proposedEl) next.proposed = proposedEl.value;
+        if (r.type === 'addition') {
+            const anchorEl = document.getElementById(`edit-rev-${i}-anchor`);
+            if (anchorEl) next.insert_after = anchorEl.value;
+        } else {
+            const origEl = document.getElementById(`edit-rev-${i}-original`);
+            if (origEl) next.original = origEl.value;
+        }
+        return next;
+    });
+}
+
 window.previewEdit = () => {
     const form = document.getElementById('edit-form');
     if (!form) return;
@@ -1549,6 +1571,9 @@ window.previewEdit = () => {
         impact: fd.get('impact') || '',
         exhibits: fd.get('specification_extra') || '',
     };
+    if (Array.isArray(p?.structured?.revisions) && p.structured.revisions.length) {
+        structured.revisions = readEditedRevisions(p.structured.revisions);
+    }
     showPreviewOverlay(fd.get('title') || p?.title || '', structured, type);
 };
 
@@ -1614,6 +1639,12 @@ window.handleEdit = async (event) => {
         ...existing,
         abstract, motivation, analysis, impact, exhibits,
     };
+    // Preserve and apply edits to the proposed constitutional amendment text.
+    // readEditedRevisions copies each revision whole and only overwrites the
+    // edited text, so type/section/other keys are never lost.
+    if (Array.isArray(existing.revisions) && existing.revisions.length) {
+        structured.revisions = readEditedRevisions(existing.revisions);
+    }
 
     state.loading = { ...state.loading, submitting: true };
     updateUI();
