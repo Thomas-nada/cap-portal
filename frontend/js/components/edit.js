@@ -128,37 +128,6 @@ export function renderEdit(state) {
                 </div>
             </div>
 
-            <!-- Proposed Revisions (CAP only; existing revisions are editable in place) -->
-            ${!isCIS && Array.isArray(s.revisions) && s.revisions.length ? `
- <div class="bg-white/80 p-10 sm:p-14 rounded-[4rem] border border-slate-100 shadow-sm space-y-8">
- <div class="flex items-center gap-3">
- <i data-lucide="git-compare" class="w-4 h-4 text-blue-600"></i>
- <h3 class="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Proposed Revisions</h3>
-                </div>
- <p class="text-sm text-slate-400 italic leading-relaxed -mt-2">Editing the Proposed text is always safe. Changing the Original or Insert-after text alters how the revision matches the current Constitution; the side-by-side diff only shows a change when the anchor still matches exactly.</p>
-                ${s.revisions.map((r, i) => {
-                    const isAddition = r.type === 'addition';
-                    const sectionLabel = r.section ? escapeHtml(r.section) : `Revision ${i + 1}`;
-                    return `
- <div class="rounded-3xl border border-slate-100 p-6 sm:p-8 space-y-6 bg-slate-50/40">
- <p class="text-xs font-black uppercase tracking-[0.2em] text-blue-600">${sectionLabel}${isAddition ? ' · Insertion' : ''}</p>
-                    ${isAddition ? `
- <div class="space-y-2">
- <label class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Insert after (anchor text in the current Constitution)</label>
- <textarea id="edit-rev-${i}-anchor" class="w-full bg-white p-5 rounded-2xl min-h-[100px] font-mono text-sm outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-700 resize-y">${escapeHtml(r.insert_after || '')}</textarea>
-                    </div>` : `
- <div class="space-y-2">
- <label class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Original (must match the current Constitution)</label>
- <textarea id="edit-rev-${i}-original" class="w-full bg-white p-5 rounded-2xl min-h-[100px] font-mono text-sm outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-700 resize-y">${escapeHtml(r.original || '')}</textarea>
-                    </div>`}
- <div class="space-y-2">
- <label class="text-xs font-black uppercase tracking-[0.2em] text-slate-400">Proposed</label>
- <textarea id="edit-rev-${i}-proposed" class="w-full bg-white p-5 rounded-2xl min-h-[120px] font-mono text-sm outline-none border-2 border-transparent focus:border-blue-600 transition-all text-slate-900 resize-y">${escapeHtml(r.proposed || '')}</textarea>
-                    </div>
-                    </div>`;
-                }).join('')}
-            </div>` : ''}
-
             <!-- Verification -->
  <div class="bg-blue-50/50 p-10 sm:p-14 rounded-[4rem] border border-blue-100 space-y-8">
  <h3 class="text-sm font-black uppercase tracking-[0.4em] text-blue-600 ml-4 mb-4">Governance Verification</h3>
@@ -192,8 +161,5 @@ export function renderEdit(state) {
 }
 
 function escapeHtml(str) {
-    // Quotes escaped too, so the title value="…" attribute is safe. Inside a
-    // <textarea>, entities decode back to the original text and round-trip
-    // through .value unchanged, so this does not alter saved revision content.
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
+    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
 }

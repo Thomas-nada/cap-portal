@@ -77,6 +77,13 @@ export const state = {
     wizardStep: 1,
     wizardError: null,
     wizardSubmitted: null,
+    // Set when the wizard is editing an existing proposal instead of creating a
+    // new one. Holds the proposal number; the original structured + category are
+    // kept alongside so unmodelled fields survive and the category label can be
+    // updated on save.
+    wizardEditNumber: null,
+    wizardEditOriginal: null,
+    wizardEditCategory: null,
     // Edit
     editingProposal: null,
     // Learn
@@ -364,20 +371,25 @@ window.handleRouting = async () => {
         state.view = 'constitution';
         await loadConstitution();
     } else if (hash === '#/new' || hash === '#/wizard') {
+        // Starting a fresh proposal: never inherit a prior edit session.
+        if (state.wizardEditNumber) {
+            state.wizardEditNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null;
+            state.wizardData = {}; state.wizardStep = 1;
+        }
         state.view = 'wizard';
         updateUI();
     } else if (hash.startsWith('#/detail/')) {
         const number = parseInt(hash.split('/').pop());
         await openProposal(number, false);
     } else if (hash.startsWith('#/edit/')) {
+        // Edit reuses the wizard, seeded from the proposal (view === 'wizard').
         const number = parseInt(hash.split('/').pop());
-        if (state.view === 'edit' && state.currentProposal?.number === number) {
+        if (state.wizardEditNumber === number && state.view === 'wizard') {
             updateUI();
         } else {
-            openProposal(number, false).then(() => {
-                state.view = 'edit';
-                updateUI();
-            });
+            await openProposal(number, false);
+            if (state.currentProposal?.number === number) enterWizardEdit(state.currentProposal);
+            updateUI();
         }
     } else if (hash.startsWith('#/guides/') || hash.startsWith('#/learn/')) {
         const slug = hash.replace('#/guides/', '').replace('#/learn/', '');
@@ -759,7 +771,12 @@ window.submitWizard = async () => {
     const w = state.wizardData;
     const title = (w.title || '').trim();
     if (!title) { state.error = 'Title is required'; updateUI(); return; }
+    const editNumber = state.wizardEditNumber;
     const structured = {
+        // In edit mode, start from the original so any stored keys the wizard
+        // does not model survive untouched; every modelled field is overwritten
+        // below. In create mode this spreads nothing.
+        ...(editNumber ? (state.wizardEditOriginal || {}) : {}),
         type: w.type || 'CAP',
         category: w.category || '',
         abstract: w.abstract || '',
@@ -777,6 +794,34 @@ window.submitWizard = async () => {
     state.loading = { ...state.loading, submitting: true };
     updateUI();
     try {
+        if (editNumber) {
+            const updated = await updateProposal(editNumber, { title, structured });
+            // Keep the category label in step with the edited category.
+            const oldCat = state.wizardEditCategory;
+            const newCat = w.category || '';
+            if (newCat !== oldCat) {
+                if (oldCat) { try { await removeLabel(editNumber, oldCat); } catch (_) {} }
+                if (newCat) { try { await addLabel(editNumber, newCat); } catch (_) {} }
+            }
+            // Refresh the derived draft so the diff reflects any edited revisions.
+            const hasRevisionsE = structured.revisions?.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed));
+            if (hasRevisionsE) {
+                try { await generateDraftConstitution(editNumber); state.constitutionVersions = []; state.constitutionCurrentVersion = null; } catch (_) {}
+            }
+            state.wizardData = {};
+            state.wizardStep = 1;
+            state.wizardEditNumber = null;
+            state.wizardEditOriginal = null;
+            state.wizardEditCategory = null;
+            state.currentProposal = updated;
+            state.proposals = (state.proposals || []).map(pp => pp.number === editNumber ? updated : pp);
+            try { state.auditEvents = await fetchAudit(editNumber); } catch (_) {}
+            state.loading = { ...state.loading, submitting: false };
+            state.view = 'detail';
+            window.location.hash = `#/detail/${editNumber}`;
+            updateUI();
+            return;
+        }
         const proposal = await createProposal({ title, type: w.type || 'CAP', structured });
         await addLabel(proposal.number, proposal.type);
         if (w.category) await addLabel(proposal.number, w.category);
@@ -810,6 +855,9 @@ window.wizardCreateAnother = () => {
     state.wizardSubmitted = null;
     state.wizardData = {};
     state.wizardStep = 1;
+    state.wizardEditNumber = null;
+    state.wizardEditOriginal = null;
+    state.wizardEditCategory = null;
     updateUI();
 };
 
@@ -1535,28 +1583,6 @@ window.wizardPreviewHtml = () => {
     return buildPreviewHtml(w.title || '', structured, type);
 };
 
-// Rebuild a proposal's revisions from the Edit form's per-revision textareas.
-// Each revision object is copied whole (preserving type, section, and any other
-// keys) and only the author-editable text is overwritten from the DOM, and only
-// when the field is actually present. If there are no revisions to edit, the
-// input is returned unchanged. This never adds or drops revisions.
-function readEditedRevisions(existingRevisions) {
-    if (!Array.isArray(existingRevisions) || !existingRevisions.length) return existingRevisions;
-    return existingRevisions.map((r, i) => {
-        const next = { ...r };
-        const proposedEl = document.getElementById(`edit-rev-${i}-proposed`);
-        if (proposedEl) next.proposed = proposedEl.value;
-        if (r.type === 'addition') {
-            const anchorEl = document.getElementById(`edit-rev-${i}-anchor`);
-            if (anchorEl) next.insert_after = anchorEl.value;
-        } else {
-            const origEl = document.getElementById(`edit-rev-${i}-original`);
-            if (origEl) next.original = origEl.value;
-        }
-        return next;
-    });
-}
-
 window.previewEdit = () => {
     const form = document.getElementById('edit-form');
     if (!form) return;
@@ -1571,9 +1597,6 @@ window.previewEdit = () => {
         impact: fd.get('impact') || '',
         exhibits: fd.get('specification_extra') || '',
     };
-    if (Array.isArray(p?.structured?.revisions) && p.structured.revisions.length) {
-        structured.revisions = readEditedRevisions(p.structured.revisions);
-    }
     showPreviewOverlay(fd.get('title') || p?.title || '', structured, type);
 };
 
@@ -1607,11 +1630,59 @@ window.closePreview = () => {
 
 // ── Edit proposal ─────────────────────────────────────────────────────────────
 
+const WIZARD_CATEGORY_IDS = ['Procedural', 'Substantive', 'Technical', 'Interpretive', 'Editorial', 'Other'];
+
+// Reverse of the wizard's forward transform (see submitWizard): turn a stored
+// proposal back into the wizard's working model. Each stored revision becomes a
+// selectedText entry (the passage) plus a revisions[idx] entry (the proposed
+// text), mirroring exactly what the forward transform consumes, so that loading
+// a proposal and saving it unchanged reproduces an identical `structured`.
+function structuredToWizard(p) {
+    const s = p.structured || {};
+    const revs = Array.isArray(s.revisions) ? s.revisions : [];
+    const selectedText = revs.map((r, i) => ({
+        id: `sel-edit-${i}`,
+        text: r.type === 'addition' ? (r.insert_after || '') : (r.original || ''),
+        sectionId: r.section || '',
+        type: 'CAP',
+        kind: r.type === 'addition' ? 'add_after' : 'replace',
+    }));
+    const revisions = {};
+    revs.forEach((r, i) => { revisions[i] = r.proposed || ''; });
+    const category = s.category
+        || (p.labels || []).find(l => WIZARD_CATEGORY_IDS.includes(l.name))?.name
+        || '';
+    return {
+        type: p.type || s.type || 'CAP',
+        category,
+        title: p.title || '',
+        abstract: s.abstract || '',
+        motivation: s.motivation || '',
+        analysis: s.analysis || '',
+        impact: s.impact || '',
+        exhibits: s.exhibits || '',
+        coAuthors: Array.isArray(s.co_authors) ? (s.co_authors[0] || '') : (s.co_authors || ''),
+        selectedText,
+        revisions,
+    };
+}
+
+// Enter the wizard in edit mode for an already-loaded proposal.
+function enterWizardEdit(p) {
+    state.wizardEditNumber = p.number;
+    state.wizardEditOriginal = p.structured || {};
+    state.wizardEditCategory = (p.labels || []).find(l => WIZARD_CATEGORY_IDS.includes(l.name))?.name || null;
+    state.wizardData = structuredToWizard(p);
+    state.wizardStep = 1;
+    state.wizardSubmitted = null;
+    state.wizardError = null;
+    state.view = 'wizard';
+}
+
 window.openEdit = (number) => {
     const p = state.proposals.find(p => p.number === number) || state.currentProposal;
     if (!p) return;
-    state.editingProposal = { ...p };
-    state.view = 'edit';
+    enterWizardEdit(p);
     window.location.hash = `#/edit/${number}`;
     updateUI();
 };
@@ -1639,12 +1710,6 @@ window.handleEdit = async (event) => {
         ...existing,
         abstract, motivation, analysis, impact, exhibits,
     };
-    // Preserve and apply edits to the proposed constitutional amendment text.
-    // readEditedRevisions copies each revision whole and only overwrites the
-    // edited text, so type/section/other keys are never lost.
-    if (Array.isArray(existing.revisions) && existing.revisions.length) {
-        structured.revisions = readEditedRevisions(existing.revisions);
-    }
 
     state.loading = { ...state.loading, submitting: true };
     updateUI();
@@ -1922,7 +1987,7 @@ window.wizardBack     = () => {
 window.wizardNextStep = () => window.wizardNext();
 window.wizardPrevStep = () => window.wizardBack();
 window.wizardSubmit   = () => window.submitWizard();
-window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; updateUI(); };
+window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; state.wizardEditNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null; updateUI(); };
 // Confirmed reset for the "Start Over" button — guards against a misclick
 // discarding a draft the user has spent several steps building.
 window.wizardStartOver = () => {
@@ -1941,12 +2006,20 @@ function wizardHasData() {
 
 // Leave the wizard (logo / Discard). Warns first if there are unsaved edits.
 window.wizardExit = () => {
-    if (wizardHasData() && !confirm('Discard this proposal? Everything you\'ve entered will be lost.')) return;
+    const editNumber = state.wizardEditNumber;
+    const prompt = editNumber
+        ? 'Discard your changes? The proposal will keep its current saved version.'
+        : 'Discard this proposal? Everything you\'ve entered will be lost.';
+    if (wizardHasData() && !confirm(prompt)) return;
     state.wizardData = {};
     state.wizardStep = 1;
     state.wizardError = null;
     state.wizardSubmitted = null;
-    window.setView('dashboard');
+    state.wizardEditNumber = null;
+    state.wizardEditOriginal = null;
+    state.wizardEditCategory = null;
+    if (editNumber) { window.location.hash = `#/detail/${editNumber}`; window.handleRouting(); }
+    else window.setView('dashboard');
 };
 
 window.previewWizard = () => {

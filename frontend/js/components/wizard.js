@@ -11,11 +11,12 @@ export function renderWizard(state) {
         ...(state.wizardData || {}),
     };
 
+    const editing = state.wizardEditNumber || null;
     return `
  <div class="max-w-5xl mx-auto pb-28 fade-in text-left">
  <header class="mb-12">
- <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">New proposal</h1>
- <p class="text-on-surface-variant text-lg font-medium mt-3">A guided, step-by-step process to create a Constitutional Amendment Proposal</p>
+ <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">${editing ? `Edit ${wizard.type || 'CAP'} #${editing}` : 'New proposal'}</h1>
+ <p class="text-on-surface-variant text-lg font-medium mt-3">${editing ? 'Edit your proposal through the same guided steps. Saving updates the existing proposal.' : 'A guided, step-by-step process to create a Constitutional Amendment Proposal'}</p>
         </header>
 
         <!-- Progress -->
@@ -79,8 +80,8 @@ function renderWizardBar(step, wizard, state) {
         rightBtn = `<button onclick="window.wizardSubmit()" ${submitting ? 'disabled' : ''}
  class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed">
             ${submitting
-                ? '<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Submitting…'
-                : '<i data-lucide="send" class="w-4 h-4"></i> Submit Proposal'}
+                ? `<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> ${state.wizardEditNumber ? 'Saving…' : 'Submitting…'}`
+                : `<i data-lucide="send" class="w-4 h-4"></i> ${state.wizardEditNumber ? 'Save changes' : 'Submit Proposal'}`}
         </button>`;
     } else if (isSelect) {
         rightBtn = `<button onclick="window.wizardNextStep()" ${hasSel ? '' : 'disabled'}
@@ -179,19 +180,22 @@ const CATEGORIES = [
 ];
 
 function renderStep1(wizard) {
+    // Type is fixed once a proposal exists: switching CAP<->CIS would change
+    // which fields and labels are valid. In edit mode the buttons are inert.
+    const editing = (typeof window !== 'undefined' && window.state && window.state.wizardEditNumber) || null;
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
  <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-8">Step 1: Choose type</h2>
 
  <div class="mb-12">
- <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 block">Proposal type</label>
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-4 block">Proposal type${editing ? ' <span class="text-slate-300 normal-case tracking-normal font-medium">(locked when editing)</span>' : ''}</label>
  <div class="space-y-3">
                 ${[
                     { id: 'CAP', name: 'Constitutional Amendment Proposal', desc: 'Proposes specific changes to the Constitution text.' },
                     { id: 'CIS', name: 'Constitutional Issue Statement', desc: 'Identifies a constitutional problem without proposing specific changes.' },
                 ].map(t => `
-                <button onclick="window.updateWizard({type:'${t.id}'}); window.updateUI(true);"
- class="w-full p-5 rounded-2xl border-2 text-left transition-all flex items-start gap-4 ${wizard.type === t.id ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-blue-300'}">
+                <button ${editing ? 'disabled' : `onclick="window.updateWizard({type:'${t.id}'}); window.updateUI(true);"`}
+ class="w-full p-5 rounded-2xl border-2 text-left transition-all flex items-start gap-4 ${wizard.type === t.id ? 'border-blue-600 bg-blue-50' : 'border-slate-200 hover:border-blue-300'} ${editing && wizard.type !== t.id ? 'opacity-40 cursor-not-allowed' : ''} ${editing ? 'cursor-default' : ''}">
  <span class="mt-1 w-5 h-5 rounded-full border-2 flex-shrink-0 flex items-center justify-center ${wizard.type === t.id ? 'border-blue-600' : 'border-slate-300'}">
                         ${wizard.type === t.id ? '<span class="w-2.5 h-2.5 rounded-full bg-blue-600 block"></span>' : ''}
                     </span>
