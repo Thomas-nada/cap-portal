@@ -9,7 +9,7 @@ function md(text) {
     return window.safeMarkdown(text);
 }
 
-function renderStructuredBody(s, type) {
+function renderStructuredBody(s, type, canSuggest = false) {
  if (!s) return '<p class="text-slate-400">No content.</p>';
     const isCIS = type === 'CIS';
     const sections = [];
@@ -25,16 +25,21 @@ function renderStructuredBody(s, type) {
     }
 
     if (s.revisions?.length) {
+        // Editors (who are not the author) get a "Suggest" button per text pane,
+        // which opens the same suggestion flow targeting that revision field.
+        const sg = (i, sub) => canSuggest
+            ? `<button onclick="window.openSuggestModal('revisions[${i}].${sub}')" title="Suggest an edit to this text" class="inline-flex items-center gap-1 text-sm font-black uppercase tracking-widest text-blue-500 hover:text-blue-700 transition-colors"><i data-lucide="git-pull-request" class="w-3 h-3"></i> Suggest</button>`
+            : '';
         const revHtml = s.revisions.map((r, i) => r.type === 'addition' ? `
  <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
  ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest">${r.section}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
  <div class="p-5">
- <div class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
+ <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-cyan-500">Insert After</div>${sg(i, 'insert_after')}</div>
  <div class="text-sm text-slate-600 font-mono leading-relaxed italic">${escapeHtml(r.insert_after || '')}</div>
                     </div>
  <div class="p-5">
- <div class="text-sm font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
+ <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-cyan-600">New Text</div>${sg(i, 'proposed')}</div>
  <div class="text-sm text-slate-900 font-mono leading-relaxed">${escapeHtml(r.proposed || '')}</div>
                     </div>
                 </div>
@@ -43,11 +48,11 @@ function renderStructuredBody(s, type) {
  ${r.section ? `<div class="px-5 py-2 bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest">${r.section}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 ">
  <div class="p-5">
- <div class="text-sm font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
+ <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-red-400">Original</div>${sg(i, 'original')}</div>
  <div class="text-sm text-slate-600 font-mono leading-relaxed">${escapeHtml(r.original || '')}</div>
                     </div>
  <div class="p-5">
- <div class="text-sm font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
+ <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-green-500">Proposed</div>${sg(i, 'proposed')}</div>
  <div class="text-sm text-slate-900 font-mono leading-relaxed">${escapeHtml(r.proposed || '')}</div>
                     </div>
                 </div>
@@ -72,6 +77,18 @@ const SUGGESTION_LABELS = {
 
 const SUGGERABLE_FIELDS = ['title', 'abstract', 'motivation', 'analysis', 'impact', 'exhibits'];
 
+// Human label for a suggestion's field, including revision-text paths like
+// "revisions[0].proposed" -> "Revision 1 · Proposed".
+function labelForSuggestionField(field) {
+    if (SUGGESTION_LABELS[field]) return SUGGESTION_LABELS[field];
+    const m = /^revisions\[(\d+)\]\.(proposed|original|insert_after)$/.exec(field || '');
+    if (m) {
+        const sub = { proposed: 'Proposed', original: 'Original', insert_after: 'Insert-after' }[m[2]];
+        return `Revision ${Number(m[1]) + 1} · ${sub}`;
+    }
+    return field;
+}
+
 function renderSuggestions(state, p, isAuthor, isEditor) {
     const suggestions = state.suggestions || [];
     const pending = suggestions.filter(s => s.status === 'pending');
@@ -83,7 +100,7 @@ function renderSuggestions(state, p, isAuthor, isEditor) {
  <div class="bg-white/80 rounded-2xl border-2 border-blue-100 p-6 space-y-4">
  <div class="flex items-start justify-between gap-4">
             <div>
- <span class="text-sm font-black uppercase tracking-widest text-blue-500">${escapeHtml(SUGGESTION_LABELS[s.field] || s.field)}</span>
+ <span class="text-sm font-black uppercase tracking-widest text-blue-500">${escapeHtml(labelForSuggestionField(s.field))}</span>
  <p class="text-sm text-slate-500 mt-0.5">
  Suggested by <span class="font-bold text-slate-700 ">${escapeHtml(s.editor_display_name || shortAddress(s.editor_stake_address))}</span>
  <span class="text-slate-400 font-mono">(${shortAddress(s.editor_stake_address)})</span>
@@ -117,7 +134,7 @@ function renderSuggestions(state, p, isAuthor, isEditor) {
     const resolvedCards = resolved.map(s => `
  <div class="rounded-2xl border border-slate-100 p-5 opacity-60 space-y-2">
  <div class="flex items-center justify-between">
- <span class="text-sm font-black uppercase tracking-widest text-slate-400">${escapeHtml(SUGGESTION_LABELS[s.field] || s.field)}</span>
+ <span class="text-sm font-black uppercase tracking-widest text-slate-400">${escapeHtml(labelForSuggestionField(s.field))}</span>
  <span class="px-2.5 py-1 rounded-full text-sm font-black uppercase tracking-widest ${s.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">${s.status}</span>
         </div>
  <p class="text-sm text-slate-400 font-mono whitespace-pre-wrap truncate">${escapeHtml(s.suggested_value)}</p>
@@ -288,7 +305,7 @@ export function renderDetail(state) {
  <div class="space-y-16">
                     <!-- Proposal Body -->
  <article class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed">
-                        ${p.structured ? renderStructuredBody(p.structured, p.type) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
+                        ${p.structured ? renderStructuredBody(p.structured, p.type, isEditor && !isAuthor) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
                     </article>
 
                     ${(p.structured?.revisions?.length && p.structured.revisions.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed))) ? `

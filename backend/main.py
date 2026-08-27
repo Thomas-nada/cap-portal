@@ -1799,6 +1799,26 @@ def get_version(number: int, version_num: int, db: Session = Depends(get_db)):
 
 SUGGESTION_FIELDS = {"title", "abstract", "motivation", "analysis", "impact", "exhibits"}
 
+# Editors may also suggest changes to the text of an existing revision, addressed
+# by path, e.g. "revisions[0].proposed". Only these three text sub-fields are
+# suggestable, and the sub-field must match the revision's kind.
+_REV_FIELD_RE = re.compile(r"^revisions\[(\d+)\]\.(proposed|original|insert_after)$")
+
+
+def _revision_subfield(structured, idx, sub):
+    """Return the current value of a revision's text sub-field, validating that
+    the revision exists and the sub-field is valid for its kind."""
+    revs = structured.get("revisions") or []
+    if idx < 0 or idx >= len(revs):
+        raise ValueError("That revision no longer exists")
+    rev = revs[idx]
+    is_addition = rev.get("type") == "addition"
+    if sub == "insert_after" and not is_addition:
+        raise ValueError("insert_after applies only to insertion revisions")
+    if sub == "original" and is_addition:
+        raise ValueError("original applies only to replacement revisions")
+    return rev.get(sub, "") or ""
+
 
 def suggestion_to_dict(s: Suggestion) -> dict:
     return {
@@ -1836,8 +1856,9 @@ class SuggestionCreate(BaseModel):
 @limiter.limit("10/minute")
 def create_suggestion(request: Request, number: int, req: SuggestionCreate,
                       user: dict = Depends(require_editor), db: Session = Depends(get_db)):
-    if req.field not in SUGGESTION_FIELDS:
-        raise HTTPException(status_code=400, detail=f"Invalid field. Must be one of: {', '.join(SUGGESTION_FIELDS)}")
+    rev_match = _REV_FIELD_RE.match(req.field)
+    if req.field not in SUGGESTION_FIELDS and not rev_match:
+        raise HTTPException(status_code=400, detail=f"Invalid field. Must be one of: {', '.join(SUGGESTION_FIELDS)}, or a revision text field (revisions[i].proposed)")
 
     p = db.query(Proposal).filter(Proposal.number == number).first()
     if not p:
@@ -1847,7 +1868,13 @@ def create_suggestion(request: Request, number: int, req: SuggestionCreate,
 
     # Snapshot current value
     structured = json.loads(p.body) if p.body else {}
-    current = p.title if req.field == "title" else structured.get(req.field, "")
+    if rev_match:
+        try:
+            current = _revision_subfield(structured, int(rev_match.group(1)), rev_match.group(2))
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+    else:
+        current = p.title if req.field == "title" else structured.get(req.field, "")
 
     s = Suggestion(
         proposal_number=number,
@@ -1882,8 +1909,18 @@ def approve_suggestion(number: int, suggestion_id: int,
         raise HTTPException(status_code=400, detail="Suggestion is already resolved")
 
     # Apply the change to the proposal
+    rev_match = _REV_FIELD_RE.match(s.field)
     if s.field == "title":
         p.title = s.suggested_value
+    elif rev_match:
+        structured = json.loads(p.body) if p.body else {}
+        idx, sub = int(rev_match.group(1)), rev_match.group(2)
+        revs = structured.get("revisions") or []
+        if idx < 0 or idx >= len(revs):
+            raise HTTPException(status_code=409, detail="That revision no longer exists; the proposal has changed since this suggestion was made")
+        revs[idx][sub] = s.suggested_value
+        structured["revisions"] = revs
+        p.body = json.dumps(structured)
     else:
         structured = json.loads(p.body) if p.body else {}
         structured[s.field] = s.suggested_value

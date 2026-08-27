@@ -1087,3 +1087,72 @@ def test_screenshot_must_be_image_data_url():
     ok = main.BugReportCreate(title="t", description="d",
                               screenshots=["data:image/png;base64,iVBORw0KGgo="])
     assert ok.screenshots == ["data:image/png;base64,iVBORw0KGgo="]
+
+
+# ── Editor suggestions on revision text (amendment text) ──────────────────────
+
+REVS = [
+    {"original": "OLD original text", "proposed": "OLD proposed text", "section": "Article II"},
+    {"type": "addition", "insert_after": "OLD anchor", "proposed": "OLD add text", "section": "Article III"},
+]
+
+
+def test_editor_can_suggest_revision_proposed(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/suggestions",
+                    json={"field": "revisions[0].proposed", "suggested_value": "NEW proposed text", "reason": "clearer"},
+                    headers=auth(EDITOR_ADDR))
+    assert r.status_code == 201, r.text
+    body = r.json()
+    assert body["status"] == "pending"
+    assert body["current_value"] == "OLD proposed text"  # snapshot of the live value
+
+
+def test_author_approves_revision_suggestion_applies_to_right_revision(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    s = client.post("/proposals/1/suggestions",
+                    json={"field": "revisions[0].proposed", "suggested_value": "NEW proposed text"},
+                    headers=auth(EDITOR_ADDR)).json()
+    r = client.post(f"/proposals/1/suggestions/{s['id']}/approve", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    got = client.get("/proposals/1").json()["structured"]["revisions"]
+    assert got[0]["proposed"] == "NEW proposed text"      # applied
+    assert got[0]["original"] == "OLD original text"      # siblings untouched
+    assert got[0]["section"] == "Article II"
+    assert got[1]["proposed"] == "OLD add text"           # other revision untouched
+    assert got[1]["type"] == "addition"
+
+
+def test_suggest_insert_after_only_on_addition(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    # insert_after on a replacement revision (index 0) is rejected
+    bad = client.post("/proposals/1/suggestions",
+                      json={"field": "revisions[0].insert_after", "suggested_value": "x"},
+                      headers=auth(EDITOR_ADDR))
+    assert bad.status_code == 400
+    # original on an addition revision (index 1) is rejected
+    bad2 = client.post("/proposals/1/suggestions",
+                       json={"field": "revisions[1].original", "suggested_value": "x"},
+                       headers=auth(EDITOR_ADDR))
+    assert bad2.status_code == 400
+    # insert_after on the addition revision is accepted
+    ok = client.post("/proposals/1/suggestions",
+                     json={"field": "revisions[1].insert_after", "suggested_value": "NEW anchor"},
+                     headers=auth(EDITOR_ADDR))
+    assert ok.status_code == 201
+
+
+def test_suggest_revision_out_of_range_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/suggestions",
+                    json={"field": "revisions[5].proposed", "suggested_value": "x"},
+                    headers=auth(EDITOR_ADDR))
+    assert r.status_code == 400

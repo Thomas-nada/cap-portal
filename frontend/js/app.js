@@ -388,7 +388,16 @@ window.handleRouting = async () => {
             updateUI();
         } else {
             await openProposal(number, false);
-            if (state.currentProposal?.number === number) enterWizardEdit(state.currentProposal);
+            const p = state.currentProposal;
+            if (p?.number === number && canAuthorEdit(p)) {
+                enterWizardEdit(p);
+            } else {
+                // Only the author of an editable proposal may open the editor.
+                // Everyone else (not logged in, not the author, or the proposal
+                // is locked) lands on the read-only detail view instead.
+                state.view = 'detail';
+                history.replaceState(null, '', `#/detail/${number}`);
+            }
             updateUI();
         }
     } else if (hash.startsWith('#/guides/') || hash.startsWith('#/learn/')) {
@@ -1137,8 +1146,13 @@ window.openSuggestModal = (field) => {
     if (!p || !state.user?.is_editor) return;
 
     const structured = p.structured || {};
-    const current = field === 'title' ? p.title : (structured[field] || '');
-    const label = SUGGESTION_FIELD_LABELS[field] || field;
+    const rm = /^revisions\[(\d+)\]\.(proposed|original|insert_after)$/.exec(field || '');
+    let current;
+    if (field === 'title') current = p.title;
+    else if (rm) { const rev = (structured.revisions || [])[Number(rm[1])] || {}; current = rev[rm[2]] || ''; }
+    else current = structured[field] || '';
+    const subLabels = { proposed: 'Proposed', original: 'Original', insert_after: 'Insert-after' };
+    const label = rm ? `Revision ${Number(rm[1]) + 1} · ${subLabels[rm[2]]}` : (SUGGESTION_FIELD_LABELS[field] || field);
 
     const existing = document.getElementById('suggest-modal-backdrop');
     if (existing) existing.remove();
@@ -1679,9 +1693,21 @@ function enterWizardEdit(p) {
     state.view = 'wizard';
 }
 
+// Client-side gate for the edit view. The server already enforces this on save
+// (PATCH is authenticated + author-only + blocked once ready/done/withdrawn), so
+// this cannot protect data on its own — it exists so the edit UI never opens for
+// someone who could not save it (e.g. anyone opening #/edit/N directly).
+function canAuthorEdit(p) {
+    if (!p || !state.user) return false;
+    if (state.user.stake_address !== p.author_stake_address) return false;
+    const locked = (p.labels || []).some(l => ['ready', 'done', 'withdrawn'].includes(l.name));
+    return !locked;
+}
+
 window.openEdit = (number) => {
     const p = state.proposals.find(p => p.number === number) || state.currentProposal;
     if (!p) return;
+    if (!canAuthorEdit(p)) { window.openProposal(number); return; }  // not the author (or locked) — show read-only detail
     enterWizardEdit(p);
     window.location.hash = `#/edit/${number}`;
     updateUI();
