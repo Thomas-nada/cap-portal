@@ -12,11 +12,18 @@ export function renderWizard(state) {
     };
 
     const editing = state.wizardEditNumber || null;
+    const suggesting = state.wizardSuggestNumber || null;
+    const heading = editing ? `Edit ${wizard.type || 'CAP'} #${editing}`
+        : suggesting ? `Suggest edits to ${wizard.type || 'CAP'} #${suggesting}`
+        : 'New proposal';
+    const subtitle = editing ? 'Edit your proposal through the same guided steps. Saving updates the existing proposal.'
+        : suggesting ? 'Propose a full edited version through the same guided steps. The author approves or refuses your suggestion.'
+        : 'A guided, step-by-step process to create a Constitutional Amendment Proposal';
     return `
  <div class="max-w-5xl mx-auto pb-28 fade-in text-left">
  <header class="mb-12">
- <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">${editing ? `Edit ${wizard.type || 'CAP'} #${editing}` : 'New proposal'}</h1>
- <p class="text-on-surface-variant text-lg font-medium mt-3">${editing ? 'Edit your proposal through the same guided steps. Saving updates the existing proposal.' : 'A guided, step-by-step process to create a Constitutional Amendment Proposal'}</p>
+ <h1 class="text-3xl sm:text-4xl font-black tracking-tighter text-on-surface leading-none">${heading}</h1>
+ <p class="text-on-surface-variant text-lg font-medium mt-3">${subtitle}</p>
         </header>
 
         <!-- Progress -->
@@ -80,8 +87,8 @@ function renderWizardBar(step, wizard, state) {
         rightBtn = `<button onclick="window.wizardSubmit()" ${submitting ? 'disabled' : ''}
  class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed">
             ${submitting
-                ? `<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> ${state.wizardEditNumber ? 'Saving…' : 'Submitting…'}`
-                : `<i data-lucide="send" class="w-4 h-4"></i> ${state.wizardEditNumber ? 'Save changes' : 'Submit Proposal'}`}
+                ? `<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> ${state.wizardEditNumber ? 'Saving…' : state.wizardSuggestNumber ? 'Submitting…' : 'Submitting…'}`
+                : `<i data-lucide="send" class="w-4 h-4"></i> ${state.wizardEditNumber ? 'Save changes' : state.wizardSuggestNumber ? 'Submit for author approval' : 'Submit Proposal'}`}
         </button>`;
     } else if (isSelect) {
         rightBtn = `<button onclick="window.wizardNextStep()" ${hasSel ? '' : 'disabled'}
@@ -182,7 +189,7 @@ const CATEGORIES = [
 function renderStep1(wizard) {
     // Type is fixed once a proposal exists: switching CAP<->CIS would change
     // which fields and labels are valid. In edit mode the buttons are inert.
-    const editing = (typeof window !== 'undefined' && window.state && window.state.wizardEditNumber) || null;
+    const editing = (typeof window !== 'undefined' && window.state && (window.state.wizardEditNumber || window.state.wizardSuggestNumber)) || null;
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
  <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-8">Step 1: Choose type</h2>

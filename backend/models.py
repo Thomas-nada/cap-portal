@@ -253,3 +253,25 @@ class Notification(Base):
     proposal_number = Column(Integer, nullable=True)   # deep-link target
     read = Column(Boolean, nullable=False, default=False)
     created_at = Column(DateTime(timezone=True), default=now)
+
+
+class SuggestedEdit(Base):
+    """A whole-proposal edit an editor proposes for the author to accept or
+    refuse. Unlike a field Suggestion, this carries a full candidate version
+    (title + structured body) produced through the same wizard the author uses,
+    so it can add, remove, or reword revisions. On approval the snapshot replaces
+    the proposal's current content (a new version is recorded); nothing changes
+    until the author approves."""
+    __tablename__ = "suggested_edits"
+
+    id = Column(Integer, primary_key=True, index=True)
+    proposal_number = Column(Integer, ForeignKey("proposals.number"), nullable=False, index=True)
+    title = Column(String, nullable=False)
+    body = Column(Text, nullable=False)          # full JSON structured snapshot
+    note = Column(Text, nullable=True)           # editor's explanation
+    status = Column(String, nullable=False, default="pending")  # pending | approved | rejected
+    editor_stake_address = Column(String, nullable=False)
+    editor_display_name = Column(String, nullable=True)
+    created_at = Column(DateTime(timezone=True), default=now)
+    resolved_at = Column(DateTime(timezone=True), nullable=True)
+    resolved_by = Column(String, nullable=True)

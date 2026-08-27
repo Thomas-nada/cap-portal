@@ -43,7 +43,7 @@ from auth import verify_cip8_signature, derive_stake_addresses, create_token, de
 from database import engine, get_db, Base
 from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
                     User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
-                    ModerationCase, Notification, AlphaAgreement, RevokedToken)
+                    ModerationCase, Notification, AlphaAgreement, RevokedToken, SuggestedEdit)
 
 Base.metadata.create_all(bind=engine)
 
@@ -1962,6 +1962,137 @@ def reject_suggestion(number: int, suggestion_id: int,
     record_audit(db, number, "suggestion_rejected", user, {"field": s.field, "suggestion_id": s.id})
     db.commit()
     return suggestion_to_dict(s)
+
+
+# ── Suggested edits (whole-proposal editor suggestions) ──────────────────────────
+
+def suggested_edit_to_dict(se: SuggestedEdit) -> dict:
+    return {
+        "id": se.id,
+        "proposal_number": se.proposal_number,
+        "title": se.title,
+        "structured": json.loads(se.body) if se.body else None,
+        "note": se.note,
+        "status": se.status,
+        "editor_stake_address": se.editor_stake_address,
+        "editor_display_name": se.editor_display_name,
+        "created_at": to_iso(se.created_at),
+        "resolved_at": to_iso(se.resolved_at),
+        "resolved_by": se.resolved_by,
+    }
+
+
+class SuggestedEditCreate(BaseModel):
+    title: str = Field(max_length=MAX_TITLE)
+    structured: dict
+    note: Optional[str] = Field(default=None, max_length=MAX_REASON)
+
+    @field_validator("structured")
+    @classmethod
+    def _v_structured(cls, v):
+        return _validate_structured(v)
+
+
+@app.get("/proposals/{number}/suggested-edits", tags=["suggestions"], summary="List whole-proposal suggested edits",
+         description="Returns all editor-suggested full edits with their status. **Public.**")
+def list_suggested_edits(number: int, db: Session = Depends(get_db)):
+    return [suggested_edit_to_dict(se) for se in
+            db.query(SuggestedEdit).filter(SuggestedEdit.proposal_number == number)
+            .order_by(SuggestedEdit.created_at.desc()).all()]
+
+
+@app.post("/proposals/{number}/suggested-edits", status_code=201, tags=["suggestions"],
+          summary="Suggest a whole-proposal edit",
+          description="An editor proposes a full edited version (title + structured content) for the "
+                      "author to approve or reject. Nothing changes on the proposal until approved. "
+                      "**Requires editor role.**")
+@limiter.limit("10/minute")
+def create_suggested_edit(request: Request, number: int, req: SuggestedEditCreate,
+                          user: dict = Depends(require_editor), db: Session = Depends(get_db)):
+    if not req.title.strip():
+        raise HTTPException(status_code=400, detail="Title is required")
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if p.author_stake_address == user["sub"]:
+        raise HTTPException(status_code=400, detail="Authors edit their own proposal directly")
+
+    se = SuggestedEdit(
+        proposal_number=number,
+        title=req.title,
+        body=json.dumps(req.structured),
+        note=(req.note or None),
+        editor_stake_address=user["sub"],
+        editor_display_name=user.get("display_name"),
+    )
+    db.add(se)
+    record_audit(db, number, "suggested_edit_created", user, {"suggested_edit_id": None})
+    db.commit()
+    db.refresh(se)
+    return suggested_edit_to_dict(se)
+
+
+@app.post("/proposals/{number}/suggested-edits/{edit_id}/approve", tags=["suggestions"],
+          summary="Approve a suggested edit",
+          description="Applies the editor's full proposed version to the proposal and records a new "
+                      "version. **Only the proposal author.**")
+def approve_suggested_edit(number: int, edit_id: int,
+                           user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if p.author_stake_address != user["sub"]:
+        raise HTTPException(status_code=403, detail="Only the proposal author can approve suggested edits")
+
+    se = db.query(SuggestedEdit).filter(SuggestedEdit.id == edit_id, SuggestedEdit.proposal_number == number).first()
+    if not se:
+        raise HTTPException(status_code=404, detail="Suggested edit not found")
+    if se.status != "pending":
+        raise HTTPException(status_code=400, detail="Suggested edit is already resolved")
+
+    structured = json.loads(se.body) if se.body else {}
+    p.title = se.title
+    p.body = json.dumps(structured)
+    p.updated_at = datetime.now(timezone.utc)
+
+    # Keep the category label in step with the approved content.
+    new_cat = structured.get("category")
+    if new_cat in CATEGORY_LABELS:
+        db.query(Label).filter(Label.proposal_number == number, Label.name.in_(CATEGORY_LABELS)).delete(synchronize_session=False)
+        if not db.query(Label).filter(Label.proposal_number == number, Label.name == new_cat).first():
+            db.add(Label(proposal_number=number, name=new_cat))
+
+    se.status = "approved"
+    se.resolved_at = datetime.now(timezone.utc)
+    se.resolved_by = user["sub"]
+    record_audit(db, number, "suggested_edit_approved", user, {"suggested_edit_id": se.id, "by_editor": se.editor_stake_address})
+    create_version(db, p, user, f"Editor suggested edit applied (by {se.editor_display_name or se.editor_stake_address[:12]})")
+    db.commit()
+    return suggested_edit_to_dict(se)
+
+
+@app.post("/proposals/{number}/suggested-edits/{edit_id}/reject", tags=["suggestions"],
+          summary="Reject a suggested edit", description="**Only the proposal author.**")
+def reject_suggested_edit(number: int, edit_id: int,
+                          user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    if p.author_stake_address != user["sub"]:
+        raise HTTPException(status_code=403, detail="Only the proposal author can reject suggested edits")
+
+    se = db.query(SuggestedEdit).filter(SuggestedEdit.id == edit_id, SuggestedEdit.proposal_number == number).first()
+    if not se:
+        raise HTTPException(status_code=404, detail="Suggested edit not found")
+    if se.status != "pending":
+        raise HTTPException(status_code=400, detail="Suggested edit is already resolved")
+
+    se.status = "rejected"
+    se.resolved_at = datetime.now(timezone.utc)
+    se.resolved_by = user["sub"]
+    record_audit(db, number, "suggested_edit_rejected", user, {"suggested_edit_id": se.id})
+    db.commit()
+    return suggested_edit_to_dict(se)
 
 
 # ── Guides ────────────────────────────────────────────────────────────────────

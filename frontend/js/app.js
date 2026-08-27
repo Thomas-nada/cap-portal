@@ -8,6 +8,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin, resetProposals,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
+         fetchSuggestedEdits, createSuggestedEdit, approveSuggestedEdit, rejectSuggestedEdit,
          fetchVersions, fetchVersion,
          getMe, revokeToken, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
@@ -84,6 +85,10 @@ export const state = {
     wizardEditNumber: null,
     wizardEditOriginal: null,
     wizardEditCategory: null,
+    // Set when the wizard is an editor proposing a whole-proposal edit (a
+    // suggested edit) rather than the author editing directly.
+    wizardSuggestNumber: null,
+    suggestedEdits: [],
     // Edit
     editingProposal: null,
     // Learn
@@ -371,9 +376,10 @@ window.handleRouting = async () => {
         state.view = 'constitution';
         await loadConstitution();
     } else if (hash === '#/new' || hash === '#/wizard') {
-        // Starting a fresh proposal: never inherit a prior edit session.
-        if (state.wizardEditNumber) {
-            state.wizardEditNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null;
+        // Starting a fresh proposal: never inherit a prior edit/suggest session.
+        if (state.wizardEditNumber || state.wizardSuggestNumber) {
+            state.wizardEditNumber = null; state.wizardSuggestNumber = null;
+            state.wizardEditOriginal = null; state.wizardEditCategory = null;
             state.wizardData = {}; state.wizardStep = 1;
         }
         state.view = 'wizard';
@@ -395,6 +401,22 @@ window.handleRouting = async () => {
                 // Only the author of an editable proposal may open the editor.
                 // Everyone else (not logged in, not the author, or the proposal
                 // is locked) lands on the read-only detail view instead.
+                state.view = 'detail';
+                history.replaceState(null, '', `#/detail/${number}`);
+            }
+            updateUI();
+        }
+    } else if (hash.startsWith('#/suggest/')) {
+        // Editor suggesting a whole-proposal edit (reuses the wizard).
+        const number = parseInt(hash.split('/').pop());
+        if (state.wizardSuggestNumber === number && state.view === 'wizard') {
+            updateUI();
+        } else {
+            await openProposal(number, false);
+            const p = state.currentProposal;
+            if (p?.number === number && canEditorSuggest(p)) {
+                enterWizardSuggest(p);
+            } else {
                 state.view = 'detail';
                 history.replaceState(null, '', `#/detail/${number}`);
             }
@@ -743,18 +765,20 @@ window.openProposal = async (number, addToHistory = true) => {
     state.versionHistoryExpanded = false;
     updateUI();
     try {
-        const [proposal, comments, audit, suggestions, versions] = await Promise.all([
+        const [proposal, comments, audit, suggestions, versions, suggestedEdits] = await Promise.all([
             fetchProposal(number),
             fetchComments(number),
             fetchAudit(number),
             fetchSuggestions(number),
             fetchVersions(number),
+            fetchSuggestedEdits(number).catch(() => []),
         ]);
         state.currentProposal = proposal;
         state.comments = comments;
         state.auditEvents = audit;
         state.suggestions = suggestions;
         state.proposalVersions = versions;
+        state.suggestedEdits = suggestedEdits;
         if (addToHistory) window.location.hash = `#/detail/${number}`;
     } catch (e) {
         // The proposal is missing or hidden (under review / removed) for this
@@ -765,6 +789,7 @@ window.openProposal = async (number, addToHistory = true) => {
         state.auditEvents = [];
         state.suggestions = [];
         state.proposalVersions = [];
+        state.suggestedEdits = [];
         state.error = 'That proposal is not available.';
         state.view = 'list';
         history.replaceState(null, '', '#/proposals');
@@ -781,11 +806,12 @@ window.submitWizard = async () => {
     const title = (w.title || '').trim();
     if (!title) { state.error = 'Title is required'; updateUI(); return; }
     const editNumber = state.wizardEditNumber;
+    const suggestNumber = state.wizardSuggestNumber;
     const structured = {
-        // In edit mode, start from the original so any stored keys the wizard
-        // does not model survive untouched; every modelled field is overwritten
-        // below. In create mode this spreads nothing.
-        ...(editNumber ? (state.wizardEditOriginal || {}) : {}),
+        // In edit/suggest mode, start from the original so any stored keys the
+        // wizard does not model survive untouched; every modelled field is
+        // overwritten below. In create mode this spreads nothing.
+        ...((editNumber || suggestNumber) ? (state.wizardEditOriginal || {}) : {}),
         type: w.type || 'CAP',
         category: w.category || '',
         abstract: w.abstract || '',
@@ -803,6 +829,21 @@ window.submitWizard = async () => {
     state.loading = { ...state.loading, submitting: true };
     updateUI();
     try {
+        if (suggestNumber) {
+            // Editor proposing a whole edited version: create a pending suggested
+            // edit for the author to approve or refuse. Nothing on the proposal
+            // changes now.
+            const note = (window.prompt('Add a note for the author (optional):') || '').trim() || null;
+            await createSuggestedEdit(suggestNumber, { title, structured, note });
+            state.wizardData = {};
+            state.wizardStep = 1;
+            state.wizardSuggestNumber = null;
+            state.wizardEditOriginal = null;
+            state.wizardEditCategory = null;
+            state.loading = { ...state.loading, submitting: false };
+            await window.openProposal(suggestNumber);  // back to detail; reloads the new suggested edit
+            return;
+        }
         if (editNumber) {
             const updated = await updateProposal(editNumber, { title, structured });
             // Keep the category label in step with the edited category.
@@ -865,6 +906,7 @@ window.wizardCreateAnother = () => {
     state.wizardData = {};
     state.wizardStep = 1;
     state.wizardEditNumber = null;
+    state.wizardSuggestNumber = null;
     state.wizardEditOriginal = null;
     state.wizardEditCategory = null;
     updateUI();
@@ -1262,6 +1304,48 @@ window.rejectSuggestion = async (id) => {
     } catch (e) {
         alert(e.message);
     }
+};
+
+// ── Suggested edits (whole-proposal) ───────────────────────────────────────────
+
+window.approveSuggestedEdit = async (id) => {
+    const p = state.currentProposal;
+    if (!p) return;
+    try {
+        await approveSuggestedEdit(p.number, id);
+        const [proposal, edits, audit, versions] = await Promise.all([
+            fetchProposal(p.number),
+            fetchSuggestedEdits(p.number).catch(() => []),
+            fetchAudit(p.number),
+            fetchVersions(p.number),
+        ]);
+        state.currentProposal = proposal;
+        state.suggestedEdits = edits;
+        state.auditEvents = audit;
+        state.proposalVersions = versions;
+        // The proposal content changed; drop cached constitution drafts so the
+        // diff regenerates from the new revisions on next view.
+        state.constitutionVersions = [];
+        state.constitutionCurrentVersion = null;
+        updateUI();
+    } catch (e) { state.error = e.message; updateUI(); }
+};
+
+window.rejectSuggestedEdit = async (id) => {
+    const p = state.currentProposal;
+    if (!p) return;
+    try {
+        await rejectSuggestedEdit(p.number, id);
+        state.suggestedEdits = await fetchSuggestedEdits(p.number).catch(() => []);
+        state.auditEvents = await fetchAudit(p.number);
+        updateUI();
+    } catch (e) { state.error = e.message; updateUI(); }
+};
+
+window.previewSuggestedEdit = (id) => {
+    const se = (state.suggestedEdits || []).find(e => e.id === id);
+    if (!se) return;
+    showPreviewOverlay(se.title, se.structured || {}, state.currentProposal?.type || 'CAP');
 };
 
 // ── Editor actions ────────────────────────────────────────────────────────────
@@ -1684,6 +1768,7 @@ function structuredToWizard(p) {
 // Enter the wizard in edit mode for an already-loaded proposal.
 function enterWizardEdit(p) {
     state.wizardEditNumber = p.number;
+    state.wizardSuggestNumber = null;
     state.wizardEditOriginal = p.structured || {};
     state.wizardEditCategory = (p.labels || []).find(l => WIZARD_CATEGORY_IDS.includes(l.name))?.name || null;
     state.wizardData = structuredToWizard(p);
@@ -1692,6 +1777,35 @@ function enterWizardEdit(p) {
     state.wizardError = null;
     state.view = 'wizard';
 }
+
+// Same wizard, but for an editor proposing a whole-proposal edit. The final
+// action creates a pending suggested edit instead of saving; the author then
+// approves or refuses it. Seeded exactly like the author's edit.
+function enterWizardSuggest(p) {
+    state.wizardSuggestNumber = p.number;
+    state.wizardEditNumber = null;
+    state.wizardEditOriginal = p.structured || {};
+    state.wizardEditCategory = null;
+    state.wizardData = structuredToWizard(p);
+    state.wizardStep = 1;
+    state.wizardSubmitted = null;
+    state.wizardError = null;
+    state.view = 'wizard';
+}
+
+// Only editors who are not the author may suggest edits.
+function canEditorSuggest(p) {
+    return !!(p && state.user?.is_editor === true && state.user.stake_address !== p.author_stake_address);
+}
+
+window.openSuggestEdit = (number) => {
+    const p = state.proposals.find(p => p.number === number) || state.currentProposal;
+    if (!p) return;
+    if (!canEditorSuggest(p)) { window.openProposal(number); return; }
+    enterWizardSuggest(p);
+    window.location.hash = `#/suggest/${number}`;
+    updateUI();
+};
 
 // Client-side gate for the edit view. The server already enforces this on save
 // (PATCH is authenticated + author-only + blocked once ready/done/withdrawn), so
@@ -2013,7 +2127,7 @@ window.wizardBack     = () => {
 window.wizardNextStep = () => window.wizardNext();
 window.wizardPrevStep = () => window.wizardBack();
 window.wizardSubmit   = () => window.submitWizard();
-window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; state.wizardEditNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null; updateUI(); };
+window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; state.wizardEditNumber = null; state.wizardSuggestNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null; updateUI(); };
 // Confirmed reset for the "Start Over" button — guards against a misclick
 // discarding a draft the user has spent several steps building.
 window.wizardStartOver = () => {
@@ -2032,9 +2146,9 @@ function wizardHasData() {
 
 // Leave the wizard (logo / Discard). Warns first if there are unsaved edits.
 window.wizardExit = () => {
-    const editNumber = state.wizardEditNumber;
-    const prompt = editNumber
-        ? 'Discard your changes? The proposal will keep its current saved version.'
+    const returnTo = state.wizardEditNumber || state.wizardSuggestNumber;
+    const prompt = returnTo
+        ? 'Discard your changes? The proposal keeps its current saved version.'
         : 'Discard this proposal? Everything you\'ve entered will be lost.';
     if (wizardHasData() && !confirm(prompt)) return;
     state.wizardData = {};
@@ -2042,9 +2156,10 @@ window.wizardExit = () => {
     state.wizardError = null;
     state.wizardSubmitted = null;
     state.wizardEditNumber = null;
+    state.wizardSuggestNumber = null;
     state.wizardEditOriginal = null;
     state.wizardEditCategory = null;
-    if (editNumber) { window.location.hash = `#/detail/${editNumber}`; window.handleRouting(); }
+    if (returnTo) { window.location.hash = `#/detail/${returnTo}`; window.handleRouting(); }
     else window.setView('dashboard');
 };
 

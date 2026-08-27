@@ -9,7 +9,7 @@ function md(text) {
     return window.safeMarkdown(text);
 }
 
-function renderStructuredBody(s, type, canSuggest = false) {
+function renderStructuredBody(s, type) {
  if (!s) return '<p class="text-slate-400">No content.</p>';
     const isCIS = type === 'CIS';
     const sections = [];
@@ -25,21 +25,16 @@ function renderStructuredBody(s, type, canSuggest = false) {
     }
 
     if (s.revisions?.length) {
-        // Editors (who are not the author) get a "Suggest" button per text pane,
-        // which opens the same suggestion flow targeting that revision field.
-        const sg = (i, sub) => canSuggest
-            ? `<button onclick="window.openSuggestModal('revisions[${i}].${sub}')" title="Suggest an edit to this text" class="inline-flex items-center gap-1 text-sm font-black uppercase tracking-widest text-blue-500 hover:text-blue-700 transition-colors"><i data-lucide="git-pull-request" class="w-3 h-3"></i> Suggest</button>`
-            : '';
         const revHtml = s.revisions.map((r, i) => r.type === 'addition' ? `
  <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
  ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest">${r.section}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
  <div class="p-5">
- <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-cyan-500">Insert After</div>${sg(i, 'insert_after')}</div>
+ <div class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
  <div class="text-sm text-slate-600 font-mono leading-relaxed italic">${escapeHtml(r.insert_after || '')}</div>
                     </div>
  <div class="p-5">
- <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-cyan-600">New Text</div>${sg(i, 'proposed')}</div>
+ <div class="text-sm font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
  <div class="text-sm text-slate-900 font-mono leading-relaxed">${escapeHtml(r.proposed || '')}</div>
                     </div>
                 </div>
@@ -48,11 +43,11 @@ function renderStructuredBody(s, type, canSuggest = false) {
  ${r.section ? `<div class="px-5 py-2 bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest">${r.section}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 ">
  <div class="p-5">
- <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-red-400">Original</div>${sg(i, 'original')}</div>
+ <div class="text-sm font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
  <div class="text-sm text-slate-600 font-mono leading-relaxed">${escapeHtml(r.original || '')}</div>
                     </div>
  <div class="p-5">
- <div class="flex items-center justify-between mb-2 gap-2"><div class="text-sm font-black uppercase tracking-widest text-green-500">Proposed</div>${sg(i, 'proposed')}</div>
+ <div class="text-sm font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
  <div class="text-sm text-slate-900 font-mono leading-relaxed">${escapeHtml(r.proposed || '')}</div>
                     </div>
                 </div>
@@ -90,63 +85,56 @@ function labelForSuggestionField(field) {
 }
 
 function renderSuggestions(state, p, isAuthor, isEditor) {
-    const suggestions = state.suggestions || [];
-    const pending = suggestions.filter(s => s.status === 'pending');
-    const resolved = suggestions.filter(s => s.status !== 'pending');
+    const edits = state.suggestedEdits || [];
+    const pending = edits.filter(e => e.status === 'pending');
+    const resolved = edits.filter(e => e.status !== 'pending');
+    const canSuggest = isEditor && !isAuthor;
 
-    if (!isEditor && !isAuthor && !suggestions.length) return '';
+    if (!canSuggest && !isAuthor && !edits.length) return '';
 
-    const pendingCards = pending.map(s => `
+    const pendingCards = pending.map(e => `
  <div class="bg-white/80 rounded-2xl border-2 border-blue-100 p-6 space-y-4">
  <div class="flex items-start justify-between gap-4">
             <div>
- <span class="text-sm font-black uppercase tracking-widest text-blue-500">${escapeHtml(labelForSuggestionField(s.field))}</span>
+ <span class="text-sm font-black uppercase tracking-widest text-blue-500">Full edit suggested</span>
  <p class="text-sm text-slate-500 mt-0.5">
- Suggested by <span class="font-bold text-slate-700 ">${escapeHtml(s.editor_display_name || shortAddress(s.editor_stake_address))}</span>
- <span class="text-slate-400 font-mono">(${shortAddress(s.editor_stake_address)})</span>
+ by <span class="font-bold text-slate-700 ">${escapeHtml(e.editor_display_name || shortAddress(e.editor_stake_address))}</span>
+ <span class="text-slate-400 font-mono">(${shortAddress(e.editor_stake_address)})</span>
                 </p>
             </div>
  <span class="flex-shrink-0 px-2.5 py-1 rounded-full text-sm font-black uppercase tracking-widest bg-amber-100 text-amber-700 ">Pending</span>
         </div>
-        ${s.current_value ? `
-        <div>
- <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Current</p>
- <div class="bg-red-50 border border-red-100 rounded-xl p-3 text-sm text-slate-500 max-h-24 overflow-y-auto font-mono whitespace-pre-wrap line-through opacity-70">${escapeHtml(s.current_value)}</div>
-        </div>` : ''}
-        <div>
- <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Suggested</p>
- <div class="bg-green-50 border border-green-100 rounded-xl p-3 text-sm text-slate-700 max-h-24 overflow-y-auto font-mono whitespace-pre-wrap">${escapeHtml(s.suggested_value)}</div>
-        </div>
- ${s.reason ? `<p class="text-sm text-slate-400 italic">"${escapeHtml(s.reason)}"</p>` : ''}
-        ${isAuthor ? `
- <div class="flex gap-3 pt-2">
-            <button onclick="window.approveSuggestion(${s.id})"
+        ${e.note ? `<p class="text-sm text-slate-500 italic">"${escapeHtml(e.note)}"</p>` : ''}
+ <div class="flex flex-wrap gap-3 pt-1">
+            <button onclick="window.previewSuggestedEdit(${e.id})"
+ class="flex items-center gap-2 px-5 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-black uppercase tracking-widest rounded-xl transition-all">
+ <i data-lucide="eye" class="w-3.5 h-3.5"></i> Preview proposed version
+            </button>
+            ${isAuthor ? `
+            <button onclick="window.approveSuggestedEdit(${e.id})"
  class="flex items-center gap-2 px-5 py-2 bg-green-600 hover:bg-green-700 text-white text-sm font-black uppercase tracking-widest rounded-xl transition-all">
  <i data-lucide="check" class="w-3.5 h-3.5"></i> Approve
             </button>
-            <button onclick="window.rejectSuggestion(${s.id})"
+            <button onclick="window.rejectSuggestedEdit(${e.id})"
  class="flex items-center gap-2 px-5 py-2 bg-slate-100 hover:bg-red-50 text-slate-600 hover:text-red-600 text-sm font-black uppercase tracking-widest rounded-xl transition-all">
  <i data-lucide="x" class="w-3.5 h-3.5"></i> Reject
-            </button>
-        </div>` : ''}
-    </div>`).join('');
-
-    const resolvedCards = resolved.map(s => `
- <div class="rounded-2xl border border-slate-100 p-5 opacity-60 space-y-2">
- <div class="flex items-center justify-between">
- <span class="text-sm font-black uppercase tracking-widest text-slate-400">${escapeHtml(labelForSuggestionField(s.field))}</span>
- <span class="px-2.5 py-1 rounded-full text-sm font-black uppercase tracking-widest ${s.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">${s.status}</span>
+            </button>` : ''}
         </div>
- <p class="text-sm text-slate-400 font-mono whitespace-pre-wrap truncate">${escapeHtml(s.suggested_value)}</p>
     </div>`).join('');
 
-    const suggestButtons = isEditor && !isAuthor ? `
- <div class="flex flex-wrap gap-2 pt-2">
-        ${SUGGERABLE_FIELDS.map(f => `
-        <button onclick="window.openSuggestModal('${f}')"
- class="flex items-center gap-1.5 px-3 py-1.5 rounded-xl border border-blue-200 text-blue-600 text-sm font-black uppercase tracking-widest hover:bg-blue-50 transition-all">
- <i data-lucide="plus" class="w-3 h-3"></i> ${SUGGESTION_LABELS[f]}
-        </button>`).join('')}
+    const resolvedCards = resolved.map(e => `
+ <div class="rounded-2xl border border-slate-100 p-5 opacity-60 flex items-center justify-between gap-3">
+ <span class="text-sm font-black uppercase tracking-widest text-slate-400">Full edit by ${escapeHtml(e.editor_display_name || shortAddress(e.editor_stake_address))}</span>
+ <span class="px-2.5 py-1 rounded-full text-sm font-black uppercase tracking-widest ${e.status === 'approved' ? 'bg-green-100 text-green-700' : 'bg-slate-100 text-slate-500'}">${e.status}</span>
+    </div>`).join('');
+
+    const suggestButtons = canSuggest ? `
+ <div class="px-1">
+        <button onclick="window.openSuggestEdit(${p.number})"
+ class="inline-flex items-center gap-2 px-5 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all">
+ <i data-lucide="edit-3" class="w-4 h-4"></i> Suggest edits
+        </button>
+ <p class="text-sm text-slate-400 mt-2">Open the editor to propose a full edited version for the author to approve or refuse.</p>
     </div>` : '';
 
     return `
@@ -158,13 +146,13 @@ function renderSuggestions(state, p, isAuthor, isEditor) {
                 </h2>
  ${pending.length ? `<span class="text-sm font-black text-amber-600 uppercase tracking-widest">${pending.length} pending</span>` : ''}
             </div>
- <p class="text-sm text-slate-400 mt-2">This section is for any changes suggested by the editors.</p>
+ <p class="text-sm text-slate-400 mt-2">Editors can propose a full edited version here for the author to approve or refuse.</p>
         </div>
         ${suggestButtons}
  ${pending.length ? `<div class="space-y-4">${pendingCards}</div>` : `
  <div class="mx-1 py-10 text-center border-2 border-dashed border-slate-100 rounded-[2rem]">
  <i data-lucide="git-pull-request" class="w-8 h-8 mx-auto mb-3 text-slate-300"></i>
- <p class="text-sm font-bold text-slate-400">The editors have submitted no suggestions.</p>
+ <p class="text-sm font-bold text-slate-400">No suggested edits yet.</p>
         </div>`}
         ${resolved.length ? `
  <details class="px-1">
@@ -305,7 +293,7 @@ export function renderDetail(state) {
  <div class="space-y-16">
                     <!-- Proposal Body -->
  <article class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed">
-                        ${p.structured ? renderStructuredBody(p.structured, p.type, isEditor && !isAuthor) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
+                        ${p.structured ? renderStructuredBody(p.structured, p.type) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
                     </article>
 
                     ${(p.structured?.revisions?.length && p.structured.revisions.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed))) ? `

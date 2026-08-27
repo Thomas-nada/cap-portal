@@ -1156,3 +1156,67 @@ def test_suggest_revision_out_of_range_rejected(client, db):
                     json={"field": "revisions[5].proposed", "suggested_value": "x"},
                     headers=auth(EDITOR_ADDR))
     assert r.status_code == 400
+
+
+# ── Whole-proposal suggested edits (editor wizard suggestions) ────────────────
+
+NEW_STRUCTURED = {
+    "category": "Substantive", "abstract": "NEW abstract", "motivation": "m",
+    "analysis": "a", "impact": "i", "exhibits": "",
+    "revisions": [{"original": "OLD original text", "proposed": "EDITOR proposed", "section": "Article II"}],
+}
+
+
+def _make_suggested_edit(client):
+    return client.post("/proposals/1/suggested-edits",
+                       json={"title": "Editor Title", "structured": NEW_STRUCTURED, "note": "cleaner"},
+                       headers=auth(EDITOR_ADDR))
+
+
+def test_editor_creates_suggested_edit_pending_no_change(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice"); seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = _make_suggested_edit(client)
+    assert r.status_code == 201, r.text
+    assert r.json()["status"] == "pending"
+    # The live proposal is untouched until approval.
+    p = client.get("/proposals/1").json()
+    assert p["title"] == "Test Proposal"
+    assert p["structured"]["abstract"] == "Test abstract"
+
+
+def test_author_approves_suggested_edit_applies_whole_version(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice"); seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    se = _make_suggested_edit(client).json()
+    r = client.post(f"/proposals/1/suggested-edits/{se['id']}/approve", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    p = client.get("/proposals/1").json()
+    assert p["title"] == "Editor Title"
+    assert p["structured"]["abstract"] == "NEW abstract"
+    assert p["structured"]["revisions"][0]["proposed"] == "EDITOR proposed"
+    assert len(p["structured"]["revisions"]) == 1  # editor removed the addition revision
+    assert "Substantive" in [l["name"] for l in p["labels"]]  # category label synced
+
+
+def test_author_rejects_suggested_edit_no_change(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice"); seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    se = _make_suggested_edit(client).json()
+    r = client.post(f"/proposals/1/suggested-edits/{se['id']}/reject", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200 and r.json()["status"] == "rejected"
+    assert client.get("/proposals/1").json()["title"] == "Test Proposal"
+
+
+def test_non_editor_cannot_suggest_edit(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice"); seed_user(db, EDITOR_ADDR, "Bob")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    assert _make_suggested_edit(client).status_code == 403
+
+
+def test_non_author_cannot_approve_suggested_edit(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice"); seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    se = _make_suggested_edit(client).json()
+    r = client.post(f"/proposals/1/suggested-edits/{se['id']}/approve", headers=auth(EDITOR_ADDR))
+    assert r.status_code == 403

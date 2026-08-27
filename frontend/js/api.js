@@ -238,6 +238,24 @@ export async function rejectSuggestion(number, id) {
     return req('POST', `/proposals/${number}/suggestions/${id}/reject`, {}, true);
 }
 
+// ── Suggested edits (whole-proposal editor suggestions) ─────────────────────────
+
+export async function fetchSuggestedEdits(number) {
+    return req('GET', `/proposals/${number}/suggested-edits`);
+}
+
+export async function createSuggestedEdit(number, data) {
+    return req('POST', `/proposals/${number}/suggested-edits`, data, true);
+}
+
+export async function approveSuggestedEdit(number, id) {
+    return req('POST', `/proposals/${number}/suggested-edits/${id}/approve`, {}, true);
+}
+
+export async function rejectSuggestedEdit(number, id) {
+    return req('POST', `/proposals/${number}/suggested-edits/${id}/reject`, {}, true);
+}
+
 // ── Bug Reports ───────────────────────────────────────────────────────────────
 
 export async function submitBugReport(title, description, screenshots = [], environment = null) {
