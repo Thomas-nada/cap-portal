@@ -1503,6 +1503,77 @@ def _match_span(haystack: str, needle: str):
     return None
 
 
+def _base_constitution_content():
+    """The current base constitution text (latest non-draft .md), or None."""
+    if not CONSTITUTION_DIR.exists():
+        return None
+    files = sorted([f for f in CONSTITUTION_DIR.iterdir()
+                    if f.suffix == ".md" and not f.name.startswith("cap-")], reverse=True)
+    return files[0].read_text(encoding="utf-8") if files else None
+
+
+def _apply_revisions(base_content, revisions):
+    """Apply a proposal's revisions to the base constitution, tolerant of
+    whitespace/list-marker differences. Returns (modified_text, applied_count)."""
+    modified = base_content
+    applied = 0
+    for rev in (revisions or []):
+        proposed = (rev.get("proposed") or "").strip()
+        if not proposed:
+            continue
+        if rev.get("type") == "addition":
+            anchor = (rev.get("insert_after") or "").strip()
+            span = _match_span(modified, anchor) if anchor else None
+            if span:
+                end = span[1]
+                modified = modified[:end] + "\n\n" + proposed + modified[end:]
+                applied += 1
+        else:
+            original = (rev.get("original") or "").strip()
+            span = _match_span(modified, original) if original else None
+            if span:
+                start, end = span
+                modified = modified[:start] + proposed + modified[end:]
+                applied += 1
+    return modified, applied
+
+
+def _regenerate_all_drafts():
+    """Regenerate every proposal's derived draft from the CURRENT base
+    constitution. Run at startup so the diff view always compares against a draft
+    built from the current constitution text, even after the base changes between
+    deploys (otherwise a stale draft would render a garbled diff). Best-effort:
+    never blocks startup, and only writes when the content actually changed."""
+    try:
+        base = _base_constitution_content()
+        if not base:
+            return
+        from database import SessionLocal
+        db = SessionLocal()
+        try:
+            for p in db.query(Proposal).all():
+                try:
+                    structured = json.loads(p.body) if p.body else {}
+                except Exception:
+                    continue
+                revisions = structured.get("revisions") or []
+                if not any((r.get("proposed") or "").strip() for r in revisions):
+                    continue
+                modified, _applied = _apply_revisions(base, revisions)
+                filename = f"cap-{p.number}-proposed.md"
+                doc = db.query(ConstitutionDoc).filter(ConstitutionDoc.filename == filename).first()
+                if doc:
+                    if doc.content != modified:
+                        doc.content = modified
+                else:
+                    db.add(ConstitutionDoc(filename=filename, content=modified))
+            db.commit()
+        finally:
+            db.close()
+    except Exception:
+        pass  # never let draft regeneration block startup
+
+
 @app.post("/proposals/{number}/generate-draft-constitution", tags=["constitution"], summary="Generate a draft constitution from a proposal",
           description="**Requires authentication.**")
 def generate_draft_constitution(number: int, user: dict = Depends(require_user),
@@ -1522,36 +1593,12 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
     if not revisions:
         raise HTTPException(status_code=400, detail="Proposal has no revisions")
 
-    # Find the current (latest) constitution file
-    if not CONSTITUTION_DIR.exists():
-        raise HTTPException(status_code=500, detail="Constitution directory missing")
-    files = sorted([f for f in CONSTITUTION_DIR.iterdir() if f.suffix == ".md" and not f.name.startswith("cap-")], reverse=True)
-    if not files:
+    content = _base_constitution_content()
+    if content is None:
         raise HTTPException(status_code=404, detail="No base constitution file found")
 
-    content = files[0].read_text(encoding="utf-8")
-
     # Apply each revision: text substitution, whitespace/list-marker tolerant.
-    modified = content
-    applied = 0
-    for rev in revisions:
-        proposed = rev.get("proposed", "").strip()
-        if not proposed:
-            continue
-        if rev.get("type") == "addition":
-            anchor = rev.get("insert_after", "").strip()
-            span = _match_span(modified, anchor) if anchor else None
-            if span:
-                end = span[1]
-                modified = modified[:end] + "\n\n" + proposed + modified[end:]
-                applied += 1
-        else:
-            original = rev.get("original", "").strip()
-            span = _match_span(modified, original) if original else None
-            if span:
-                start, end = span
-                modified = modified[:start] + proposed + modified[end:]
-                applied += 1
+    modified, applied = _apply_revisions(content, revisions)
 
     filename = f"cap-{number}-proposed.md"
     doc = db.query(ConstitutionDoc).filter(ConstitutionDoc.filename == filename).first()
@@ -2260,6 +2307,11 @@ if _is_production:
     _dev_routes = [r.path for r in app.routes if getattr(r, "path", "").startswith("/dev")]
     if _dev_routes:
         raise RuntimeError(f"Refusing to start in production with dev routes exposed: {_dev_routes}")
+
+
+# Keep every proposal's derived draft in sync with the current base constitution
+# so the diff view stays correct after the constitution text changes.
+_regenerate_all_drafts()
 
 
 if __name__ == '__main__':
