@@ -65,6 +65,146 @@ function escapeHtml(str) {
     return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;').replace(/'/g,'&#39;');
 }
 
+// ── Threaded comments ─────────────────────────────────────────────────────────
+// Renders one comment plus its replies, recursively. `depth` drives indentation;
+// past a few levels we stop indenting (mobile width) but keep the "Replying to"
+// label so who-answered-whom stays clear no matter how deep the thread goes.
+// Total number of comments beneath `id` (replies, their replies, and so on).
+function countDescendants(id, childrenOf) {
+    const kids = childrenOf.get(id) || [];
+    return kids.reduce((n, k) => n + 1 + countDescendants(k.id, childrenOf), 0);
+}
+
+function renderCommentNode(c, ctx, depth) {
+    const { byId, childrenOf, state, isEditor, isAdmin } = ctx;
+    const cName = c.author_display_name || shortAddress(c.author_stake_address);
+    const cAddr = shortAddress(c.author_stake_address);
+    const mod = c.moderation_status || 'visible';
+    const modBadge = mod === 'under_review'
+        ? `<span class="text-sm font-black px-2 py-1 rounded-full bg-amber-500 text-white uppercase tracking-wider flex items-center gap-1"><i data-lucide="eye-off" class="w-2.5 h-2.5"></i> Under review</span>`
+        : mod === 'removed'
+        ? `<span class="text-sm font-black px-2 py-1 rounded-full bg-red-600 text-white uppercase tracking-wider flex items-center gap-1"><i data-lucide="ban" class="w-2.5 h-2.5"></i> Removed</span>`
+        : '';
+    const cardBorder = mod === 'removed' ? 'border-red-200' : mod === 'under_review' ? 'border-amber-200' : 'border-slate-200';
+    const canFlag = (isEditor || isAdmin) && mod === 'visible';
+    const canReply = !!state.user && mod === 'visible';
+    const parent = c.parent_id != null ? byId.get(c.parent_id) : null;
+    const parentName = parent ? (parent.author_display_name || shortAddress(parent.author_stake_address)) : null;
+    const kids = childrenOf.get(c.id) || [];
+    const replying = state.replyingTo === c.id;
+    const replyLoading = state.loading?.[`postReply-${c.id}`];
+    const canIndent = depth < 5;
+    const isCollapsed = !!(state.collapsedComments && state.collapsedComments.has(c.id));
+    const descendants = kids.length ? countDescendants(c.id, childrenOf) : 0;
+
+    // Roots read as bold, self-contained posts (white card, big avatar, boxed as
+    // a whole thread); replies are lighter and smaller so a thread is instantly
+    // distinguishable from a top-level comment at a glance.
+    const isRoot = depth === 0;
+    // Root = a boxed, self-contained thread group (visible slate box, white card);
+    // replies = lighter and smaller, in their own tinted bubble under a blue
+    // connector line, so the nesting reads at a glance even in light mode.
+    const nodeWrap = isRoot
+        ? 'rounded-[2rem] border border-slate-200 bg-slate-50 p-4 sm:p-6 space-y-5 shadow-sm'
+        : 'space-y-5';
+    const avatarWrap = isRoot
+        ? 'w-11 h-11 sm:w-14 sm:h-14 rounded-3xl bg-slate-200'
+        : 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-blue-50 ring-1 ring-blue-200';
+    const avatarIcon = isRoot ? 'w-5 h-5 sm:w-6 sm:h-6 text-slate-500' : 'w-4 h-4 sm:w-5 sm:h-5 text-blue-600';
+    const cardBase = isRoot
+        ? 'bg-white p-5 sm:p-7 rounded-[1.75rem] shadow-sm'
+        : 'bg-[#eef2f8] p-4 sm:p-5 rounded-[1.5rem]';
+    const nameSize = isRoot ? 'text-base' : 'text-sm';
+
+    return `
+ <div class="${nodeWrap}">
+ <div class="flex gap-4 sm:gap-8 group ${mod !== 'visible' ? 'opacity-80' : ''}">
+ <div class="${avatarWrap} flex items-center justify-center flex-shrink-0">
+ <i data-lucide="user" class="${avatarIcon}"></i>
+                                    </div>
+ <div class="flex-grow min-w-0 space-y-4">
+ <div class="flex items-center gap-3 sm:gap-4 flex-wrap">
+ <div class="flex flex-col leading-tight">
+ <span class="${nameSize} font-black text-slate-900 ">${escapeHtml(cName)}</span>
+ <span class="text-sm text-slate-400 font-mono">(${cAddr})</span>
+                                            </div>
+                                            ${parentName ? `<span class="text-sm font-bold text-blue-600 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-3 h-3"></i> Replying to ${escapeHtml(parentName)}</span>` : ''}
+ <span class="text-sm font-bold text-slate-400 uppercase tracking-tighter">${new Date(c.created_at).toLocaleString()}</span>
+                                            ${modBadge}
+ <div class="ml-auto flex items-center gap-1">
+                                                ${canReply ? `
+                                                <button onclick="window.replyToComment(${c.id})" title="Reply to this comment"
+ class="text-slate-400 hover:text-blue-600 transition-all p-1.5 rounded-lg hover:bg-blue-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide">
+ <i data-lucide="reply" class="w-3.5 h-3.5"></i> Reply
+                                                </button>
+                                                ` : ''}
+                                                ${canFlag ? `
+                                                <button onclick="window.flagCommentForRemoval(${c.id})" title="Flag this comment for removal"
+ class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide opacity-0 group-hover:opacity-100">
+ <i data-lucide="flag" class="w-3.5 h-3.5"></i> Flag
+                                                </button>
+                                                ` : ''}
+                                            </div>
+                                        </div>
+ <div class="${cardBase} border ${cardBorder} text-sm leading-relaxed prose max-w-none">
+                                            ${window.safeMarkdown(c.body)}
+                                        </div>
+                                        ${replying ? `
+ <form onsubmit="event.preventDefault(); window.postComment(this)" data-parent-id="${c.id}" class="space-y-3 pt-1">
+                                            <textarea id="reply-input-${c.id}" name="comment" required placeholder="Reply to ${escapeHtml(cName)}…" maxlength="20000"
+ class="w-full bg-white/80 p-5 rounded-2xl min-h-[110px] font-medium outline-none border-2 border-slate-100 focus:border-blue-600 transition-all text-slate-900 shadow-sm resize-none"></textarea>
+ <div class="flex justify-end gap-3">
+                                                <button type="button" onclick="window.cancelReply()"
+ class="px-6 py-2.5 rounded-xl text-sm font-black uppercase tracking-wide text-slate-500 hover:bg-slate-100 transition-all">Cancel</button>
+                                                <button type="submit" ${replyLoading ? 'disabled' : ''}
+ class="bg-slate-950 text-white px-8 py-2.5 rounded-xl font-black uppercase text-sm tracking-widest hover:opacity-90 active:scale-95 transition-all shadow-lg disabled:opacity-50">
+                                                    ${replyLoading ? 'Posting…' : 'Reply'}
+                                                </button>
+                                            </div>
+                                        </form>
+                                        ` : ''}
+                                        ${kids.length ? `
+                                        <button onclick="window.toggleThread(${c.id})"
+ class="inline-flex items-center gap-1.5 text-sm font-black uppercase tracking-wide text-blue-600 hover:text-blue-800 transition-all">
+ <i data-lucide="${isCollapsed ? 'chevron-right' : 'chevron-down'}" class="w-4 h-4"></i>
+                                            ${isCollapsed
+                                                ? `Show ${descendants} ${descendants === 1 ? 'reply' : 'replies'}`
+                                                : `Hide ${descendants === 1 ? 'reply' : 'replies'}`}
+                                        </button>
+                                        ` : ''}
+                                    </div>
+                                </div>
+                                ${kids.length && !isCollapsed ? `
+ <div class="${canIndent ? 'ml-6 sm:ml-14 pl-4 sm:pl-6' : 'pl-4'} border-l-2 border-blue-200 space-y-6">
+                                    ${kids.map(k => renderCommentNode(k, ctx, depth + 1)).join('')}
+                                </div>` : ''}
+                            </div>`;
+}
+
+function renderCommentThread(state, isEditor, isAdmin) {
+    const comments = state.comments || [];
+    if (!comments.length) return `
+ <div class="p-20 text-center border-2 border-dashed border-slate-100 rounded-[3rem]">
+ <p class="text-slate-400 font-bold uppercase tracking-widest text-sm">No comments yet.</p>
+                                </div>`;
+    const byId = new Map(comments.map(c => [c.id, c]));
+    const childrenOf = new Map();
+    const roots = [];
+    for (const c of comments) {
+        const pid = c.parent_id;
+        // A reply nests under its parent; a top-level comment (or an orphan whose
+        // parent is hidden from this viewer) renders at the root.
+        if (pid != null && byId.has(pid)) {
+            if (!childrenOf.has(pid)) childrenOf.set(pid, []);
+            childrenOf.get(pid).push(c);
+        } else {
+            roots.push(c);
+        }
+    }
+    const ctx = { byId, childrenOf, state, isEditor, isAdmin };
+    return roots.map(c => renderCommentNode(c, ctx, 0)).join('');
+}
+
 const SUGGESTION_LABELS = {
     title: 'Title', abstract: 'Summary', motivation: 'Why is this change needed?',
     analysis: 'Analysis & Test', impact: 'Impact', exhibits: 'Links & Files',
@@ -266,6 +406,12 @@ export function renderDetail(state) {
  <span class="text-sm text-on-surface-variant font-mono">(${authorAddr})</span>
                         </div>
                     </div>
+                    ${(p.co_authors && p.co_authors.length) ? `
+ <div class="w-px h-8 bg-white/15 "></div>
+ <div class="flex flex-col">
+ <span class="text-sm font-black uppercase text-on-surface-variant tracking-widest leading-none mb-1">Co-author${p.co_authors.length > 1 ? 's' : ''}</span>
+ <span class="text-sm font-bold text-on-surface ">${p.co_authors.map(ca => escapeHtml(ca.display_name || shortAddress(ca.stake_address))).join(', ')}</span>
+                    </div>` : ''}
  <div class="w-px h-8 bg-white/15 "></div>
  <div class="flex flex-col">
  <span class="text-sm font-black uppercase text-on-surface-variant tracking-widest leading-none mb-1">Submitted</span>
@@ -326,49 +472,7 @@ export function renderDetail(state) {
                         </div>
 
  <div class="space-y-8">
-                            ${(state.comments||[]).length === 0 ? `
- <div class="p-20 text-center border-2 border-dashed border-slate-100 rounded-[3rem]">
- <p class="text-slate-400 font-bold uppercase tracking-widest text-sm">No comments yet.</p>
-                                </div>
-                            ` : (state.comments||[]).map(c => {
-                                const cName = c.author_display_name || shortAddress(c.author_stake_address);
-                                const cAddr = shortAddress(c.author_stake_address);
-                                const mod = c.moderation_status || 'visible';
-                                const modBadge = mod === 'under_review'
-                                    ? `<span class="text-sm font-black px-2 py-1 rounded-full bg-amber-500 text-white uppercase tracking-wider flex items-center gap-1"><i data-lucide="eye-off" class="w-2.5 h-2.5"></i> Under review</span>`
-                                    : mod === 'removed'
-                                    ? `<span class="text-sm font-black px-2 py-1 rounded-full bg-red-600 text-white uppercase tracking-wider flex items-center gap-1"><i data-lucide="ban" class="w-2.5 h-2.5"></i> Removed</span>`
-                                    : '';
-                                const cardBorder = mod === 'removed' ? 'border-red-200' : mod === 'under_review' ? 'border-amber-200' : 'border-slate-100';
-                                const canFlag = (isEditor || isAdmin) && mod === 'visible';
-                                return `
- <div class="flex gap-8 group ${mod !== 'visible' ? 'opacity-80' : ''}">
- <div class="w-14 h-14 rounded-3xl bg-slate-100 flex items-center justify-center flex-shrink-0">
- <i data-lucide="user" class="w-6 h-6 text-slate-400"></i>
-                                    </div>
- <div class="flex-grow space-y-4">
- <div class="flex items-center gap-4 flex-wrap">
- <div class="flex flex-col leading-tight">
- <span class="text-sm font-black text-slate-900 ">${escapeHtml(cName)}</span>
- <span class="text-sm text-slate-400 font-mono">(${cAddr})</span>
-                                            </div>
- <span class="text-sm font-bold text-slate-400 uppercase tracking-tighter">${new Date(c.created_at).toLocaleString()}</span>
-                                            ${modBadge}
- <div class="ml-auto flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-all">
-                                                ${canFlag ? `
-                                                <button onclick="window.flagCommentForRemoval(${c.id})" title="Flag this comment for removal"
- class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide">
- <i data-lucide="flag" class="w-3.5 h-3.5"></i> Flag
-                                                </button>
-                                                ` : ''}
-                                            </div>
-                                        </div>
- <div class="bg-white/80 p-8 rounded-[2.5rem] border ${cardBorder} shadow-sm text-sm leading-relaxed prose max-w-none">
-                                            ${window.safeMarkdown(c.body)}
-                                        </div>
-                                    </div>
-                                </div>`;
-                            }).join('')}
+                            ${renderCommentThread(state, isEditor, isAdmin)}
 
                             ${!state.user ? `
  <div class="pt-8 pl-0 sm:pl-20">

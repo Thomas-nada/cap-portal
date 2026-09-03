@@ -52,6 +52,9 @@ class Comment(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     proposal_number = Column(Integer, ForeignKey("proposals.number"), nullable=False)
+    # Threading: NULL for a top-level comment, else the id of the comment this
+    # one replies to. Existing comments predate this and stay top-level (NULL).
+    parent_id = Column(Integer, ForeignKey("comments.id"), nullable=True)
     body = Column(Text, nullable=False)
     author_stake_address = Column(String, nullable=False)
     author_display_name = Column(String, nullable=True)
@@ -275,3 +278,23 @@ class SuggestedEdit(Base):
     created_at = Column(DateTime(timezone=True), default=now)
     resolved_at = Column(DateTime(timezone=True), nullable=True)
     resolved_by = Column(String, nullable=True)
+
+
+class Draft(Base):
+    """A private, in-progress proposal an author is still writing in the wizard.
+    Wholly separate from Proposal: it has no number, is never public, and is
+    visible only to the wallet that created it. `data` is an opaque JSON snapshot
+    of the author's wizard state, restored verbatim when they continue. Submitting
+    creates a real Proposal and the draft is deleted; the author may also discard
+    it. Nothing here is referenced by any proposal query, so drafts cannot affect
+    live proposals in any way."""
+    __tablename__ = "drafts"
+
+    id = Column(Integer, primary_key=True, index=True)
+    author_stake_address = Column(String, nullable=False, index=True)
+    author_display_name = Column(String, nullable=True)
+    title = Column(String, nullable=True)       # author's current title, for the list
+    doc_type = Column(String, nullable=True)    # CAP | CIS, for the list
+    data = Column(Text, nullable=False)         # JSON snapshot of the wizard state
+    created_at = Column(DateTime(timezone=True), default=now)
+    updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)

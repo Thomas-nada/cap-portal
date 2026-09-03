@@ -43,7 +43,8 @@ from auth import verify_cip8_signature, derive_stake_addresses, create_token, de
 from database import engine, get_db, Base
 from models import (Proposal, Label, Comment, AuditEvent, Editor, Admin, AuthChallenge,
                     User, Suggestion, ProposalVersion, BugReport, Guide, ConstitutionDoc,
-                    ModerationCase, Notification, AlphaAgreement, RevokedToken, SuggestedEdit)
+                    ModerationCase, Notification, AlphaAgreement, RevokedToken, SuggestedEdit,
+                    Draft)
 
 Base.metadata.create_all(bind=engine)
 
@@ -69,6 +70,8 @@ with engine.connect() as _conn:
         "ALTER TABLE proposals ADD COLUMN withdrawal_requested_by_name TEXT",
         "ALTER TABLE proposals ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'visible'",
         "ALTER TABLE comments ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'visible'",
+        # Threaded replies: NULL parent_id = top-level comment (all pre-existing ones).
+        "ALTER TABLE comments ADD COLUMN parent_id INTEGER REFERENCES comments(id)",
         # Drop the superseded per-comment flag columns (replaced by the
         # moderation_status + moderation_cases workflow). Their leftover NOT NULL
         # constraint would otherwise break new comment inserts on existing DBs.
@@ -181,6 +184,7 @@ All other endpoints are unrestricted.
     openapi_tags=[
         {"name": "auth",          "description": "Wallet authentication and user profile"},
         {"name": "proposals",     "description": "Create and manage governance proposals"},
+        {"name": "drafts",        "description": "Private, per-author saved proposal drafts"},
         {"name": "comments",      "description": "Discussion threads on proposals"},
         {"name": "labels",        "description": "Lifecycle labels applied by editors"},
         {"name": "suggestions",   "description": "Editor-suggested edits, approved or rejected by the author"},
@@ -237,6 +241,13 @@ MAX_BUG_DESC = 5_000
 MAX_SCREENSHOT = 5_000_000    # base64 data URL (~3.7 MB image)
 MAX_SCREENSHOTS = 5           # per bug report
 MAX_NAME = 100
+MAX_CO_AUTHORS = 20           # co-authors per proposal
+MAX_DRAFTS_PER_AUTHOR = 25    # saved wizard drafts per wallet
+MAX_DRAFT_TOTAL = 200_000     # whole draft blob (wizard state is larger than the
+                              # final structured body: it also holds selections, etc.)
+
+# Mainnet stake address (bech32, hrp "stake"). Used to validate co-author ids.
+_STAKE_ADDR_RE = re.compile(r"^stake1[0-9a-z]{50,70}$")
 
 _PROPOSAL_TEXT_FIELDS = ("abstract", "motivation", "analysis", "impact", "exhibits")
 
@@ -276,6 +287,18 @@ def _validate_structured(v):
             for rk, rv in rev.items():
                 if isinstance(rv, str) and len(rv) > MAX_LONG_TEXT:
                     raise ValueError(f"Revision #{i + 1} ('{rk}') is too long (max {MAX_LONG_TEXT:,} characters)")
+    # Co-authors are identified by mainnet stake address. This runs only on
+    # create/edit, so existing proposals (all with empty co_authors) are never
+    # re-validated and cannot be broken by it.
+    coa = v.get("co_authors")
+    if coa is not None:
+        if not isinstance(coa, list):
+            raise ValueError("co_authors must be a list")
+        if len(coa) > MAX_CO_AUTHORS:
+            raise ValueError(f"Too many co-authors (max {MAX_CO_AUTHORS})")
+        for a in coa:
+            if not isinstance(a, str) or not _STAKE_ADDR_RE.match(a):
+                raise ValueError("Each co-author must be a valid Cardano mainnet stake address (stake1...)")
     return v
 
 
@@ -475,6 +498,7 @@ def comment_to_dict(c: Comment) -> dict:
     return {
         "id": c.id,
         "proposal_number": c.proposal_number,
+        "parent_id": c.parent_id,
         "body": c.body,
         "author_stake_address": c.author_stake_address,
         "author_display_name": c.author_display_name,
@@ -835,7 +859,22 @@ def get_proposal(number: int, authorization: Optional[str] = Header(None), db: S
         raise HTTPException(status_code=404, detail="Proposal not found")
     if p.moderation_status != "visible" and not _viewer_is_admin(authorization, db):
         raise HTTPException(status_code=404, detail="Proposal not found")
-    return proposal_to_dict(p)
+    d = proposal_to_dict(p)
+    # Resolve co-author stake addresses to display names (when the address has a
+    # registered profile) for the detail view. structured.co_authors keeps the
+    # raw addresses, which is what the author edits.
+    addrs = (d.get("structured") or {}).get("co_authors") or []
+    if not isinstance(addrs, list):
+        addrs = []
+    resolved, seen = [], set()
+    for a in addrs:
+        if not isinstance(a, str) or not a.strip() or a in seen:
+            continue
+        seen.add(a)
+        u = db.query(User).filter(User.stake_address == a).first()
+        resolved.append({"stake_address": a, "display_name": (u.display_name if u else None)})
+    d["co_authors"] = resolved
+    return d
 
 
 class ProposalCreate(BaseModel):
@@ -1112,6 +1151,143 @@ def cancel_withdrawal(number: int, user: dict = Depends(require_user),
     return proposal_to_dict(p)
 
 
+# ── Drafts (private, per-author wizard saves) ───────────────────────────────────
+# A draft is a wholly separate, author-private record: it has no proposal number,
+# never appears in any public list, and is only ever read/written by its owning
+# wallet. No proposal query references it, so drafts cannot affect live proposals.
+
+def _validate_draft_data(v):
+    """A draft body is an opaque snapshot of wizard state. We guard only its type
+    and total size — content is intentionally NOT validated, since a draft may be
+    incomplete. Full validation still runs when the author submits the proposal."""
+    if not isinstance(v, dict):
+        raise ValueError("Draft data must be an object")
+    if len(json.dumps(v)) > MAX_DRAFT_TOTAL:
+        raise ValueError(f"Draft is too large (max {MAX_DRAFT_TOTAL:,} characters)")
+    return v
+
+
+def _norm_doc_type(t):
+    return t if t in ("CAP", "CIS") else None
+
+
+def draft_summary(d: Draft) -> dict:
+    return {
+        "id": d.id,
+        "title": d.title,
+        "type": d.doc_type,
+        "created_at": to_iso(d.created_at),
+        "updated_at": to_iso(d.updated_at),
+    }
+
+
+def draft_to_dict(d: Draft) -> dict:
+    out = draft_summary(d)
+    try:
+        out["data"] = json.loads(d.data) if d.data else {}
+    except (ValueError, TypeError):
+        out["data"] = {}
+    return out
+
+
+class DraftCreate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=MAX_TITLE)
+    type: Optional[str] = Field(default=None, max_length=20)
+    data: dict
+
+    @field_validator("data")
+    @classmethod
+    def _v_data(cls, v):
+        return _validate_draft_data(v)
+
+
+class DraftUpdate(BaseModel):
+    title: Optional[str] = Field(default=None, max_length=MAX_TITLE)
+    type: Optional[str] = Field(default=None, max_length=20)
+    data: Optional[dict] = None
+
+    @field_validator("data")
+    @classmethod
+    def _v_data(cls, v):
+        return v if v is None else _validate_draft_data(v)
+
+
+def _own_draft_or_404(draft_id: int, user: dict, db: Session) -> Draft:
+    d = db.query(Draft).filter(Draft.id == draft_id).first()
+    # Return 404 (not 403) whether the draft is missing or belongs to someone
+    # else, so a draft's existence never leaks to a non-owner.
+    if not d or d.author_stake_address != user["sub"]:
+        raise HTTPException(status_code=404, detail="Draft not found")
+    return d
+
+
+@app.get("/drafts", tags=["drafts"], summary="List your saved drafts",
+         description="Returns a summary (no content) of the authenticated author's own drafts, newest first. **Requires authentication.**")
+def list_drafts(user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    rows = (db.query(Draft)
+              .filter(Draft.author_stake_address == user["sub"])
+              .order_by(Draft.updated_at.desc())
+              .all())
+    return [draft_summary(d) for d in rows]
+
+
+@app.post("/drafts", status_code=201, tags=["drafts"], summary="Save a new draft",
+          description="Creates a private draft owned by the authenticated wallet. **Requires authentication.**")
+@limiter.limit("60/minute")
+def create_draft(request: Request, req: DraftCreate, user: dict = Depends(require_user),
+                 db: Session = Depends(get_db)):
+    count = db.query(Draft).filter(Draft.author_stake_address == user["sub"]).count()
+    if count >= MAX_DRAFTS_PER_AUTHOR:
+        raise HTTPException(status_code=400,
+                            detail=f"You can keep at most {MAX_DRAFTS_PER_AUTHOR} drafts. Delete one to save another.")
+    d = Draft(
+        author_stake_address=user["sub"],
+        author_display_name=user.get("display_name"),
+        title=(req.title or None),
+        doc_type=_norm_doc_type(req.type),
+        data=json.dumps(req.data),
+    )
+    db.add(d)
+    db.commit()
+    db.refresh(d)
+    return draft_to_dict(d)
+
+
+@app.get("/drafts/{draft_id}", tags=["drafts"], summary="Load one of your drafts",
+         description="Returns a full draft including its saved wizard state. Owner only. **Requires authentication.**")
+def get_draft(draft_id: int, user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    return draft_to_dict(_own_draft_or_404(draft_id, user, db))
+
+
+@app.patch("/drafts/{draft_id}", tags=["drafts"], summary="Update a draft",
+           description="Saves changes to one of your drafts (used by Save draft and autosave). Owner only. **Requires authentication.**")
+@limiter.limit("120/minute")
+def update_draft(request: Request, draft_id: int, req: DraftUpdate, user: dict = Depends(require_user),
+                 db: Session = Depends(get_db)):
+    d = _own_draft_or_404(draft_id, user, db)
+    fields = req.model_fields_set
+    # Only touch a field the client actually sent, so a partial autosave can't
+    # accidentally wipe the title or type.
+    if "data" in fields and req.data is not None:
+        d.data = json.dumps(req.data)
+    if "title" in fields:
+        d.title = (req.title or None)
+    if "type" in fields:
+        d.doc_type = _norm_doc_type(req.type)
+    db.commit()
+    db.refresh(d)
+    return draft_to_dict(d)
+
+
+@app.delete("/drafts/{draft_id}", status_code=204, tags=["drafts"], summary="Discard a draft",
+            description="Permanently deletes one of your drafts. Owner only. **Requires authentication.**")
+def delete_draft(draft_id: int, user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    d = _own_draft_or_404(draft_id, user, db)
+    db.delete(d)
+    db.commit()
+    return None
+
+
 # ── Comments ───────────────────────────────────────────────────────────────────
 
 @app.get("/proposals/{number}/comments", tags=["comments"], summary="List comments on a proposal",
@@ -1127,6 +1303,8 @@ def list_comments(number: int, authorization: Optional[str] = Header(None), db: 
 
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=MAX_LONG_TEXT)
+    # Optional: id of the comment being replied to. Ignored by the edit endpoint.
+    parent_id: Optional[int] = None
 
 
 @app.post("/proposals/{number}/comments", status_code=201, tags=["comments"], summary="Post a comment",
@@ -1142,8 +1320,17 @@ def create_comment(request: Request, number: int, req: CommentCreate, user: dict
     if p.moderation_status != "visible" and not is_admin(user["sub"], db):
         raise HTTPException(status_code=404, detail="Proposal not found")
 
+    # A reply must point at an existing comment on THIS proposal. We store the
+    # real parent id at any depth; the frontend caps how deeply it visually indents.
+    parent_id = req.parent_id
+    if parent_id is not None:
+        parent = db.query(Comment).filter(Comment.id == parent_id).first()
+        if not parent or parent.proposal_number != number:
+            raise HTTPException(status_code=400, detail="Reply target not found on this proposal")
+
     c = Comment(
         proposal_number=number,
+        parent_id=parent_id,
         body=req.body,
         author_stake_address=user["sub"],
         author_display_name=user.get("display_name"),

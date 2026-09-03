@@ -1,6 +1,9 @@
 import { LIFECYCLE, getStage } from '../lifecycle.js';
 import { renderBoardColumns } from './kanban.js';
 
+// Human-friendly "last saved" time for a draft row.
+const draftWhen = (iso) => { try { return new Date(iso).toLocaleString(); } catch { return ''; } };
+
 const STAGE_COLOR = {
     consultation: 'purple', ready: 'green', done: 'emerald', withdrawn: 'red',
 };
@@ -76,6 +79,12 @@ export function renderRegistry(state) {
  class="flex-shrink-0 inline-flex items-center gap-2 px-5 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
  <i data-lucide="plus" class="w-4 h-4"></i> New Proposal
                     </button>` : ''}
+                    ${state.user && (state.drafts || []).length ? `<button onclick="window.toggleDraftsPanel()" title="Your saved drafts"
+ class="flex-shrink-0 inline-flex items-center gap-2 px-4 py-2 rounded-xl border border-slate-200 bg-white/80 text-slate-600 hover:text-slate-900 hover:border-slate-300 text-sm font-bold transition-colors">
+ <i data-lucide="folder-open" class="w-4 h-4"></i> Drafts
+ <span class="inline-flex items-center justify-center min-w-[1.25rem] h-5 px-1.5 rounded-full bg-blue-600 text-white text-sm font-black">${state.drafts.length}</span>
+ <i data-lucide="chevron-${state.draftsPanelOpen ? 'up' : 'down'}" class="w-3.5 h-3.5 opacity-60"></i>
+                    </button>` : ''}
                 </div>
             </div>
  <div class="flex flex-wrap gap-2 items-center">
@@ -88,6 +97,32 @@ export function renderRegistry(state) {
                 ).join('')}
             </div>
         </div>
+
+        ${state.user && state.draftsPanelOpen && (state.drafts || []).length ? `
+ <div class="bg-white/80 rounded-3xl border border-slate-200 shadow-sm p-5 sm:p-6">
+ <div class="flex items-center gap-2 mb-1">
+ <i data-lucide="folder-open" class="w-4 h-4 text-blue-600"></i>
+ <h2 class="text-sm font-black uppercase tracking-widest text-slate-500">Your saved drafts</h2>
+            </div>
+ <p class="text-sm text-slate-400 font-medium mb-4">Private to you. Continue where you left off, or discard.</p>
+ <div class="space-y-2">
+                ${(state.drafts || []).map(d => `
+ <div class="flex items-center gap-3 p-3 rounded-2xl border border-slate-200 hover:border-blue-300 transition-all">
+ <div class="flex-1 min-w-0">
+ <div class="font-bold text-slate-900 truncate">${escapeHtml(d.title || 'Untitled draft')}</div>
+ <div class="text-sm text-slate-400 font-medium">${escapeHtml(d.type || 'CAP')} · saved ${escapeHtml(draftWhen(d.updated_at))}</div>
+                    </div>
+                    <button onclick="window.continueDraft(${d.id})"
+ class="inline-flex items-center gap-2 px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all flex-shrink-0">
+ <i data-lucide="arrow-right" class="w-4 h-4"></i> <span class="hidden sm:inline">Continue</span>
+                    </button>
+                    <button onclick="window.deleteDraft(${d.id})" title="Delete draft"
+ class="text-slate-300 hover:text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all flex-shrink-0">
+ <i data-lucide="trash-2" class="w-4 h-4"></i>
+                    </button>
+                </div>`).join('')}
+            </div>
+        </div>` : ''}
 
         <!-- Count, then the list/board view toggle below it -->
  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-3">

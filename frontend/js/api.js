@@ -145,12 +145,36 @@ export async function fetchComments(number) {
     return req('GET', `/proposals/${number}/comments`);
 }
 
-export async function createComment(number, body) {
-    return req('POST', `/proposals/${number}/comments`, { body }, true);
+export async function createComment(number, body, parentId = null) {
+    const payload = { body };
+    if (parentId != null) payload.parent_id = parentId;
+    return req('POST', `/proposals/${number}/comments`, payload, true);
 }
 
 export async function updateComment(id, body) {
     return req('PATCH', `/comments/${id}`, { body }, true);
+}
+
+// ── Drafts (private, per-author) ────────────────────────────────────────────────
+
+export async function fetchDrafts() {
+    return req('GET', '/drafts', null, true);
+}
+
+export async function fetchDraft(id) {
+    return req('GET', `/drafts/${id}`, null, true);
+}
+
+export async function createDraft(payload) {
+    return req('POST', '/drafts', payload, true);
+}
+
+export async function updateDraft(id, payload) {
+    return req('PATCH', `/drafts/${id}`, payload, true);
+}
+
+export async function deleteDraft(id) {
+    return req('DELETE', `/drafts/${id}`, null, true);
 }
 
 // ── Audit ─────────────────────────────────────────────────────────────────────

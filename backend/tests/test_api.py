@@ -476,6 +476,64 @@ def test_comment_requires_auth(client, db):
     assert r.status_code == 401
 
 
+def test_comment_defaults_to_top_level(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/comments", json={"body": "Top-level"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 201
+    assert r.json()["parent_id"] is None
+
+
+def test_reply_records_parent(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    parent = client.post("/proposals/1/comments", json={"body": "Parent"},
+                         headers=auth(AUTHOR_ADDR, "Alice")).json()
+    reply = client.post("/proposals/1/comments",
+                        json={"body": "Reply", "parent_id": parent["id"]},
+                        headers=auth(AUTHOR_ADDR, "Alice"))
+    assert reply.status_code == 201
+    assert reply.json()["parent_id"] == parent["id"]
+    # Both appear in the flat list; the frontend nests them by parent_id.
+    listed = client.get("/proposals/1/comments").json()
+    assert {c["id"]: c["parent_id"] for c in listed} == {parent["id"]: None, reply.json()["id"]: parent["id"]}
+
+
+def test_reply_to_nonexistent_parent_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/comments", json={"body": "Reply", "parent_id": 99999},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+
+
+def test_reply_to_parent_on_other_proposal_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="One"), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals", json=proposal_body(title="Two"), headers=auth(AUTHOR_ADDR, "Alice"))
+    parent = client.post("/proposals/1/comments", json={"body": "On one"},
+                         headers=auth(AUTHOR_ADDR, "Alice")).json()
+    # Try to reply on proposal 2 pointing at a comment that lives on proposal 1.
+    r = client.post("/proposals/2/comments", json={"body": "Wrong thread", "parent_id": parent["id"]},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+
+
+def test_editing_comment_keeps_parent(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    parent = client.post("/proposals/1/comments", json={"body": "Parent"},
+                         headers=auth(AUTHOR_ADDR, "Alice")).json()
+    reply = client.post("/proposals/1/comments", json={"body": "Reply", "parent_id": parent["id"]},
+                        headers=auth(AUTHOR_ADDR, "Alice")).json()
+    # Edit endpoint shares the schema but must not re-parent the comment.
+    edited = client.patch(f"/comments/{reply['id']}",
+                          json={"body": "Reply edited", "parent_id": None},
+                          headers=auth(AUTHOR_ADDR, "Alice"))
+    assert edited.status_code == 200
+    assert edited.json()["parent_id"] == parent["id"]
+
+
 # ── Suggestions ───────────────────────────────────────────────────────────────
 
 def test_editor_can_suggest(client, db):
@@ -1220,3 +1278,144 @@ def test_non_author_cannot_approve_suggested_edit(client, db):
     se = _make_suggested_edit(client).json()
     r = client.post(f"/proposals/1/suggested-edits/{se['id']}/approve", headers=auth(EDITOR_ADDR))
     assert r.status_code == 403
+
+
+# ── Co-authors (identified by stake address) ─────────────────────────────────
+
+CO_AUTHOR_A = "stake1u" + "q" * 52   # valid stake-address format
+CO_AUTHOR_B = "stake1u" + "p" * 52
+
+
+def test_author_can_save_co_authors(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    body = proposal_body()["structured"]
+    body["co_authors"] = [CO_AUTHOR_A, CO_AUTHOR_B]
+    r = client.patch("/proposals/1", json={"structured": body}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200, r.text
+    got = client.get("/proposals/1").json()
+    assert got["structured"]["co_authors"] == [CO_AUTHOR_A, CO_AUTHOR_B]
+
+
+def test_invalid_co_author_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    body = proposal_body()["structured"]
+    body["co_authors"] = ["not-a-stake-address"]
+    r = client.patch("/proposals/1", json={"structured": body}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code in (400, 422)   # rejected as invalid
+    # the proposal keeps its (empty) co-authors — nothing was saved
+    assert client.get("/proposals/1").json()["structured"].get("co_authors", []) == []
+
+
+def test_co_author_names_resolved(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_user(db, CO_AUTHOR_A, "Bob")   # Bob has a registered profile; B does not
+    client.post("/proposals", json=proposal_body(co_authors=[CO_AUTHOR_A, CO_AUTHOR_B]),
+                headers=auth(AUTHOR_ADDR, "Alice"))
+    ca = client.get("/proposals/1").json()["co_authors"]
+    assert {"stake_address": CO_AUTHOR_A, "display_name": "Bob"} in ca
+    assert any(x["stake_address"] == CO_AUTHOR_B and x["display_name"] is None for x in ca)
+
+
+def test_existing_proposal_empty_co_authors_unaffected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    got = client.get("/proposals/1").json()
+    assert got["co_authors"] == []
+
+
+# ── Drafts ─────────────────────────────────────────────────────────────────────
+
+DRAFT_OTHER = "stake1other000000000000000000000000000000000000000000000"
+
+
+def test_create_and_list_draft(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = client.post("/drafts", json={"title": "WIP", "type": "CAP", "data": {"title": "WIP", "step": 2}},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 201
+    body = r.json()
+    assert body["id"] and body["title"] == "WIP" and body["type"] == "CAP"
+    assert body["data"] == {"title": "WIP", "step": 2}
+    lst = client.get("/drafts", headers=auth(AUTHOR_ADDR, "Alice")).json()
+    assert len(lst) == 1 and lst[0]["title"] == "WIP"
+    assert "data" not in lst[0]          # list is a summary, no heavy blob
+
+
+def test_draft_requires_auth(client, db):
+    assert client.get("/drafts").status_code == 401
+    assert client.post("/drafts", json={"data": {}}).status_code == 401
+
+
+def test_get_draft_returns_full_data(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    did = client.post("/drafts", json={"title": "T", "type": "CIS", "data": {"a": 1, "revisions": {"0": {}}}},
+                      headers=auth(AUTHOR_ADDR, "Alice")).json()["id"]
+    got = client.get(f"/drafts/{did}", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert got.status_code == 200
+    assert got.json()["data"] == {"a": 1, "revisions": {"0": {}}}
+
+
+def test_update_draft_persists(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    did = client.post("/drafts", json={"title": "Old", "type": "CAP", "data": {"v": 1}},
+                      headers=auth(AUTHOR_ADDR, "Alice")).json()["id"]
+    r = client.patch(f"/drafts/{did}", json={"title": "New", "type": "CAP", "data": {"v": 2}},
+                     headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200 and r.json()["title"] == "New" and r.json()["data"] == {"v": 2}
+
+
+def test_partial_update_does_not_wipe_title(client, db):
+    # An autosave that sends only `data` must not clear the previously saved title.
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    did = client.post("/drafts", json={"title": "Keep me", "type": "CAP", "data": {"v": 1}},
+                      headers=auth(AUTHOR_ADDR, "Alice")).json()["id"]
+    r = client.patch(f"/drafts/{did}", json={"data": {"v": 2}}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200 and r.json()["title"] == "Keep me"
+
+
+def test_delete_draft(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    did = client.post("/drafts", json={"data": {"v": 1}}, headers=auth(AUTHOR_ADDR, "Alice")).json()["id"]
+    assert client.delete(f"/drafts/{did}", headers=auth(AUTHOR_ADDR, "Alice")).status_code == 204
+    assert client.get(f"/drafts/{did}", headers=auth(AUTHOR_ADDR, "Alice")).status_code == 404
+    assert client.get("/drafts", headers=auth(AUTHOR_ADDR, "Alice")).json() == []
+
+
+def test_drafts_are_private_to_owner(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_user(db, DRAFT_OTHER, "Mallory")
+    did = client.post("/drafts", json={"title": "secret", "data": {"x": 1}},
+                      headers=auth(AUTHOR_ADDR, "Alice")).json()["id"]
+    # Another wallet can neither see it in their list nor read/patch/delete it.
+    assert client.get("/drafts", headers=auth(DRAFT_OTHER, "Mallory")).json() == []
+    assert client.get(f"/drafts/{did}", headers=auth(DRAFT_OTHER, "Mallory")).status_code == 404
+    assert client.patch(f"/drafts/{did}", json={"data": {"x": 2}},
+                        headers=auth(DRAFT_OTHER, "Mallory")).status_code == 404
+    assert client.delete(f"/drafts/{did}", headers=auth(DRAFT_OTHER, "Mallory")).status_code == 404
+    # ...and the owner's draft is untouched.
+    assert client.get(f"/drafts/{did}", headers=auth(AUTHOR_ADDR, "Alice")).json()["data"] == {"x": 1}
+
+
+def test_oversized_draft_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    big = {"blob": "q" * 250_000}
+    r = client.post("/drafts", json={"data": big}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code in (400, 422)
+
+
+def test_draft_count_capped(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    for _ in range(25):
+        assert client.post("/drafts", json={"data": {"v": 1}},
+                           headers=auth(AUTHOR_ADDR, "Alice")).status_code == 201
+    over = client.post("/drafts", json={"data": {"v": 1}}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert over.status_code == 400
+
+
+def test_drafts_do_not_appear_as_proposals(client, db):
+    # A draft must never leak into the public proposal list.
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/drafts", json={"title": "hidden", "data": {"v": 1}}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert client.get("/proposals").json() == []

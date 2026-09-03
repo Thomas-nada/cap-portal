@@ -13,7 +13,8 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          getMe, revokeToken, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
-         fetchGuides, fetchGuide, upsertGuide, deleteGuide } from './api.js';
+         fetchGuides, fetchGuide, upsertGuide, deleteGuide,
+         fetchDrafts, fetchDraft, createDraft, updateDraft, deleteDraft } from './api.js';
 
 import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          showDisplayNameStep, devLogin, shortAddress, revalidateWalletIdentity,
@@ -89,6 +90,10 @@ export const state = {
     // suggested edit) rather than the author editing directly.
     wizardSuggestNumber: null,
     suggestedEdits: [],
+    // The current author's private saved drafts (summaries). The id of the draft
+    // the wizard is currently tied to lives on wizardData.draftId (null = unsaved).
+    drafts: [],
+    draftsPanelOpen: false,   // the Drafts panel on the Proposals page
     // Edit
     editingProposal: null,
     // Learn
@@ -367,11 +372,13 @@ window.handleRouting = async () => {
     } else if (hash === '#/proposals' || hash === '#/registry') {
         state.view = 'list';
         state.proposalsTab = 'list';
-        await loadProposals();
+        await Promise.all([loadProposals(), refreshDrafts()]);
+        updateUI();
     } else if (hash === '#/board' || hash === '#/kanban') {
         state.view = 'list';
         state.proposalsTab = 'board';
-        await loadProposals();
+        await Promise.all([loadProposals(), refreshDrafts()]);
+        updateUI();
     } else if (hash === '#/constitution') {
         state.view = 'constitution';
         await loadConstitution();
@@ -383,6 +390,8 @@ window.handleRouting = async () => {
             state.wizardData = {}; state.wizardStep = 1;
         }
         state.view = 'wizard';
+        clearWizardDirty();      // fresh entry: no unsaved changes yet
+        await refreshDrafts();   // keep the author's drafts fresh for the Proposals panel
         updateUI();
     } else if (hash.startsWith('#/detail/')) {
         const number = parseInt(hash.split('/').pop());
@@ -763,6 +772,8 @@ window.openProposal = async (number, addToHistory = true) => {
     state.view = 'detail';
     state.auditPanelExpanded = false;      // popups start closed per proposal
     state.versionHistoryExpanded = false;
+    state.replyingTo = null;               // no stale reply box across proposals
+    state.collapsedComments = new Set();   // threads start expanded per proposal
     updateUI();
     try {
         const [proposal, comments, audit, suggestions, versions, suggestedEdits] = await Promise.all([
@@ -823,7 +834,7 @@ window.submitWizard = async () => {
             ? { type: 'addition', insert_after: sel.text || '', proposed: (w.revisions || {})[i] || '', section: sel.sectionId || '' }
             : { original: sel.text || '', proposed: (w.revisions || {})[i] || '', section: sel.sectionId || '' }
         ),
-        co_authors: w.coAuthors ? [w.coAuthors] : [],
+        co_authors: (Array.isArray(w.coAuthors) ? w.coAuthors : (w.coAuthors ? [w.coAuthors] : [])).filter(Boolean),
     };
     // Disable the button + show a loader so a slow request can't be double-clicked.
     state.loading = { ...state.loading, submitting: true };
@@ -875,6 +886,10 @@ window.submitWizard = async () => {
         const proposal = await createProposal({ title, type: w.type || 'CAP', structured });
         await addLabel(proposal.number, proposal.type);
         if (w.category) await addLabel(proposal.number, w.category);
+        // The proposal is live now, so remove the draft it grew out of (if any).
+        if (w.draftId) {
+            try { await deleteDraft(w.draftId); await refreshDrafts(); } catch (_) {}
+        }
         // Generate draft constitution if proposal includes revisions
         const hasRevisions = structured.revisions?.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed));
         if (hasRevisions) {
@@ -886,6 +901,7 @@ window.submitWizard = async () => {
         }
         state.wizardData = {};
         state.wizardStep = 1;
+        clearWizardDirty();
         state.loading = { ...state.loading, submitting: false };
         state.wizardSubmitted = proposal.number;  // shows the success screen
         updateUI();
@@ -909,31 +925,59 @@ window.wizardCreateAnother = () => {
     state.wizardSuggestNumber = null;
     state.wizardEditOriginal = null;
     state.wizardEditCategory = null;
+    clearWizardDirty();
     updateUI();
 };
 
-window.postComment = async (formOrNumber, bodyArg) => {
+// Open/close the inline reply box under a specific comment.
+window.replyToComment = (commentId) => {
     if (!state.user) { showWalletModal(); return; }
-    let number, body;
+    state.replyingTo = commentId;
+    updateUI();
+    // Focus the freshly rendered reply textarea.
+    setTimeout(() => document.getElementById(`reply-input-${commentId}`)?.focus(), 0);
+};
+window.cancelReply = () => {
+    state.replyingTo = null;
+    updateUI();
+};
+
+// Collapse/expand a comment's reply subtree. Ids live in a Set on state so the
+// choice survives re-renders; it's cleared when a different proposal opens.
+window.toggleThread = (commentId) => {
+    if (!(state.collapsedComments instanceof Set)) state.collapsedComments = new Set();
+    if (state.collapsedComments.has(commentId)) state.collapsedComments.delete(commentId);
+    else state.collapsedComments.add(commentId);
+    updateUI();
+};
+
+window.postComment = async (formOrNumber, bodyArg, parentArg) => {
+    if (!state.user) { showWalletModal(); return; }
+    let number, body, parentId = null;
     if (formOrNumber instanceof HTMLElement) {
         const fd = new FormData(formOrNumber);
         body = fd.get('body') || formOrNumber.querySelector('textarea')?.value || '';
+        const rawParent = fd.get('parent_id') || formOrNumber.dataset.parentId || '';
+        parentId = rawParent ? Number(rawParent) : null;
         number = state.currentProposal?.number;
         formOrNumber.reset();
     } else {
         number = formOrNumber;
         body = bodyArg;
+        parentId = parentArg != null ? Number(parentArg) : null;
     }
     if (!body?.trim() || !number) return;
-    state.loading = { ...state.loading, postComment: true };
+    const loadKey = parentId ? `postReply-${parentId}` : 'postComment';
+    state.loading = { ...state.loading, [loadKey]: true };
     updateUI();
     try {
-        const comment = await createComment(number, body);
+        const comment = await createComment(number, body, parentId);
         state.comments = [...state.comments, comment];
+        if (parentId) state.replyingTo = null;
     } catch (e) {
         state.error = e.message;
     } finally {
-        state.loading = { ...state.loading, postComment: false };
+        state.loading = { ...state.loading, [loadKey]: false };
         updateUI();
     }
 };
@@ -1759,7 +1803,7 @@ function structuredToWizard(p) {
         analysis: s.analysis || '',
         impact: s.impact || '',
         exhibits: s.exhibits || '',
-        coAuthors: Array.isArray(s.co_authors) ? (s.co_authors[0] || '') : (s.co_authors || ''),
+        coAuthors: Array.isArray(s.co_authors) ? s.co_authors.slice() : (s.co_authors ? [s.co_authors] : []),
         selectedText,
         revisions,
     };
@@ -2099,6 +2143,174 @@ window._saveProfile = async () => {
 window.updateWizard = (data) => {
     state.wizardData = { ...state.wizardData, ...data };
     state.wizardError = null;  // clear any blocking warning once the user changes input
+    scheduleDraftAutosave();
+};
+
+// ── Drafts: save / continue / discard a proposal in progress ───────────────────
+// A draft is the whole wizard state saved server-side, private to the author.
+// Editing an existing proposal or suggesting an edit is never a draft.
+
+// The draft body is the wizard state minus internal bookkeeping (the draft id).
+function draftDataFromWizard() {
+    const { draftId, ...data } = state.wizardData || {};
+    return data;
+}
+
+// Something worth keeping? Avoids spawning empty drafts from a bare wizard open.
+function hasWizardContent() {
+    const w = state.wizardData || {};
+    if ((w.title || '').trim()) return true;
+    if (['abstract', 'motivation', 'analysis', 'impact', 'exhibits'].some(k => (w[k] || '').trim())) return true;
+    if (Array.isArray(w.selectedText) && w.selectedText.length) return true;
+    return false;
+}
+function _canAutosaveDraft() {
+    return !!state.user && state.view === 'wizard'
+        && !state.wizardEditNumber && !state.wizardSuggestNumber
+        && hasWizardContent();
+}
+
+async function refreshDrafts() {
+    if (!state.user) { state.drafts = []; return; }
+    try { state.drafts = await fetchDrafts(); } catch (_) { /* non-fatal */ }
+}
+window.refreshDrafts = refreshDrafts;
+
+// Show/hide the drafts panel on the Proposals page.
+window.toggleDraftsPanel = () => { state.draftsPanelOpen = !state.draftsPanelOpen; updateUI(); };
+
+function setDraftStatus(text) {
+    const el = document.getElementById('draft-save-status');
+    if (el) el.textContent = text;
+}
+
+// One in-flight guard so a burst of autosaves can't create duplicate drafts
+// before the first POST returns.
+let _draftSaveInFlight = false;
+let _draftSavePending = false;
+let _draftSaveTimer = null;
+// True when the wizard holds create-mode changes not yet persisted to a draft.
+// Drives whether "Discard" warns on exit (no warning once everything is saved).
+let _draftDirty = false;
+function wizardIsDirty() { return _draftDirty; }
+window.wizardIsDirty = wizardIsDirty;
+function clearWizardDirty() { _draftDirty = false; }
+window.clearWizardDirty = clearWizardDirty;
+
+async function _doSaveDraft(silent) {
+    if (!state.user) { if (!silent) showWalletModal(); return; }
+    if (state.wizardEditNumber || state.wizardSuggestNumber) return;  // not a draft
+    // Never create a brand-new draft out of nothing (e.g. a stray autosave that
+    // fires after the wizard was cleared). An existing draft may still be updated.
+    if (!state.wizardData.draftId && !hasWizardContent()) { if (!silent) setDraftStatus(''); return; }
+    if (_draftSaveInFlight) { _draftSavePending = true; return; }
+    _draftSaveInFlight = true;
+    setDraftStatus('Saving…');
+    try {
+        const data = draftDataFromWizard();
+        const title = (state.wizardData.title || '').trim() || null;
+        const type = state.wizardData.type || 'CAP';
+        if (state.wizardData.draftId) {
+            await updateDraft(state.wizardData.draftId, { title, type, data });
+        } else {
+            const created = await createDraft({ title, type, data });
+            // Attach the id in place, without re-rendering (would disrupt typing).
+            state.wizardData.draftId = created.id;
+        }
+        await refreshDrafts();
+        _draftDirty = false;  // everything is now persisted
+        setDraftStatus('Saved');
+        if (!silent) updateUI();  // manual save: reflect the new draft in the list
+    } catch (e) {
+        if (!silent) { state.error = e.message; setDraftStatus(''); updateUI(); }
+        // Autosave failures stay silent; the next change retries.
+    } finally {
+        _draftSaveInFlight = false;
+        if (_draftSavePending) { _draftSavePending = false; _doSaveDraft(true); }
+    }
+}
+
+// Debounced background autosave, safe to call from any wizard mutation.
+function scheduleDraftAutosave() {
+    if (state.wizardEditNumber || state.wizardSuggestNumber) return;  // not a draft session
+    _draftDirty = true;  // a change happened; not yet persisted
+    if (!_canAutosaveDraft()) return;   // not signed in, or nothing worth saving yet
+    setDraftStatus('Saving…');
+    clearTimeout(_draftSaveTimer);
+    _draftSaveTimer = setTimeout(() => _doSaveDraft(true), 1500);
+}
+window._scheduleDraftAutosave = scheduleDraftAutosave;
+
+// Manual "Save draft" button.
+window.saveDraft = () => { clearTimeout(_draftSaveTimer); _doSaveDraft(false); };
+
+// Continue a saved draft: load its full state and reopen the wizard fresh.
+window.continueDraft = async (id) => {
+    if (!state.user) { showWalletModal(); return; }
+    try {
+        const d = await fetchDraft(id);
+        state.wizardEditNumber = null;
+        state.wizardSuggestNumber = null;
+        state.wizardEditOriginal = null;
+        state.wizardEditCategory = null;
+        state.wizardData = { ...(d.data || {}), draftId: d.id };
+        state.wizardStep = 1;
+        state.wizardError = null;
+        state.wizardSubmitted = null;
+        state.view = 'wizard';
+        _draftDirty = false;  // freshly loaded, nothing changed yet
+        if (window.location.hash !== '#/new') window.location.hash = '#/new';
+        updateUI();
+    } catch (e) {
+        state.error = e.message; updateUI();
+    }
+};
+
+// Discard a saved draft (with confirmation).
+window.deleteDraft = async (id) => {
+    const d = (state.drafts || []).find(x => x.id === id);
+    const label = d?.title ? `"${d.title}"` : 'this draft';
+    if (!window.confirm(`Delete ${label}? This cannot be undone.`)) return;
+    try {
+        await deleteDraft(id);
+    } catch (e) {
+        state.error = e.message; updateUI(); return;
+    }
+    state.drafts = (state.drafts || []).filter(x => x.id !== id);
+    // If it was the draft the wizard is tied to, detach so a later save starts
+    // a new draft rather than PATCHing a now-missing id.
+    if (state.wizardData && state.wizardData.draftId === id) {
+        const { draftId, ...rest } = state.wizardData; state.wizardData = rest;
+    }
+    updateUI();
+};
+
+// Co-authors are identified by their Cardano stake address. Stored as an array
+// on wizardData.coAuthors; validated for format here and again on the server.
+window.addCoAuthor = () => {
+    const el = document.getElementById('coauthor-input');
+    const errEl = document.getElementById('coauthor-error');
+    const show = (m) => { if (errEl) { errEl.textContent = m; errEl.classList.remove('hidden'); } };
+    if (errEl) errEl.classList.add('hidden');
+    const addr = (el?.value || '').trim();
+    if (!addr) return;
+    if (!/^stake1[0-9a-z]{50,70}$/.test(addr)) { show('Enter a valid Cardano stake address (starts with stake1).'); return; }
+    const list = Array.isArray(state.wizardData.coAuthors) ? state.wizardData.coAuthors.slice() : [];
+    if (state.user && addr === state.user.stake_address) { show("That's your own address — you're already the author."); return; }
+    if (list.includes(addr)) { show('That co-author has already been added.'); return; }
+    if (list.length >= 20) { show('You can add at most 20 co-authors.'); return; }
+    list.push(addr);
+    state.wizardData = { ...state.wizardData, coAuthors: list };
+    scheduleDraftAutosave();
+    updateUI(true);
+};
+
+window.removeCoAuthor = (i) => {
+    const list = Array.isArray(state.wizardData.coAuthors) ? state.wizardData.coAuthors.slice() : [];
+    list.splice(i, 1);
+    state.wizardData = { ...state.wizardData, coAuthors: list };
+    scheduleDraftAutosave();
+    updateUI(true);
 };
 // Step counter runs 1-6, but CIS proposals skip the CAP-only Select/Propose
 // screens (2 & 3), so navigation jumps over them in both directions.
@@ -2127,7 +2339,7 @@ window.wizardBack     = () => {
 window.wizardNextStep = () => window.wizardNext();
 window.wizardPrevStep = () => window.wizardBack();
 window.wizardSubmit   = () => window.submitWizard();
-window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; state.wizardEditNumber = null; state.wizardSuggestNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null; updateUI(); };
+window.wizardReset    = () => { state.wizardData = {}; state.wizardStep = 1; state.wizardError = null; state.wizardEditNumber = null; state.wizardSuggestNumber = null; state.wizardEditOriginal = null; state.wizardEditCategory = null; clearWizardDirty(); updateUI(); };
 // Confirmed reset for the "Start Over" button — guards against a misclick
 // discarding a draft the user has spent several steps building.
 window.wizardStartOver = () => {
@@ -2147,10 +2359,18 @@ function wizardHasData() {
 // Leave the wizard (logo / Discard). Warns first if there are unsaved edits.
 window.wizardExit = () => {
     const returnTo = state.wizardEditNumber || state.wizardSuggestNumber;
-    const prompt = returnTo
-        ? 'Discard your changes? The proposal keeps its current saved version.'
-        : 'Discard this proposal? Everything you\'ve entered will be lost.';
-    if (wizardHasData() && !confirm(prompt)) return;
+    if (returnTo) {
+        // Editing/suggesting an existing proposal is not a draft, so warn as before.
+        if (wizardHasData() && !confirm('Discard your changes? The proposal keeps its current saved version.')) return;
+    } else {
+        // Creating: drafts autosave, so only warn when there are changes that have
+        // not been saved yet. Once everything is saved, leaving is safe (the draft
+        // stays under Drafts on the Proposals page) and we exit without a prompt.
+        if (_draftDirty && wizardHasData() &&
+            !confirm('You have unsaved changes that will be lost. Discard them? Your last saved draft is kept.')) return;
+    }
+    clearTimeout(_draftSaveTimer);  // cancel any pending autosave so it can't fire after exit
+    clearWizardDirty();
     state.wizardData = {};
     state.wizardStep = 1;
     state.wizardError = null;
@@ -2186,6 +2406,7 @@ window.removeWizardSelection = (idx) => {
     const sel = (state.wizardData.selectedText || []).filter((_, i) => i !== idx);
     state.wizardData = { ...state.wizardData, selectedText: sel };
     if (!sel.length) state.wizardSelPanelOpen = false;  // nothing left to list
+    scheduleDraftAutosave();
     updateUI();
 };
 
@@ -2271,6 +2492,7 @@ window.addTextToCAP = () => {
     const selections = window.stagedSelections?.filter(s => s.type === 'CAP') || [];
     if (selections.length) {
         state.wizardData = { ...state.wizardData, selectedText: selections, type: 'CAP' };
+        scheduleDraftAutosave();
     }
     showSelectionAddedBanner();
 };
@@ -2279,6 +2501,7 @@ window.addTextToCIS = () => {
     const selections = window.stagedSelections?.filter(s => s.type === 'CIS') || [];
     if (selections.length) {
         state.wizardData = { ...state.wizardData, selectedText: selections, type: 'CIS' };
+        scheduleDraftAutosave();
     }
     showSelectionAddedBanner();
 };
@@ -2634,6 +2857,13 @@ async function init() {
     }
 
     window.addEventListener('hashchange', window.handleRouting);
+    // Autosave the wizard as the author types. Delegated once here so it survives
+    // every re-render; the scheduler itself gates to create-mode + signed-in.
+    document.addEventListener('input', () => {
+        if (state.view === 'wizard' && !state.wizardEditNumber && !state.wizardSuggestNumber) {
+            scheduleDraftAutosave();
+        }
+    });
     await window.handleRouting();
     state.loading.init = false;
     if (state.user) {

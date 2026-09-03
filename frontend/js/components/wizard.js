@@ -82,6 +82,16 @@ function renderWizardBar(step, wizard, state) {
         ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white/85 hover:bg-white/10 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
         : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-red-300 hover:bg-white/10 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`;
 
+    // Save draft is available only when creating (not editing/suggesting an
+    // existing proposal). The status text is updated in place by autosave.
+    const canDraft = !state.wizardEditNumber && !state.wizardSuggestNumber;
+    const draftControls = canDraft ? `
+ <span id="draft-save-status" class="text-sm font-black uppercase tracking-widest text-emerald-300 hidden sm:inline"></span>
+        <button onclick="window.saveDraft()" title="Save this draft so you can finish it later"
+ class="inline-flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-white/50 bg-white/10 text-white hover:bg-white/20 hover:border-white text-sm font-black uppercase tracking-widest transition-all flex-shrink-0 shadow-sm">
+ <i data-lucide="save" class="w-4 h-4"></i> Save draft
+        </button>` : '';
+
     let rightBtn;
     if (isLast) {
         rightBtn = `<button onclick="window.wizardSubmit()" ${submitting ? 'disabled' : ''}
@@ -138,6 +148,7 @@ function renderWizardBar(step, wizard, state) {
  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
             ${leftBtn}
             ${center}
+            ${draftControls}
             ${rightBtn}
         </div>
     </div>`;
@@ -168,7 +179,7 @@ function renderSuccess(number) {
 
 function renderStep(step, wizard, state) {
     switch (step) {
-        case 1: return renderStep1(wizard);
+        case 1: return renderStep1(wizard, state);
         case 2: return wizard.type === 'CIS' ? renderStep4(wizard) : renderStep2(wizard, state);
         case 3: return wizard.type === 'CIS' ? renderStep4(wizard) : renderStep3(wizard);
         case 4: return renderStep4(wizard);
@@ -186,7 +197,7 @@ const CATEGORIES = [
     { id: 'Other',        label: 'Other',        desc: 'Doesn\'t fit other categories. Editors will assess.', days: 30 },
 ];
 
-function renderStep1(wizard) {
+function renderStep1(wizard, state) {
     // Type is fixed once a proposal exists: switching CAP<->CIS would change
     // which fields and labels are valid. In edit mode the buttons are inert.
     const editing = (typeof window !== 'undefined' && window.state && (window.state.wizardEditNumber || window.state.wizardSuggestNumber)) || null;
@@ -451,6 +462,28 @@ function renderStep4(wizard) {
  class="w-full p-6 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all min-h-24"
                 >${escapeHtml(wizard.exhibits || '')}</textarea>
                     ${charCounter('cc-exhibits', wizard.exhibits, 20000)}
+            </div>
+
+            <div>
+ <label class="text-sm font-black text-slate-400 uppercase tracking-widest mb-2 block">Co-authors (Optional)</label>
+ <p class="text-sm text-slate-400 mb-3">Add co-authors by their Cardano stake address (starts with <span class="font-mono">stake1</span>). They will be credited on the proposal.</p>
+                ${(wizard.coAuthors && wizard.coAuthors.length) ? `
+ <div class="space-y-2 mb-3">
+                    ${wizard.coAuthors.map((addr, i) => `
+ <div class="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-2xl px-4 py-3">
+ <i data-lucide="user" class="w-4 h-4 text-slate-400 flex-shrink-0"></i>
+ <span class="text-sm font-mono text-slate-700 truncate flex-1">${escapeHtml(addr)}</span>
+                        <button type="button" onclick="window.removeCoAuthor(${i})" title="Remove co-author" class="text-red-400 hover:text-red-600 flex-shrink-0"><i data-lucide="x" class="w-4 h-4"></i></button>
+                    </div>`).join('')}
+                </div>` : ''}
+ <div class="flex gap-2">
+                    <input id="coauthor-input" type="text" placeholder="stake1..." maxlength="120"
+                        onkeydown="if(event.key==='Enter'){event.preventDefault();window.addCoAuthor();}"
+ class="flex-1 p-4 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 focus:border-blue-600 outline-none transition-all font-mono text-sm">
+                    <button type="button" onclick="window.addCoAuthor()"
+ class="px-6 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white font-black text-sm transition-colors">Add</button>
+                </div>
+ <p id="coauthor-error" class="text-red-500 text-sm font-bold mt-2 hidden"></p>
             </div>
         </div>
     </div>`;
