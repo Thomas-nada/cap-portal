@@ -88,6 +88,9 @@ function renderCommentNode(c, ctx, depth) {
     const cardBorder = mod === 'removed' ? 'border-red-200' : mod === 'under_review' ? 'border-amber-200' : 'border-slate-200';
     const canFlag = (isEditor || isAdmin) && mod === 'visible';
     const canReply = !!state.user && mod === 'visible';
+    const canEdit = !!state.user && state.user.stake_address === c.author_stake_address && mod === 'visible';
+    const editing = state.editingComment === c.id;
+    const editLoading = state.loading?.[`editComment-${c.id}`];
     const parent = c.parent_id != null ? byId.get(c.parent_id) : null;
     const parentName = parent ? (parent.author_display_name || shortAddress(parent.author_stake_address)) : null;
     const kids = childrenOf.get(c.id) || [];
@@ -138,6 +141,12 @@ function renderCommentNode(c, ctx, depth) {
  <i data-lucide="reply" class="w-3.5 h-3.5"></i> Reply
                                                 </button>
                                                 ` : ''}
+                                                ${canEdit ? `
+                                                <button onclick="window.editComment(${c.id})" title="Edit your comment"
+ class="text-slate-400 hover:text-blue-600 transition-all p-1.5 rounded-lg hover:bg-blue-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide">
+ <i data-lucide="pencil" class="w-3.5 h-3.5"></i> Edit
+                                                </button>
+                                                ` : ''}
                                                 ${canFlag ? `
                                                 <button onclick="window.flagCommentForRemoval(${c.id})" title="Flag this comment for removal"
  class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide opacity-0 group-hover:opacity-100">
@@ -146,9 +155,23 @@ function renderCommentNode(c, ctx, depth) {
                                                 ` : ''}
                                             </div>
                                         </div>
+                                        ${editing ? `
+ <form onsubmit="event.preventDefault(); window.saveCommentEdit(${c.id}, this)" class="space-y-3">
+                                            <textarea id="edit-input-${c.id}" name="body" required maxlength="20000"
+ class="w-full bg-white/80 p-5 rounded-2xl min-h-[200px] font-medium outline-none border-2 border-slate-100 focus:border-blue-600 transition-all text-slate-900 shadow-sm resize-none">${escapeHtml(c.body)}</textarea>
+ <div class="flex justify-end gap-3">
+                                                <button type="button" onclick="window.cancelCommentEdit()"
+ class="px-6 py-2.5 rounded-xl text-sm font-black uppercase tracking-wide text-slate-500 hover:bg-slate-100 transition-all">Cancel</button>
+                                                <button type="submit" ${editLoading ? 'disabled' : ''}
+ class="bg-slate-950 text-white px-8 py-2.5 rounded-xl font-black uppercase text-sm tracking-widest hover:opacity-90 active:scale-95 transition-all shadow-lg disabled:opacity-50">
+                                                    ${editLoading ? 'Saving…' : 'Save'}
+                                                </button>
+                                            </div>
+                                        </form>
+                                        ` : `
  <div class="${cardBase} border ${cardBorder} text-sm leading-relaxed prose max-w-none">
                                             ${window.safeMarkdown(c.body)}
-                                        </div>
+                                        </div>`}
                                         ${replying ? `
  <form onsubmit="event.preventDefault(); window.postComment(this)" data-parent-id="${c.id}" class="space-y-3 pt-1">
                                             <textarea id="reply-input-${c.id}" name="comment" required placeholder="Reply to ${escapeHtml(cName)}…" maxlength="20000"

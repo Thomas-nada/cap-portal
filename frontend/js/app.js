@@ -773,6 +773,7 @@ window.openProposal = async (number, addToHistory = true) => {
     state.auditPanelExpanded = false;      // popups start closed per proposal
     state.versionHistoryExpanded = false;
     state.replyingTo = null;               // no stale reply box across proposals
+    state.editingComment = null;           // no stale edit box across proposals
     state.collapsedComments = new Set();   // threads start expanded per proposal
     updateUI();
     try {
@@ -940,6 +941,45 @@ window.replyToComment = (commentId) => {
 window.cancelReply = () => {
     state.replyingTo = null;
     updateUI();
+};
+
+// Edit one of your own comments in place. The backend PATCH is author-only, so a
+// non-author never gets the button and the server rejects it anyway.
+window.editComment = (commentId) => {
+    if (!state.user) { showWalletModal(); return; }
+    state.editingComment = commentId;
+    state.replyingTo = null;   // don't show a reply box and an edit box at once
+    updateUI();
+    // Focus the textarea and place the cursor at the end of the existing text.
+    setTimeout(() => {
+        const el = document.getElementById(`edit-input-${commentId}`);
+        if (el) { el.focus(); try { el.setSelectionRange(el.value.length, el.value.length); } catch (_) {} }
+    }, 0);
+};
+window.cancelCommentEdit = () => {
+    state.editingComment = null;
+    updateUI();
+};
+window.saveCommentEdit = async (commentId, formOrText) => {
+    let body;
+    if (formOrText instanceof HTMLElement) {
+        body = formOrText.querySelector('textarea')?.value || '';
+    } else {
+        body = formOrText || '';
+    }
+    if (!body.trim()) return;
+    state.loading = { ...state.loading, [`editComment-${commentId}`]: true };
+    updateUI();
+    try {
+        const updated = await updateComment(commentId, body);
+        state.comments = (state.comments || []).map(c => c.id === commentId ? updated : c);
+        state.editingComment = null;
+    } catch (e) {
+        state.error = e.message;
+    } finally {
+        state.loading = { ...state.loading, [`editComment-${commentId}`]: false };
+        updateUI();
+    }
 };
 
 // Collapse/expand a comment's reply subtree. Ids live in a Set on state so the
