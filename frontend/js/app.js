@@ -217,10 +217,6 @@ export function updateUI(rerender = false) {
                     <p class="text-sm font-black uppercase tracking-widest text-white/40 mb-1">Links</p>
                     <a href="https://intersectmbo.org" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Home</a>
                     <a onclick="window.setView('editors')" class="text-sm text-white/70 hover:text-white transition-colors cursor-pointer">Editors</a>
-                    <a href="https://github.com/Thomas-nada/cap-portal" target="_blank" rel="noopener noreferrer" class="flex items-center gap-1.5 text-sm text-white/70 hover:text-white transition-colors">
-                        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12a11.5 11.5 0 0 0 7.86 10.92c.575.106.785-.25.785-.556 0-.274-.01-1-.015-1.963-3.196.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.045-.714.08-.7.08-.7 1.155.082 1.763 1.186 1.763 1.186 1.027 1.76 2.695 1.252 3.352.957.104-.744.402-1.252.732-1.54-2.552-.29-5.235-1.276-5.235-5.68 0-1.255.448-2.28 1.183-3.084-.119-.29-.513-1.46.112-3.045 0 0 .965-.309 3.163 1.178a10.98 10.98 0 0 1 2.88-.388c.977.004 1.96.132 2.88.388 2.196-1.487 3.16-1.178 3.16-1.178.626 1.585.232 2.755.114 3.045.737.804 1.182 1.829 1.182 3.084 0 4.416-2.688 5.386-5.248 5.67.413.356.78 1.057.78 2.13 0 1.538-.014 2.777-.014 3.155 0 .309.208.667.79.554A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"/></svg>
-                        Source code
-                    </a>
                     <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/terms-of-use" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Terms of Use</a>
                     <a href="https://docs.intersectmbo.org/intersect-knowledge-base/legal/policies-and-conditions/intersect-internal-policies/privacy-policy" target="_blank" rel="noopener noreferrer" class="text-sm text-white/70 hover:text-white transition-colors">Privacy Policy</a>
                 </nav>
@@ -233,6 +229,10 @@ export function updateUI(rerender = false) {
                     <a href="https://www.linkedin.com/company/intersectmbo/" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors">
                         <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24"><path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433a2.062 2.062 0 01-2.063-2.065 2.064 2.064 0 112.063 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/></svg>
                         LinkedIn
+                    </a>
+                    <a href="https://github.com/Thomas-nada/cap-portal" target="_blank" rel="noopener noreferrer" class="flex items-center gap-2 text-sm text-white/70 hover:text-white transition-colors">
+                        <svg class="w-4 h-4 fill-current" viewBox="0 0 24 24" aria-hidden="true"><path d="M12 .5C5.73.5.5 5.73.5 12a11.5 11.5 0 0 0 7.86 10.92c.575.106.785-.25.785-.556 0-.274-.01-1-.015-1.963-3.196.695-3.87-1.54-3.87-1.54-.523-1.33-1.278-1.684-1.278-1.684-1.045-.714.08-.7.08-.7 1.155.082 1.763 1.186 1.763 1.186 1.027 1.76 2.695 1.252 3.352.957.104-.744.402-1.252.732-1.54-2.552-.29-5.235-1.276-5.235-5.68 0-1.255.448-2.28 1.183-3.084-.119-.29-.513-1.46.112-3.045 0 0 .965-.309 3.163 1.178a10.98 10.98 0 0 1 2.88-.388c.977.004 1.96.132 2.88.388 2.196-1.487 3.16-1.178 3.16-1.178.626 1.585.232 2.755.114 3.045.737.804 1.182 1.829 1.182 3.084 0 4.416-2.688 5.386-5.248 5.67.413.356.78 1.057.78 2.13 0 1.538-.014 2.777-.014 3.155 0 .309.208.667.79.554A11.5 11.5 0 0 0 23.5 12C23.5 5.73 18.27.5 12 .5Z"/></svg>
+                        GitHub
                     </a>
                 </div>
             </div>
