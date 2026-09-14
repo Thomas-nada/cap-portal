@@ -1419,3 +1419,72 @@ def test_drafts_do_not_appear_as_proposals(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/drafts", json={"title": "hidden", "data": {"v": 1}}, headers=auth(AUTHOR_ADDR, "Alice"))
     assert client.get("/proposals").json() == []
+
+
+# ── Version change summaries only report fields that actually changed ───────────
+
+def test_content_only_edit_not_flagged_as_title_change(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="Keep This Title"), headers=auth(AUTHOR_ADDR, "Alice"))
+    # Edit the content but resubmit the SAME title, exactly as the edit wizard does.
+    edited = proposal_body(title="Keep This Title", motivation="A genuinely different motivation")
+    r = client.patch("/proposals/1", json={"title": edited["title"], "structured": edited["structured"]},
+                     headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    latest = client.get("/proposals/1/versions").json()[0]
+    assert "Content updated" in latest["change_summary"]
+    assert "Title updated" not in latest["change_summary"]
+
+
+def test_title_only_edit_not_flagged_as_content_change(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="Old Title"), headers=auth(AUTHOR_ADDR, "Alice"))
+    current = client.get("/proposals/1").json()["structured"]   # resubmit identical content
+    r = client.patch("/proposals/1", json={"title": "New Title", "structured": current},
+                     headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    latest = client.get("/proposals/1/versions").json()[0]
+    assert "Title updated" in latest["change_summary"]
+    assert "Content updated" not in latest["change_summary"]
+
+
+def test_noop_edit_creates_no_new_version(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="Same"), headers=auth(AUTHOR_ADDR, "Alice"))
+    current = client.get("/proposals/1").json()["structured"]
+    before = len(client.get("/proposals/1/versions").json())
+    client.patch("/proposals/1", json={"title": "Same", "structured": current},
+                 headers=auth(AUTHOR_ADDR, "Alice"))
+    after = len(client.get("/proposals/1/versions").json())
+    assert after == before   # a no-op save must not create a spurious version
+
+
+# ── "Add After" must not split inline Markdown emphasis ─────────────────────────
+
+def test_add_after_does_not_split_inline_emphasis():
+    from main import _apply_revisions
+    base = "Intro.\n\n- *pvtPPSecurityGroup*\n- *pvtPPNetworkGroup*\n\nMore text."
+    # Author selected the *rendered* text, so the anchor has no asterisks.
+    revisions = [{"type": "addition", "insert_after": "pvtPPSecurityGroup",
+                  "proposed": "- *pvtPPStakePoolEconomicGroup*"}]
+    modified, applied = _apply_revisions(base, revisions)
+    assert applied == 1
+    # The original emphasised item stays intact, and the new item is whole.
+    assert "- *pvtPPSecurityGroup*" in modified
+    assert "- *pvtPPStakePoolEconomicGroup*" in modified
+    # The emphasis was NOT split across the inserted line.
+    assert "*pvtPPSecurityGroup\n" not in modified
+    # The new item lands after the anchor's line, before the following item.
+    assert (modified.index("pvtPPSecurityGroup*")
+            < modified.index("pvtPPStakePoolEconomicGroup")
+            < modified.index("pvtPPNetworkGroup"))
+
+
+def test_add_after_paragraph_still_separated_by_blank_line():
+    from main import _apply_revisions
+    base = "First paragraph anchor here.\n\nSecond paragraph."
+    revisions = [{"type": "addition", "insert_after": "First paragraph anchor here.",
+                  "proposed": "An entirely new paragraph."}]
+    modified, applied = _apply_revisions(base, revisions)
+    assert applied == 1
+    assert "First paragraph anchor here.\n\nAn entirely new paragraph." in modified

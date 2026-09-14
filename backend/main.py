@@ -955,16 +955,25 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
     if current_labels & locked_stages:
         raise HTTPException(status_code=403, detail="Proposal is locked for editing once it reaches the ready stage")
 
+    # Only record a field as changed when its value actually differs. The edit
+    # wizard always resubmits both the title and the full structured body, so a
+    # naive "field is present" check would report a title change on every save
+    # even when the author only touched the content (and vice versa).
     changes = {}
     parts = []
-    if req.title is not None:
+    if req.title is not None and req.title != p.title:
         changes["title"] = {"from": p.title, "to": req.title}
         parts.append("Title updated")
         p.title = req.title
     if req.structured is not None:
-        changes["body_updated"] = True
-        parts.append("Content updated")
-        p.body = json.dumps(req.structured)
+        try:
+            content_changed = json.loads(p.body) != req.structured
+        except (ValueError, TypeError):
+            content_changed = True
+        if content_changed:
+            changes["body_updated"] = True
+            parts.append("Content updated")
+            p.body = json.dumps(req.structured)
 
     # Nothing supplied to change — don't touch updated_at, don't log an edit,
     # don't create a spurious version.
@@ -1712,8 +1721,19 @@ def _apply_revisions(base_content, revisions):
             anchor = (rev.get("insert_after") or "").strip()
             span = _match_span(modified, anchor) if anchor else None
             if span:
-                end = span[1]
-                modified = modified[:end] + "\n\n" + proposed + modified[end:]
+                # "Add After" inserts a new block after the anchor's line, not
+                # after the matched substring. Authors select the *rendered* text,
+                # so an anchor like "pvtPPSecurityGroup" matches inside the source
+                # "*pvtPPSecurityGroup*"; inserting at the substring end would land
+                # before the closing "*" and split the emphasis. Advancing to the
+                # end of the line keeps the existing element intact.
+                line_end = modified.find("\n", span[1])
+                if line_end == -1:
+                    line_end = len(modified)
+                # A new list item continues the list tightly (single newline);
+                # a prose block is separated by a blank line.
+                sep = "\n" if re.match(r"^(?:[-*+]|\d+\.)\s", proposed) else "\n\n"
+                modified = modified[:line_end] + sep + proposed + modified[line_end:]
                 applied += 1
         else:
             original = (rev.get("original") or "").strip()

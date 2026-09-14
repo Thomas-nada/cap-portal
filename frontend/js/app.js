@@ -2982,8 +2982,8 @@ window.openBugReportModal = () => {
 
  <div id="bug-error" class="hidden text-red-500 text-sm font-bold mb-4"></div>
 
-            <button onclick="window._submitBugReport()"
- class="w-full py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors">
+            <button id="bug-submit-btn" onclick="window._submitBugReport()"
+ class="w-full py-3 rounded-2xl bg-red-500 hover:bg-red-600 text-white font-black transition-colors disabled:opacity-60">
                 Submit Report
             </button>
         </div>
@@ -3051,13 +3051,36 @@ window._submitBugReport = async () => {
 
     const environment = window._bugEnv || null;
 
+    // Disable the button and show progress so the report can't be double-submitted.
+    const submitBtn = document.getElementById('bug-submit-btn');
+    if (submitBtn) { submitBtn.disabled = true; submitBtn.textContent = 'Submitting…'; }
+    if (errEl) errEl.classList.add('hidden');
+
     try {
         await submitBugReport(title, description, window._bugShots.slice(0, MAX_BUG_SHOTS), environment);
         window._bugShots = [];
-        document.getElementById('bug-report-modal')?.remove();
+        // Confirm success in place instead of silently closing, so the user knows
+        // the report was saved and doesn't submit it again.
+        const card = document.querySelector('#bug-report-modal > div');
+        if (card) {
+            card.innerHTML = `
+ <div class="text-center py-6">
+ <div class="w-16 h-16 bg-green-100 rounded-full flex items-center justify-center mx-auto mb-5">
+ <i data-lucide="check" class="w-8 h-8 text-green-600"></i>
+                </div>
+ <h2 class="text-xl font-black text-slate-900 mb-2">Bug report submitted</h2>
+ <p class="text-slate-500 mb-8">Thanks for the report. We've logged it and will take a look.</p>
+                <button onclick="document.getElementById('bug-report-modal')?.remove()"
+ class="w-full py-3 rounded-2xl bg-slate-900 hover:bg-slate-800 text-white font-black transition-colors">Close</button>
+            </div>`;
+            if (typeof lucide !== 'undefined') lucide.createIcons();
+        } else {
+            document.getElementById('bug-report-modal')?.remove();
+        }
     } catch (e) {
         errEl.textContent = e.message || 'Failed to submit. Please try again.';
         errEl.classList.remove('hidden');
+        if (submitBtn) { submitBtn.disabled = false; submitBtn.textContent = 'Submit Report'; }
     }
 };
 

@@ -31,11 +31,11 @@ function renderStructuredBody(s, type) {
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
- <div class="text-sm text-slate-600 font-mono leading-relaxed italic">${escapeHtml(r.insert_after || '')}</div>
+ <div class="text-sm text-slate-600 font-mono leading-relaxed italic whitespace-pre-wrap">${escapeHtml(r.insert_after || '')}</div>
                     </div>
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-cyan-600 mb-2">New Text</div>
- <div class="text-sm text-slate-900 font-mono leading-relaxed">${escapeHtml(r.proposed || '')}</div>
+ <div class="text-sm text-slate-900 font-mono leading-relaxed whitespace-pre-wrap">${escapeHtml(r.proposed || '')}</div>
                     </div>
                 </div>
             </div>` : `
@@ -44,11 +44,11 @@ function renderStructuredBody(s, type) {
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 ">
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
- <div class="text-sm text-slate-600 font-mono leading-relaxed">${escapeHtml(r.original || '')}</div>
+ <div class="text-sm text-slate-600 font-mono leading-relaxed whitespace-pre-wrap">${escapeHtml(r.original || '')}</div>
                     </div>
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-green-500 mb-2">Proposed</div>
- <div class="text-sm text-slate-900 font-mono leading-relaxed">${escapeHtml(r.proposed || '')}</div>
+ <div class="text-sm text-slate-900 font-mono leading-relaxed whitespace-pre-wrap">${escapeHtml(r.proposed || '')}</div>
                     </div>
                 </div>
             </div>`).join('');
@@ -345,7 +345,12 @@ export function renderDetail(state) {
     const authorName = p.author_display_name || shortAddress(p.author_stake_address);
     const authorAddr = shortAddress(p.author_stake_address);
     const createdDate = new Date(p.created_at);
-    const expiryDate = new Date(createdDate.getTime() + 30 * 24 * 60 * 60 * 1000);
+    // Recommended review period runs from submission for the category's
+    // consultation length (mirrors the wizard's dayMap). CIS default to 30 days.
+    const CONSULT_DAYS = { Procedural: 60, Substantive: 60, Technical: 90, Interpretive: 30, Editorial: 14, Other: 30 };
+    const catName = (p.labels || []).map(l => l.name).find(n => CONSULT_DAYS[n]);
+    const consultDays = p.type === 'CIS' ? 30 : (CONSULT_DAYS[catName] || 30);
+    const expiryDate = new Date(createdDate.getTime() + consultDays * 24 * 60 * 60 * 1000);
 
     window.toggleEventExpansion = (id) => {
         state.expandedEventId = state.expandedEventId == id ? null : id;
