@@ -1533,3 +1533,11 @@ def test_cip100_feed_lists_documents(client, db):
 
 def test_cip100_missing_proposal_404(client, db):
     assert client.get("/proposals/999/cip100").status_code == 404
+
+
+def test_cip100_allows_any_origin(client, db):
+    # Public read-only endpoints must be fetchable by browser tools on any origin.
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    assert client.get("/proposals/1/cip100").headers.get("access-control-allow-origin") == "*"
+    assert client.get("/cip100").headers.get("access-control-allow-origin") == "*"

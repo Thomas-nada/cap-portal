@@ -2106,6 +2106,7 @@ def _cip100_document(p: Proposal, versions, comments) -> dict:
                 "abstract": (vs.get("abstract") or "").strip() or None,
                 "motivation": (vs.get("motivation") or "").strip() or None,
                 "rationale": (vs.get("analysis") or "").strip() or None,
+                "impact": (vs.get("impact") or "").strip() or None,   # used by CIS
                 "references": _cip100_references(vs.get("exhibits"), portal_url),
                 "proposedRevisions": vs.get("revisions") or [],
             },
@@ -2128,6 +2129,7 @@ def _cip100_document(p: Proposal, versions, comments) -> dict:
         "abstract": (s.get("abstract") or "").strip() or None,
         "motivation": (s.get("motivation") or "").strip() or None,
         "rationale": (s.get("analysis") or "").strip() or None,
+        "impact": (s.get("impact") or "").strip() or None,   # used by CIS
         "references": _cip100_references(s.get("exhibits"), portal_url),
         "cap": {
             "number": p.number,
@@ -2180,7 +2182,10 @@ def get_cip100(number: int, db: Session = Depends(get_db)):
                           Comment.moderation_status == "visible")
                   .order_by(Comment.created_at.asc()).all())
     doc = _cip100_document(p, versions, comments)
-    return _JSONResponse(content=doc, media_type="application/ld+json")
+    # Public, read-only, no credentials: allow any origin so browser-based
+    # governance tools can index it. Scoped to this endpoint only.
+    return _JSONResponse(content=doc, media_type="application/ld+json",
+                         headers={"Access-Control-Allow-Origin": "*"})
 
 
 @app.get("/cip100", tags=["cip100"],
@@ -2208,7 +2213,8 @@ def cip100_feed(request: Request, db: Session = Depends(get_db)):
             "contentHash": latest.content_hash if latest else None,
             "cip100": f"{base}/proposals/{p.number}/cip100",
         })
-    return _JSONResponse(content={"count": len(items), "documents": items})
+    return _JSONResponse(content={"count": len(items), "documents": items},
+                         headers={"Access-Control-Allow-Origin": "*"})
 
 
 # ── Suggestions ───────────────────────────────────────────────────────────────
