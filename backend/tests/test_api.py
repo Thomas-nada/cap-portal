@@ -1488,3 +1488,48 @@ def test_add_after_paragraph_still_separated_by_blank_line():
     modified, applied = _apply_revisions(base, revisions)
     assert applied == 1
     assert "First paragraph anchor here.\n\nAn entirely new paragraph." in modified
+
+
+# ── CIP-100 governance metadata endpoints ───────────────────────────────────────
+
+def test_cip100_document_shape(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="NCL plan"), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/comments", json={"body": "First thought"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.get("/proposals/1/cip100")
+    assert r.status_code == 200
+    assert "ld+json" in r.headers["content-type"]
+    d = r.json()
+    assert "@context" in d and d["hashAlgorithm"] == "blake2b-256"
+    assert d["body"]["title"] == "NCL plan"
+    cap = d["body"]["cap"]
+    assert cap["number"] == 1 and cap["documentType"] == "CAP"
+    assert len(cap["versionHistory"]) >= 1                       # includes the submission
+    assert any(c["body"] == "First thought" for c in cap["discussion"])
+
+
+def test_cip100_discussion_preserves_threading(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    parent = client.post("/proposals/1/comments", json={"body": "Parent"},
+                         headers=auth(AUTHOR_ADDR, "Alice")).json()
+    client.post("/proposals/1/comments", json={"body": "Reply", "parent_id": parent["id"]},
+                headers=auth(AUTHOR_ADDR, "Alice"))
+    disc = client.get("/proposals/1/cip100").json()["body"]["cap"]["discussion"]
+    reply = next(c for c in disc if c["body"] == "Reply")
+    assert reply["inReplyTo"] == parent["id"]
+
+
+def test_cip100_feed_lists_documents(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="One"), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.get("/cip100")
+    assert r.status_code == 200
+    body = r.json()
+    assert body["count"] == 1
+    assert body["documents"][0]["number"] == 1
+    assert body["documents"][0]["cip100"].endswith("/proposals/1/cip100")
+
+
+def test_cip100_missing_proposal_404(client, db):
+    assert client.get("/proposals/999/cip100").status_code == 404

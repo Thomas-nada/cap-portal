@@ -189,6 +189,7 @@ All other endpoints are unrestricted.
         {"name": "labels",        "description": "Lifecycle labels applied by editors"},
         {"name": "suggestions",   "description": "Editor-suggested edits, approved or rejected by the author"},
         {"name": "versions",      "description": "Immutable version history with hash-chained integrity"},
+        {"name": "cip100",        "description": "CIP-100 governance metadata (JSON-LD) for indexing by other tools"},
         {"name": "audit",         "description": "Append-only event log for every proposal"},
         {"name": "constitution",  "description": "Published constitution document versions"},
         {"name": "moderation",    "description": "Flag content for removal and admin review of cases"},
@@ -2047,6 +2048,167 @@ def get_version(number: int, version_num: int, db: Session = Depends(get_db)):
     if not v:
         raise HTTPException(status_code=404, detail="Version not found")
     return version_to_dict(v)
+
+
+# ── CIP-100 governance metadata (public, read-only) ─────────────────────────────
+# Exposes each proposal, its full version history and its entire comment thread as
+# a CIP-100-compatible JSON-LD document, so DReps, explorers and other governance
+# tools can index and cross-reference the CAP process. Purely additive: it reads
+# existing data and changes nothing about how proposals or comments work.
+
+_CIP100_CATEGORIES = ("Procedural", "Substantive", "Technical", "Interpretive", "Editorial", "Other")
+
+
+def _cip100_references(exhibits, portal_url):
+    refs = [{"@type": "Other", "label": "CAP Portal page", "uri": portal_url}]
+    for line in (exhibits or "").splitlines():
+        line = line.strip()
+        if line.startswith("http"):
+            refs.append({"@type": "Other", "label": "Reference", "uri": line})
+    return refs
+
+
+def _cip100_document(p: Proposal, versions, comments) -> dict:
+    """Map a proposal, its versions and its comments into a CIP-100 JSON-LD doc.
+    Proposal fields follow CIP-108 (title/abstract/motivation/rationale/references);
+    a small `cap` extension carries the number, category, status, the structured
+    revisions, the full version history and the whole (threaded) discussion."""
+    try:
+        s = json.loads(p.body) if p.body else {}
+        if not isinstance(s, dict):
+            s = {}
+    except Exception:
+        s = {}
+    labels = [l.name for l in p.labels]
+    category = next((l for l in labels if l in _CIP100_CATEGORIES), None)
+    status = next((l for l in labels if l in ("consultation", "ready", "done", "withdrawn")), None)
+    portal_url = f"https://cap.intersectmbo.org/#/detail/{p.number}"
+    latest = versions[0] if versions else None
+
+    version_history = []
+    for v in reversed(versions):  # oldest first, reads as a history
+        try:
+            vs = json.loads(v.body) if v.body else {}
+            if not isinstance(vs, dict):
+                vs = {}
+        except Exception:
+            vs = {}
+        version_history.append({
+            "version": v.version,
+            "changeSummary": v.change_summary,
+            "contentHash": v.content_hash,
+            "previousHash": v.previous_hash,
+            "date": to_iso(v.created_at),
+            "author": v.created_by_name,
+            "title": v.title,
+            # Full snapshot of that version, so a reader can view any version 1:1.
+            "content": {
+                "abstract": (vs.get("abstract") or "").strip() or None,
+                "motivation": (vs.get("motivation") or "").strip() or None,
+                "rationale": (vs.get("analysis") or "").strip() or None,
+                "references": _cip100_references(vs.get("exhibits"), portal_url),
+                "proposedRevisions": vs.get("revisions") or [],
+            },
+        })
+
+    discussion = []
+    for c in comments:  # oldest first
+        entry = {
+            "id": c.id,
+            "author": c.author_display_name or "Anonymous",
+            "date": to_iso(c.created_at),
+            "body": (c.body or "").strip(),
+        }
+        if c.parent_id:
+            entry["inReplyTo"] = c.parent_id   # preserves the thread shape
+        discussion.append(entry)
+
+    body = {
+        "title": p.title,
+        "abstract": (s.get("abstract") or "").strip() or None,
+        "motivation": (s.get("motivation") or "").strip() or None,
+        "rationale": (s.get("analysis") or "").strip() or None,
+        "references": _cip100_references(s.get("exhibits"), portal_url),
+        "cap": {
+            "number": p.number,
+            "documentType": p.type,
+            "category": category,
+            "status": status,
+            "sourceUrl": portal_url,
+            "submittedAt": to_iso(p.created_at),
+            "currentVersion": latest.version if latest else None,
+            "portalContentHash": latest.content_hash if latest else None,
+            "proposedRevisions": s.get("revisions") or [],
+            "versionHistory": version_history,
+            "discussion": discussion,
+        },
+    }
+    body = {k: v for k, v in body.items() if v not in (None, [], "")}
+
+    return {
+        "@context": {
+            "@language": "en-us",
+            "CIP100": "https://github.com/cardano-foundation/CIPs/blob/master/CIP-0100/README.md#",
+            "CIP108": "https://github.com/cardano-foundation/CIPs/blob/master/CIP-0108/README.md#",
+            "CIPCAP": "https://cap.intersectmbo.org/schema/cap/v1#",
+            "hashAlgorithm": "CIP100:hashAlgorithm",
+            "authors": {"@id": "CIP100:authors", "@container": "@set"},
+            "body": {"@id": "CIP108:body", "@context": {"cap": "CIPCAP:"}},
+        },
+        "hashAlgorithm": "blake2b-256",
+        # Author identity is the wallet that submitted the proposal. The CIP-100
+        # witness (a signature over the canonical document) is an optional signing
+        # step and is intentionally not fabricated here.
+        "authors": [{"name": p.author_display_name or "Anonymous"}],
+        "body": body,
+    }
+
+
+@app.get("/proposals/{number}/cip100", tags=["cip100"],
+         summary="CIP-100 metadata for a proposal",
+         description="Returns the proposal, its full version history and its entire comment "
+                     "thread as a CIP-100-compatible JSON-LD document. Read-only. **Public.**")
+def get_cip100(number: int, db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p or p.moderation_status != "visible":
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    versions = (db.query(ProposalVersion)
+                  .filter(ProposalVersion.proposal_number == number)
+                  .order_by(ProposalVersion.version.desc()).all())
+    comments = (db.query(Comment)
+                  .filter(Comment.proposal_number == number,
+                          Comment.moderation_status == "visible")
+                  .order_by(Comment.created_at.asc()).all())
+    doc = _cip100_document(p, versions, comments)
+    return _JSONResponse(content=doc, media_type="application/ld+json")
+
+
+@app.get("/cip100", tags=["cip100"],
+         summary="CIP-100 metadata feed",
+         description="Lists every public proposal with a link to its CIP-100 document so "
+                     "governance tools can discover and pull them. **Public.**")
+def cip100_feed(request: Request, db: Session = Depends(get_db)):
+    base = str(request.base_url).rstrip("/")
+    proposals = (db.query(Proposal)
+                   .filter(Proposal.moderation_status == "visible")
+                   .order_by(Proposal.number.asc()).all())
+    items = []
+    for p in proposals:
+        latest = (db.query(ProposalVersion)
+                    .filter(ProposalVersion.proposal_number == p.number)
+                    .order_by(ProposalVersion.version.desc()).first())
+        labels = [l.name for l in p.labels]
+        items.append({
+            "number": p.number,
+            "documentType": p.type,
+            "title": p.title,
+            "category": next((l for l in labels if l in _CIP100_CATEGORIES), None),
+            "status": next((l for l in labels if l in ("consultation", "ready", "done", "withdrawn")), None),
+            "updatedAt": to_iso(p.updated_at),
+            "contentHash": latest.content_hash if latest else None,
+            "cip100": f"{base}/proposals/{p.number}/cip100",
+        })
+    return _JSONResponse(content={"count": len(items), "documents": items})
 
 
 # ── Suggestions ───────────────────────────────────────────────────────────────
