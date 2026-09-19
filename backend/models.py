@@ -109,7 +109,7 @@ class ProposalVersion(Base):
     created_by = Column(String, nullable=False)
     created_by_name = Column(String, nullable=True)
     previous_hash = Column(String, nullable=True)   # hash of prior version ("genesis" for V1)
-    content_hash = Column(String, nullable=True)    # SHA-256(title|body|previous_hash)
+    content_hash = Column(String, nullable=True)    # blake2b-256 of canonical {title, body, previousHash}
 
     proposal = relationship("Proposal", back_populates="versions")
 

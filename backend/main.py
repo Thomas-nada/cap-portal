@@ -126,6 +126,52 @@ with engine.connect() as _conn:
         except Exception:
             pass
 
+
+def _version_content_hash(title, body, previous_hash):
+    """The content hash of one proposal version: blake2b-256 over a canonical
+    JSON of {title, body, previousHash}, with sorted keys and compact separators,
+    so the digest is independent of stored key order or JSON whitespace. `body` is
+    the version's structured snapshot (parsed from its JSON). This is the exact
+    rule the CIP-100 export's `hashAlgorithm: blake2b-256` refers to, documented
+    in docs/cip100-read-profile.md so a consumer can reproduce it."""
+    try:
+        parsed = json.loads(body) if body else {}
+    except Exception:
+        parsed = {}
+    canonical = json.dumps(
+        {"title": title or "", "body": parsed, "previousHash": previous_hash or "genesis"},
+        sort_keys=True, separators=(",", ":"), ensure_ascii=False,
+    )
+    return hashlib.blake2b(canonical.encode("utf-8"), digest_size=32).hexdigest()
+
+
+# One-time, idempotent recompute of the version-hash chain to blake2b-256.
+# Earlier versions were hashed with SHA-256 while the CIP-100 export declared
+# blake2b-256; this reconciles the stored chain to the declared algorithm. It
+# recomputes each proposal's chain in order and writes only the rows whose hash
+# actually changed, so after the first run it is a no-op.
+try:
+    with Session(engine) as _db:
+        _nums = [n for (n,) in _db.query(ProposalVersion.proposal_number).distinct().all()]
+        _changed = 0
+        for _num in _nums:
+            _vs = (_db.query(ProposalVersion)
+                     .filter(ProposalVersion.proposal_number == _num)
+                     .order_by(ProposalVersion.version.asc()).all())
+            _prev = "genesis"
+            for _v in _vs:
+                _h = _version_content_hash(_v.title, _v.body, _prev)
+                if _v.previous_hash != _prev or _v.content_hash != _h:
+                    _v.previous_hash = _prev
+                    _v.content_hash = _h
+                    _changed += 1
+                _prev = _h
+        if _changed:
+            _db.commit()
+except Exception:
+    pass
+
+
 def client_ip(request: Request) -> str:
     """Real client IP for rate limiting. Behind Render's proxy the socket peer
     (request.client.host) is always the proxy, so every user would otherwise
@@ -547,8 +593,7 @@ def create_version(db: Session, proposal: Proposal, actor: dict, summary: str):
     ).order_by(ProposalVersion.version.desc()).first()
     next_ver = (last.version + 1) if last else 1
     previous_hash = last.content_hash if last else "genesis"
-    payload = f"{proposal.title}|{proposal.body}|{previous_hash}"
-    content_hash = hashlib.sha256(payload.encode()).hexdigest()
+    content_hash = _version_content_hash(proposal.title, proposal.body, previous_hash)
     db.add(ProposalVersion(
         proposal_number=proposal.number,
         version=next_ver,
@@ -2058,6 +2103,21 @@ def get_version(number: int, version_num: int, db: Session = Depends(get_db)):
 
 _CIP100_CATEGORIES = ("Procedural", "Substantive", "Technical", "Interpretive", "Editorial", "Other")
 
+# Bumped when the shape or semantics of the CIP-100 export change in a way a
+# consumer must notice. Documented in docs/cip100-read-profile.md.
+_CIP100_PROFILE_VERSION = "1.0"
+
+
+def _canonical_text(s):
+    """The one text normalization the export applies before it is served or
+    hashed: line endings to LF, trailing whitespace stripped per line and at the
+    ends. Documented in the read profile so a consumer can reproduce byte-for-byte
+    what a content hash covers. Returns "" for empty input."""
+    if not s:
+        return ""
+    normalized = s.replace("\r\n", "\n").replace("\r", "\n")
+    return "\n".join(line.rstrip() for line in normalized.split("\n")).strip()
+
 
 def _cip100_references(exhibits, portal_url):
     refs = [{"@type": "Other", "label": "CAP Portal page", "uri": portal_url}]
@@ -2100,46 +2160,70 @@ def _cip100_document(p: Proposal, versions, comments) -> dict:
             "previousHash": v.previous_hash,
             "date": to_iso(v.created_at),
             "author": v.created_by_name,
+            "authorId": v.created_by,   # stable identifier (stake address)
             "title": v.title,
             # Full snapshot of that version, so a reader can view any version 1:1.
             "content": {
-                "abstract": (vs.get("abstract") or "").strip() or None,
-                "motivation": (vs.get("motivation") or "").strip() or None,
-                "rationale": (vs.get("analysis") or "").strip() or None,
-                "impact": (vs.get("impact") or "").strip() or None,   # used by CIS
+                "abstract": _canonical_text(vs.get("abstract")) or None,
+                "motivation": _canonical_text(vs.get("motivation")) or None,
+                "rationale": _canonical_text(vs.get("analysis")) or None,
+                "impact": _canonical_text(vs.get("impact")) or None,   # used by CIS
                 "references": _cip100_references(vs.get("exhibits"), portal_url),
                 "proposedRevisions": vs.get("revisions") or [],
             },
         })
 
     discussion = []
-    for c in comments:  # oldest first
-        entry = {
-            "id": c.id,
-            "author": c.author_display_name or "Anonymous",
-            "date": to_iso(c.created_at),
-            "body": (c.body or "").strip(),
-        }
+    for c in comments:  # oldest first; includes non-visible comments as tombstones
+        if c.moderation_status == "visible":
+            entry = {
+                "id": c.id,
+                "author": c.author_display_name or "Anonymous",
+                "authorId": c.author_stake_address,   # stable identifier
+                "date": to_iso(c.created_at),
+                "updatedAt": to_iso(c.updated_at),     # differs from date once edited
+                "status": "visible",
+                "body": _canonical_text(c.body),
+            }
+        else:
+            # Tombstone: enough to reconcile a removal and keep the thread shape,
+            # without exposing the author or content of a hidden comment.
+            entry = {
+                "id": c.id,
+                "status": c.moderation_status,
+                "updatedAt": to_iso(c.updated_at),
+            }
         if c.parent_id:
             entry["inReplyTo"] = c.parent_id   # preserves the thread shape
         discussion.append(entry)
 
     body = {
         "title": p.title,
-        "abstract": (s.get("abstract") or "").strip() or None,
-        "motivation": (s.get("motivation") or "").strip() or None,
-        "rationale": (s.get("analysis") or "").strip() or None,
-        "impact": (s.get("impact") or "").strip() or None,   # used by CIS
+        "abstract": _canonical_text(s.get("abstract")) or None,
+        "motivation": _canonical_text(s.get("motivation")) or None,
+        "rationale": _canonical_text(s.get("analysis")) or None,
+        "impact": _canonical_text(s.get("impact")) or None,   # used by CIS
         "references": _cip100_references(s.get("exhibits"), portal_url),
         "cap": {
+            "profileVersion": _CIP100_PROFILE_VERSION,
             "number": p.number,
             "documentType": p.type,
             "category": category,
             "status": status,
             "sourceUrl": portal_url,
             "submittedAt": to_iso(p.created_at),
+            "updatedAt": to_iso(p.updated_at),
             "currentVersion": latest.version if latest else None,
             "portalContentHash": latest.content_hash if latest else None,
+            # How authorship is proven today: the portal verified the author's
+            # wallet (CIP-8) at submission; the exported document itself does not
+            # yet carry a per-document witness signature. `id` fields hold the
+            # author's stake address, the stable identifier.
+            "authorship": {
+                "identifierType": "stakeAddress",
+                "walletVerifiedAtSubmission": True,
+                "documentSigned": False,
+            },
             "proposedRevisions": s.get("revisions") or [],
             "versionHistory": version_history,
             "discussion": discussion,
@@ -2158,10 +2242,11 @@ def _cip100_document(p: Proposal, versions, comments) -> dict:
             "body": {"@id": "CIP108:body", "@context": {"cap": "CIPCAP:"}},
         },
         "hashAlgorithm": "blake2b-256",
-        # Author identity is the wallet that submitted the proposal. The CIP-100
+        # Author identity is the wallet that submitted the proposal: `id` is the
+        # stable stake address, `name` the chosen display name. The CIP-100
         # witness (a signature over the canonical document) is an optional signing
-        # step and is intentionally not fabricated here.
-        "authors": [{"name": p.author_display_name or "Anonymous"}],
+        # step and is intentionally not fabricated here; see body.cap.authorship.
+        "authors": [{"name": p.author_display_name or "Anonymous", "id": p.author_stake_address}],
         "body": body,
     }
 
@@ -2177,9 +2262,11 @@ def get_cip100(number: int, db: Session = Depends(get_db)):
     versions = (db.query(ProposalVersion)
                   .filter(ProposalVersion.proposal_number == number)
                   .order_by(ProposalVersion.version.desc()).all())
+    # All comments, not only visible ones: the document renders visible comments
+    # in full and non-visible ones as tombstones (id + status, no body), so a
+    # consumer can detect a removal and keep the thread shape intact.
     comments = (db.query(Comment)
-                  .filter(Comment.proposal_number == number,
-                          Comment.moderation_status == "visible")
+                  .filter(Comment.proposal_number == number)
                   .order_by(Comment.created_at.asc()).all())
     doc = _cip100_document(p, versions, comments)
     # Public, read-only, no credentials: allow any origin so browser-based

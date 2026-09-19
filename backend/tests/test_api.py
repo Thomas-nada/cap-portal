@@ -1541,3 +1541,61 @@ def test_cip100_allows_any_origin(client, db):
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
     assert client.get("/proposals/1/cip100").headers.get("access-control-allow-origin") == "*"
     assert client.get("/cip100").headers.get("access-control-allow-origin") == "*"
+
+
+def test_cip100_exposes_stable_author_id_and_signature_state(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(title="NCL plan"), headers=auth(AUTHOR_ADDR, "Alice"))
+    client.post("/proposals/1/comments", json={"body": "First thought"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    d = client.get("/proposals/1/cip100").json()
+    # Stable identifier (stake address) alongside the display name.
+    assert d["authors"][0]["id"] == AUTHOR_ADDR
+    cap = d["body"]["cap"]
+    assert cap["profileVersion"]
+    # Signature state is explicit, not inferred: wallet-verified at submission,
+    # document not (yet) signed.
+    assert cap["authorship"]["identifierType"] == "stakeAddress"
+    assert cap["authorship"]["walletVerifiedAtSubmission"] is True
+    assert cap["authorship"]["documentSigned"] is False
+    assert cap["versionHistory"][0]["authorId"] == AUTHOR_ADDR
+    comment = next(c for c in cap["discussion"] if c.get("body") == "First thought")
+    assert comment["authorId"] == AUTHOR_ADDR
+    assert comment["status"] == "visible"
+    assert comment["updatedAt"]  # present, so edits are detectable
+
+
+def test_cip100_removed_comment_becomes_a_tombstone(client, db):
+    from models import Comment
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    parent = client.post("/proposals/1/comments", json={"body": "Parent"},
+                         headers=auth(AUTHOR_ADDR, "Alice")).json()
+    client.post("/proposals/1/comments", json={"body": "Reply", "parent_id": parent["id"]},
+                headers=auth(AUTHOR_ADDR, "Alice"))
+    # Moderate the parent out of view.
+    c = db.query(Comment).filter(Comment.id == parent["id"]).first()
+    c.moderation_status = "removed"
+    db.commit()
+
+    disc = client.get("/proposals/1/cip100").json()["body"]["cap"]["discussion"]
+    tomb = next(c for c in disc if c["id"] == parent["id"])
+    assert tomb["status"] == "removed"
+    assert "body" not in tomb and "author" not in tomb   # content and author withheld
+    # The reply is still there and still points at its parent: the thread shape
+    # survives a removal instead of orphaning the reply.
+    reply = next(c for c in disc if c.get("body") == "Reply")
+    assert reply["inReplyTo"] == parent["id"]
+
+
+def test_cip100_content_hash_is_blake2b256_and_chained(client, db):
+    import main
+    from models import ProposalVersion
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
+    v = (db.query(ProposalVersion)
+           .filter(ProposalVersion.proposal_number == 1, ProposalVersion.version == 1)
+           .first())
+    assert v.previous_hash == "genesis"
+    assert len(v.content_hash) == 64 and int(v.content_hash, 16) >= 0   # 32-byte hex digest
+    # Stored hash is exactly the documented blake2b-256 rule.
+    assert v.content_hash == main._version_content_hash(v.title, v.body, v.previous_hash)
