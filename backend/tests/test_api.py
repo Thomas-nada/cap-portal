@@ -1799,7 +1799,9 @@ def test_derive_revisions_ignores_markdown_editor_noise(client, db):
     kinds = [rv.get("type", "replace") for rv in revs]
     assert kinds == ["replace", "deletion", "replace"]
     assert revs[0]["proposed"].endswith("in order to participate in the governance of the Cardano Blockchain ecosystem. We invite all who share our values to join us for as long as they wish, while honoring the freedom to take another path. Hello")
-    assert revs[2]["original"] == "- External economic factors"
-    assert revs[2]["proposed"] == '- External economic factors — "quoted" [note]'   # "-" bullet, straight quotes, no escapes
+    # That bullet occurs several times in the base, so the revision is widened
+    # with the preceding (unchanged) line to make it unambiguous.
+    assert revs[2]["original"].endswith("\n\n- External economic factors") and base.count(revs[2]["original"]) == 1
+    assert revs[2]["proposed"].endswith('\n\n- External economic factors \u2014 "quoted" [note]')   # "-" bullet, straight quotes, no escapes
     modified, applied = main._apply_revisions(base, revs)
     assert applied == 3 and "\\" not in modified and "\n* " not in modified
