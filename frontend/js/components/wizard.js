@@ -356,11 +356,11 @@ function renderStep3(wizard) {
                 </div>
                 <div>
  <label class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2 block">New Text to Add:</label>
-                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value; window._cc(this, 'cc-rev-${idx}')" maxlength="20000"
+                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value; window._cc(this, 'cc-rev-${idx}')" maxlength="100000"
                         placeholder="Write the new text to insert after the selected passage..."
  class="w-full p-4 rounded-xl border-2 border-cyan-300 bg-white/80 text-slate-900 focus:border-cyan-500 outline-none transition-all min-h-32 font-mono text-sm"
                     >${escapeHtml(wizard.revisions?.[idx] || '')}</textarea>
-                    ${charCounter(`cc-rev-${idx}`, wizard.revisions?.[idx], 20000)}
+                    ${charCounter(`cc-rev-${idx}`, wizard.revisions?.[idx], 100000)}
                 </div>
             </div>
             ` : `
@@ -373,11 +373,11 @@ function renderStep3(wizard) {
                 </div>
                 <div>
  <label class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2 block">Proposed:</label>
-                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value; window._cc(this, 'cc-rev-${idx}')" maxlength="20000"
+                    <textarea oninput="(state.wizardData.revisions = state.wizardData.revisions || {})[${idx}] = this.value; window._cc(this, 'cc-rev-${idx}')" maxlength="100000"
                         placeholder="Write your proposed replacement text..."
  class="w-full p-4 rounded-xl border-2 border-green-300 bg-green-50 text-slate-900 focus:border-green-500 outline-none transition-all min-h-32 font-mono text-sm"
                     >${escapeHtml(wizard.revisions?.[idx] || '')}</textarea>
-                    ${charCounter(`cc-rev-${idx}`, wizard.revisions?.[idx], 20000)}
+                    ${charCounter(`cc-rev-${idx}`, wizard.revisions?.[idx], 100000)}
                 </div>
             </div>
             `).join('')}

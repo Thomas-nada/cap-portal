@@ -282,7 +282,9 @@ from fastapi.responses import JSONResponse as _JSONResponse
 # bloating the database.
 MAX_TITLE = 200
 MAX_LONG_TEXT = 20_000        # per proposal section / comment (~3,000 words)
-MAX_STRUCTURED_TOTAL = 100_000  # whole proposal body (all fields combined)
+MAX_REVISION_TEXT = 100_000   # per constitution revision (original / insert-after /
+                              # proposed text) — whole articles can be rewritten
+MAX_STRUCTURED_TOTAL = 1_000_000  # whole proposal body (all fields combined)
 MAX_REASON = 2_000            # moderation reasons (flag / remove)
 MAX_BUG_DESC = 5_000
 MAX_SCREENSHOT = 5_000_000    # base64 data URL (~3.7 MB image)
@@ -290,7 +292,7 @@ MAX_SCREENSHOTS = 5           # per bug report
 MAX_NAME = 100
 MAX_CO_AUTHORS = 20           # co-authors per proposal
 MAX_DRAFTS_PER_AUTHOR = 25    # saved wizard drafts per wallet
-MAX_DRAFT_TOTAL = 200_000     # whole draft blob (wizard state is larger than the
+MAX_DRAFT_TOTAL = 2_000_000   # whole draft blob (wizard state is larger than the
                               # final structured body: it also holds selections, etc.)
 
 # Mainnet stake address (bech32, hrp "stake"). Used to validate co-author ids.
@@ -328,12 +330,13 @@ def _validate_structured(v):
         val = v.get(key)
         if isinstance(val, str) and len(val) > MAX_LONG_TEXT:
             raise ValueError(f"The '{key}' field is too long (max {MAX_LONG_TEXT:,} characters)")
-    # Each structured revision (original passage + proposed text) is a section too.
+    # Each structured revision (original passage + proposed text) gets its own,
+    # larger cap: a single change may replace or insert a whole article.
     for i, rev in enumerate(v.get("revisions") or []):
         if isinstance(rev, dict):
             for rk, rv in rev.items():
-                if isinstance(rv, str) and len(rv) > MAX_LONG_TEXT:
-                    raise ValueError(f"Revision #{i + 1} ('{rk}') is too long (max {MAX_LONG_TEXT:,} characters)")
+                if isinstance(rv, str) and len(rv) > MAX_REVISION_TEXT:
+                    raise ValueError(f"Revision #{i + 1} ('{rk}') is too long (max {MAX_REVISION_TEXT:,} characters)")
     # Co-authors are identified by mainnet stake address. This runs only on
     # create/edit, so existing proposals (all with empty co_authors) are never
     # re-validated and cannot be broken by it.
@@ -2356,7 +2359,7 @@ def list_suggestions(number: int, db: Session = Depends(get_db)):
 
 class SuggestionCreate(BaseModel):
     field: str = Field(max_length=100)
-    suggested_value: str = Field(max_length=MAX_LONG_TEXT)
+    suggested_value: str = Field(max_length=MAX_REVISION_TEXT)
     reason: Optional[str] = Field(default=None, max_length=MAX_REASON)
 
 
@@ -2368,6 +2371,9 @@ def create_suggestion(request: Request, number: int, req: SuggestionCreate,
     rev_match = _REV_FIELD_RE.match(req.field)
     if req.field not in SUGGESTION_FIELDS and not rev_match:
         raise HTTPException(status_code=400, detail=f"Invalid field. Must be one of: {', '.join(SUGGESTION_FIELDS)}, or a revision text field (revisions[i].proposed)")
+    # Only revision text gets the larger cap; ordinary sections keep MAX_LONG_TEXT.
+    if not rev_match and len(req.suggested_value) > MAX_LONG_TEXT:
+        raise HTTPException(status_code=400, detail=f"Suggested value is too long (max {MAX_LONG_TEXT:,} characters)")
 
     p = db.query(Proposal).filter(Proposal.number == number).first()
     if not p:

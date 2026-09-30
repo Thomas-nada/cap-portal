@@ -1283,6 +1283,8 @@ window.openSuggestModal = (field) => {
     else current = structured[field] || '';
     const subLabels = { proposed: 'Proposed', original: 'Original', insert_after: 'Insert-after' };
     const label = rm ? `Revision ${Number(rm[1]) + 1} · ${subLabels[rm[2]]}` : (SUGGESTION_FIELD_LABELS[field] || field);
+    // Revision text (constitution changes) allows 100,000 characters; other sections 20,000.
+    const maxLen = rm ? 100000 : 20000;
 
     const existing = document.getElementById('suggest-modal-backdrop');
     if (existing) existing.remove();
@@ -1310,9 +1312,9 @@ window.openSuggestModal = (field) => {
             </div>` : ''}
  <div class="mb-4">
  <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Suggested Value</p>
-                <textarea id="suggest-value" rows="6" placeholder="Enter your suggested text…" maxlength="20000" oninput="window._cc(this, 'cc-suggest-value')"
+                <textarea id="suggest-value" rows="6" placeholder="Enter your suggested text…" maxlength="${maxLen}" oninput="window._cc(this, 'cc-suggest-value')"
  class="w-full px-4 py-3 rounded-2xl border-2 border-slate-200 bg-white/80 text-slate-900 text-sm focus:border-blue-500 outline-none resize-none transition-all">${escHtml(current)}</textarea>
- <p class="text-sm text-slate-400 text-right mt-1"><span id="cc-suggest-value">${String(current || '').length.toLocaleString()}</span> / 20,000 characters</p>
+ <p class="text-sm text-slate-400 text-right mt-1"><span id="cc-suggest-value">${String(current || '').length.toLocaleString()}</span> / ${maxLen.toLocaleString()} characters</p>
             </div>
  <div class="mb-6">
  <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Reason <span class="text-slate-300">(optional)</span></p>

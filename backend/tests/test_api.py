@@ -678,12 +678,35 @@ def test_oversized_input_rejected_with_clean_message(client, db):
                     headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 400
     assert "too long" in r.json()["detail"]
-    # Oversized proposal overall (each field under 20k, combined over 100k)
-    big = {f"extra_{i}": "z" * 19_000 for i in range(6)}
+    # Oversized proposal overall (each field under 20k, combined over 1M)
+    big = {f"extra_{i}": "z" * 19_000 for i in range(53)}
     r = client.post("/proposals", json={"title": "ok", "type": "CAP", "structured": {"abstract": "a", **big}},
                     headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 400
     assert "too large" in r.json()["detail"]
+
+
+def test_revision_text_allows_100k_characters(client, db):
+    """Constitution changes (Step 3 of the wizard) get a roomier cap than other
+    sections: a whole article can be rewritten or inserted in one revision."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    revs = [
+        {"original": "Article I", "proposed": "p" * 100_000, "section": "I"},
+        {"type": "addition", "insert_after": "Article II", "proposed": "a" * 100_000, "section": "II"},
+    ]
+    r = client.post("/proposals", json=proposal_body(revisions=revs), headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 201
+    got = client.get("/proposals/1").json()["structured"]["revisions"]
+    assert len(got[0]["proposed"]) == 100_000
+    assert len(got[1]["proposed"]) == 100_000
+
+
+def test_revision_text_over_100k_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    revs = [{"original": "Article I", "proposed": "p" * 100_001, "section": "I"}]
+    r = client.post("/proposals", json=proposal_body(revisions=revs), headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert "Revision #1" in r.json()["detail"] and "too long" in r.json()["detail"]
 
 
 def test_oversized_comment_rejected(client, db):
@@ -1206,6 +1229,26 @@ def test_suggest_insert_after_only_on_addition(client, db):
     assert ok.status_code == 201
 
 
+def test_suggestion_size_caps_per_field(client, db):
+    """Revision text suggestions get the 100k revision cap; ordinary sections keep 20k."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    ok = client.post("/proposals/1/suggestions",
+                     json={"field": "revisions[0].proposed", "suggested_value": "p" * 100_000},
+                     headers=auth(EDITOR_ADDR))
+    assert ok.status_code == 201, ok.text
+    too_big = client.post("/proposals/1/suggestions",
+                          json={"field": "revisions[0].proposed", "suggested_value": "p" * 100_001},
+                          headers=auth(EDITOR_ADDR))
+    assert too_big.status_code == 400
+    section = client.post("/proposals/1/suggestions",
+                          json={"field": "motivation", "suggested_value": "m" * 20_001},
+                          headers=auth(EDITOR_ADDR))
+    assert section.status_code == 400
+    assert "too long" in section.json()["detail"]
+
+
 def test_suggest_revision_out_of_range_rejected(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     seed_editor(db)
@@ -1400,7 +1443,7 @@ def test_drafts_are_private_to_owner(client, db):
 
 def test_oversized_draft_rejected(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
-    big = {"blob": "q" * 250_000}
+    big = {"blob": "q" * 2_500_000}
     r = client.post("/drafts", json={"data": big}, headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code in (400, 422)
 
