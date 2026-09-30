@@ -1642,3 +1642,134 @@ def test_cip100_content_hash_is_blake2b256_and_chained(client, db):
     assert len(v.content_hash) == 64 and int(v.content_hash, 16) >= 0   # 32-byte hex digest
     # Stored hash is exactly the documented blake2b-256 rule.
     assert v.content_hash == main._version_content_hash(v.title, v.body, v.previous_hash)
+
+
+# ── Upload an edited constitution → derived revisions ─────────────────────────
+
+def _base_text():
+    return main._base_constitution_content()
+
+
+def test_derive_revisions_requires_auth(client, db):
+    r = client.post("/constitution/derive-revisions", json={"content": "x"})
+    assert r.status_code in (401, 403)
+
+
+def test_derive_revisions_from_edited_copy(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    base = _base_text()
+    lines = base.split("\n")
+    edited = lines[:]
+    i_para = next(i for i, l in enumerate(lines) if l.startswith("Cardano is a decentralized"))
+    edited[i_para] = edited[i_para].replace("decentralized ecosystem", "decentralised ecosystem")
+    # A paragraph well away from the edited one (adjacent changes merge into one
+    # replacement, which is correct but would not count as a separate deletion).
+    i_sec = next(i for i, l in enumerate(lines) if l.startswith("### Section 1 The Cardano Community"))
+    i_del = i_sec + 2
+    assert lines[i_del].strip() and not lines[i_del].startswith("#")
+    del edited[i_del]
+    edited.append("A brand new closing paragraph.")
+    r = client.post("/constitution/derive-revisions", json={"content": "\r\n".join(edited)},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200, r.text
+    body = r.json()
+    assert body["counts"] == {"replacements": 1, "additions": 1, "deletions": 1}
+    assert body["warnings"] == []
+    kinds = [rv.get("type", "replace") for rv in body["revisions"]]
+    assert kinds == ["replace", "deletion", "addition"]
+    rep, dele, add = body["revisions"]
+    assert rep["original"].startswith("Cardano is a decentralized") and "decentralised" in rep["proposed"]
+    assert rep["section"] == "PREAMBLE"
+    assert dele["original"] == lines[i_del].strip() and dele["proposed"] == ""
+    assert dele["section"].startswith("ARTICLE II") and "Section 1" in dele["section"]
+    assert add["proposed"] == "A brand new closing paragraph." and add["insert_after"]
+    # Submitting the derived revisions reproduces the edited text in the draft.
+    p = client.post("/proposals", json=proposal_body(revisions=body["revisions"]), headers=auth(AUTHOR_ADDR, "Alice"))
+    assert p.status_code == 201, p.text
+    g = client.post("/proposals/1/generate-draft-constitution", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert g.status_code == 200 and g.json()["applied"] == 3
+    draft = client.get("/constitution/cap-1-proposed.md").json()["content"]
+    norm = lambda t: [l.strip() for l in t.split("\n") if l.strip()]
+    assert norm(draft) == norm("\n".join(edited))
+    assert "\n\n\n" not in draft  # the deletion left no empty line behind
+
+
+def test_derive_revisions_disambiguates_repeated_lines(client, db):
+    """A changed line that occurs several times in the base (e.g. '##### GUARDRAILS')
+    is widened with preceding context so the draft applies it in the right place."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    base = _base_text()
+    lines = base.split("\n")
+    dups = [i for i, l in enumerate(lines) if l == "##### GUARDRAILS"]
+    assert len(dups) > 2
+    edited = lines[:]
+    edited[dups[3]] = "##### GUARDRAILS (revised)"
+    r = client.post("/constitution/derive-revisions", json={"content": "\n".join(edited)},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200, r.text
+    (rev,) = r.json()["revisions"]
+    assert base.count(rev["original"]) == 1
+    modified, applied = main._apply_revisions(base, [rev])
+    assert applied == 1
+    assert modified.split("\n") == edited
+
+
+def test_derive_revisions_rejects_unrelated_file(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = client.post("/constitution/derive-revisions", json={"content": "# Something else\n\nNot the constitution.\n"},
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert "does not look like" in r.json()["detail"]
+    r = client.post("/constitution/derive-revisions", json={"content": "   \n"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    r = client.post("/constitution/derive-revisions", json={"content": _base_text()}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200 and r.json()["revisions"] == []
+
+
+def test_derive_revisions_warns_on_oversized_change(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    edited = _base_text() + "\n\n" + ("x" * 100_001) + "\n"
+    r = client.post("/constitution/derive-revisions", json={"content": edited}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    assert len(r.json()["warnings"]) == 1
+
+
+def test_derive_revisions_upload_too_large(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = client.post("/constitution/derive-revisions", json={"content": "x" * 1_000_001}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+
+
+def test_deletion_revision_must_name_a_passage(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = client.post("/proposals", json=proposal_body(revisions=[{"type": "deletion", "original": "", "proposed": ""}]),
+                    headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400
+    assert "deletion" in r.json()["detail"]
+
+
+def test_remove_span_keeps_surrounding_spacing():
+    text = "a\n\nb\n\nc\n"
+    s = text.find("b")
+    assert main._remove_span(text, s, s + 1) == "a\n\nc\n"
+    tight = "- a\n- b\n- c\n"
+    s = tight.find("- b")
+    assert main._remove_span(tight, s, s + 3) == "- a\n- c\n"
+    last = "a\n\nb\n"
+    s = last.find("b")
+    assert main._remove_span(last, s, s + 1) == "a\n"
+    first = "a\n\nb\n"
+    assert main._remove_span(first, 0, 1) == "b\n"
+
+
+def test_suggest_proposed_on_deletion_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    revs = [{"type": "deletion", "original": "OLD original text", "proposed": "", "section": "Article II"}]
+    client.post("/proposals", json=proposal_body(revisions=revs), headers=auth(AUTHOR_ADDR, "Alice"))
+    bad = client.post("/proposals/1/suggestions", json={"field": "revisions[0].proposed", "suggested_value": "x"},
+                      headers=auth(EDITOR_ADDR))
+    assert bad.status_code == 400
+    ok = client.post("/proposals/1/suggestions", json={"field": "revisions[0].original", "suggested_value": "x"},
+                     headers=auth(EDITOR_ADDR))
+    assert ok.status_code == 201

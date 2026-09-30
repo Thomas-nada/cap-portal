@@ -4,7 +4,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          createComment, updateComment,
          flagProposal, flagComment, fetchModerationCases, moderationRemove, moderationReject,
          fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
-         fetchConstitutionVersions, fetchConstitutionContent,
+         fetchConstitutionVersions, fetchConstitutionContent, deriveRevisionsFromUpload,
          fetchEditors, addEditor, removeEditor, claimFirstEditor,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin, resetProposals,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
@@ -21,6 +21,7 @@ import { connectAndAuth, logout, getSavedSession, renderWalletModal,
          getAvailableWallets, walletErrorMessage } from './wallet.js';
 
 import { DEV_MODE, API_BASE } from './config.js';
+import { revisionHasEffect, countEffectiveRevisions, selectionToRevision } from './revisions.js';
 import { computeStageCounts } from './lifecycle.js';
 
 import { renderNav }          from './components/nav.js';
@@ -835,10 +836,7 @@ window.submitWizard = async () => {
         analysis: w.analysis || '',
         impact: w.impact || '',
         exhibits: w.exhibits || '',
-        revisions: (w.selectedText || []).map((sel, i) => sel.kind === 'add_after'
-            ? { type: 'addition', insert_after: sel.text || '', proposed: (w.revisions || {})[i] || '', section: sel.sectionId || '' }
-            : { original: sel.text || '', proposed: (w.revisions || {})[i] || '', section: sel.sectionId || '' }
-        ),
+        revisions: (w.selectedText || []).map((sel, i) => selectionToRevision(sel, (w.revisions || {})[i])),
         co_authors: (Array.isArray(w.coAuthors) ? w.coAuthors : (w.coAuthors ? [w.coAuthors] : [])).filter(Boolean),
     };
     // Disable the button + show a loader so a slow request can't be double-clicked.
@@ -870,7 +868,7 @@ window.submitWizard = async () => {
                 if (newCat) { try { await addLabel(editNumber, newCat); } catch (_) {} }
             }
             // Refresh the derived draft so the diff reflects any edited revisions.
-            const hasRevisionsE = structured.revisions?.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed));
+            const hasRevisionsE = structured.revisions?.some(revisionHasEffect);
             if (hasRevisionsE) {
                 try { await generateDraftConstitution(editNumber); state.constitutionVersions = []; state.constitutionCurrentVersion = null; } catch (_) {}
             }
@@ -896,7 +894,7 @@ window.submitWizard = async () => {
             try { await deleteDraft(w.draftId); await refreshDrafts(); } catch (_) {}
         }
         // Generate draft constitution if proposal includes revisions
-        const hasRevisions = structured.revisions?.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed));
+        const hasRevisions = structured.revisions?.some(revisionHasEffect);
         if (hasRevisions) {
             try {
                 await generateDraftConstitution(proposal.number);
@@ -1145,7 +1143,12 @@ window.openVersionModal = async (number, version) => {
         // Render revisions the same way as the proposal detail
         const renderRevisions = (revisions) => {
             if (!revisions?.length) return '';
-            return revisions.map(r => r.type === 'addition' ? `
+            return revisions.map(r => r.type === 'deletion' ? `
+ <div class="rounded-2xl border border-red-100 overflow-hidden mb-4">
+ ${r.section ? `<div class="px-5 py-2 bg-red-50 text-sm font-black text-red-400 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
+ <div class="p-5"><div class="text-sm font-black uppercase tracking-widest text-red-500 mb-2">Removed</div>
+ <div class="text-sm text-slate-500 font-mono leading-relaxed line-through">${esc(r.original || '')}</div></div>
+            </div>` : r.type === 'addition' ? `
  <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
  ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest">${esc(r.section)}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
@@ -1764,9 +1767,7 @@ window.wizardPreviewHtml = () => {
         type, category: w.category || '', abstract: w.abstract || '',
         motivation: w.motivation || '', analysis: w.analysis || '',
         impact: w.impact || '', exhibits: w.exhibits || '',
-        revisions: (w.selectedText || []).map((sel, i) => sel.kind === 'add_after'
-            ? { type: 'addition', insert_after: sel.text || '', proposed: w.revisions?.[i] || '', section: sel.sectionId || '' }
-            : { original: sel.text || '', proposed: w.revisions?.[i] || '', section: sel.sectionId || '' }),
+        revisions: (w.selectedText || []).map((sel, i) => selectionToRevision(sel, w.revisions?.[i])),
     };
     return buildPreviewHtml(w.title || '', structured, type);
 };
@@ -1833,7 +1834,7 @@ function structuredToWizard(p) {
         text: r.type === 'addition' ? (r.insert_after || '') : (r.original || ''),
         sectionId: r.section || '',
         type: 'CAP',
-        kind: r.type === 'addition' ? 'add_after' : 'replace',
+        kind: r.type === 'addition' ? 'add_after' : r.type === 'deletion' ? 'delete' : 'replace',
     }));
     const revisions = {};
     revs.forEach((r, i) => { revisions[i] = r.proposed || ''; });
@@ -2440,20 +2441,93 @@ window.previewWizard = () => {
         analysis: w.analysis || '',
         impact: w.impact || '',
         exhibits: w.exhibits || '',
-        revisions: (w.selectedText || []).map((sel, idx) => sel.kind === 'add_after'
-            ? { type: 'addition', insert_after: sel.text || '', proposed: w.revisions?.[idx] || '', section: sel.sectionId || '' }
-            : { original: sel.text || '', proposed: w.revisions?.[idx] || '', section: sel.sectionId || '' }
-        ),
+        revisions: (w.selectedText || []).map((sel, idx) => selectionToRevision(sel, w.revisions?.[idx])),
     };
     showPreviewOverlay(w.title || '', structured, type);
 };
 
 window.removeWizardSelection = (idx) => {
     const sel = (state.wizardData.selectedText || []).filter((_, i) => i !== idx);
-    state.wizardData = { ...state.wizardData, selectedText: sel };
+    // Proposed texts are keyed by selection index, so close the gap left by the
+    // removed one or every later revision would shift onto the wrong passage.
+    const old = state.wizardData.revisions || {};
+    const revisions = {};
+    Object.keys(old).map(Number).sort((a, b) => a - b).forEach(i => {
+        if (i < idx) revisions[i] = old[i];
+        else if (i > idx) revisions[i - 1] = old[i];
+    });
+    state.wizardData = { ...state.wizardData, selectedText: sel, revisions, uploadSummary: null };
     if (!sel.length) state.wizardSelPanelOpen = false;  // nothing left to list
     scheduleDraftAutosave();
     updateUI();
+};
+
+// ── Wizard Step 2: upload an edited copy of the constitution ──────────────────
+// Alternative to highlighting passages one by one: the author downloads the
+// current constitution, edits it in their own editor, and uploads the result.
+// The backend diffs it and returns the differences as revisions, which become
+// the wizard's selections (with their proposed text prefilled).
+
+window.downloadBaseConstitutionMd = async () => {
+    try {
+        if (!state.constitutionVersions.length) await loadConstitution();
+        const base = state.constitutionVersions.find(v => v.isCurrent) || state.constitutionVersions[0];
+        if (!base) return;
+        if (!base.content) base.content = (await fetchConstitutionContent(base.filename)).content;
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([base.content], { type: 'text/markdown' }));
+        a.download = base.filename || 'constitution.md';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 1000);
+    } catch (e) {
+        state.wizardError = e.message; updateUI();
+    }
+};
+
+window.uploadEditedConstitution = async (input) => {
+    const file = input.files?.[0];
+    input.value = '';  // allow re-uploading the same file after fixing it
+    if (!file) return;
+    if (file.size > 1_000_000) {
+        state.wizardError = 'That file is too large (max 1 MB). Upload the edited constitution markdown only.';
+        updateUI(); return;
+    }
+    const existing = state.wizardData.selectedText || [];
+    if (existing.length && !confirm(`Replace your ${existing.length} existing selection${existing.length === 1 ? '' : 's'} with the changes found in this file?`)) return;
+    state.loading = { ...state.loading, deriving: true };
+    state.wizardError = null;
+    updateUI();
+    try {
+        const content = await file.text();
+        const res = await deriveRevisionsFromUpload(content);
+        const revs = res.revisions || [];
+        if (!revs.length) {
+            state.wizardError = 'No differences found between that file and the current constitution.';
+            return;
+        }
+        const stamp = Date.now();
+        const selectedText = revs.map((r, i) => ({
+            id: `sel-upload-${stamp}-${i}`,
+            text: r.type === 'addition' ? (r.insert_after || '') : (r.original || ''),
+            sectionId: r.section || '',
+            type: 'CAP',
+            kind: r.type === 'addition' ? 'add_after' : r.type === 'deletion' ? 'delete' : 'replace',
+        }));
+        const revisions = {};
+        revs.forEach((r, i) => { revisions[i] = r.proposed || ''; });
+        state.wizardData = {
+            ...state.wizardData, type: 'CAP', selectedText, revisions,
+            uploadSummary: { filename: file.name, counts: res.counts || {}, warnings: res.warnings || [] },
+        };
+        state.wizardSelPanelOpen = false;
+        scheduleDraftAutosave();
+    } catch (e) {
+        if (e.message === 'AUTH_EXPIRED') { state.wizardError = 'Your session expired — connect your wallet again and retry the upload.'; }
+        else state.wizardError = e.message;
+    } finally {
+        state.loading = { ...state.loading, deriving: false };
+        updateUI();
+    }
 };
 
 // Toggle the selections panel that pops up from the wizard step-2 bottom bar.

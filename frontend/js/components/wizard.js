@@ -1,5 +1,59 @@
 import { renderSingleView, initConstitutionSelection, CONSTITUTION_SECTIONS } from './constitution.js';
 
+// Pill naming what a selection does to the passage. `dark` is the variant for
+// the bottom bar's panel.
+function kindBadge(kind, dark = false) {
+    const label = kind === 'add_after' ? 'Add After' : kind === 'delete' ? 'Delete' : 'Replace';
+    const cls = dark
+        ? (kind === 'add_after' ? 'bg-cyan-500/25 text-cyan-200' : kind === 'delete' ? 'bg-red-500/25 text-red-200' : 'bg-white/15 text-white/70')
+        : (kind === 'add_after' ? 'bg-cyan-100 text-cyan-600' : kind === 'delete' ? 'bg-red-100 text-red-600' : 'bg-slate-100 text-slate-500');
+    return `<span class="flex-shrink-0 text-sm font-black px-3 py-1 rounded-full uppercase tracking-wider ${cls}">${label}</span>`;
+}
+
+// Step 2 alternative to highlighting: download the current constitution, edit
+// it in any editor, upload the result. The backend diffs it and the differences
+// become the selections below (with proposed text prefilled for Step 3).
+function renderUploadPanel(wizard, state) {
+    const busy = !!state.loading?.deriving;
+    const sum = wizard.uploadSummary;
+    const c = sum?.counts || {};
+    const parts = [];
+    if (c.replacements) parts.push(`${c.replacements} replacement${c.replacements === 1 ? '' : 's'}`);
+    if (c.additions)    parts.push(`${c.additions} addition${c.additions === 1 ? '' : 's'}`);
+    if (c.deletions)    parts.push(`${c.deletions} deletion${c.deletions === 1 ? '' : 's'}`);
+    return `
+ <div class="bg-slate-50 p-6 rounded-2xl border border-slate-200 mb-8">
+ <div class="flex items-start gap-3">
+ <i data-lucide="file-diff" class="w-5 h-5 text-slate-500 mt-1 flex-shrink-0"></i>
+ <div class="flex-1 min-w-0">
+ <p class="font-bold text-slate-900 mb-1">Or upload an edited copy of the Constitution</p>
+ <p class="text-sm text-slate-600 mb-4">Download the current text, make your changes in any editor that keeps it as plain markdown, then upload the file. Every changed, added or removed passage becomes a selection below, with your new wording already filled in.</p>
+ <div class="flex flex-wrap items-center gap-3">
+                    <button type="button" onclick="window.downloadBaseConstitutionMd()"
+ class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-slate-200 bg-white text-slate-700 hover:border-slate-400 text-sm font-black uppercase tracking-widest transition-all">
+ <i data-lucide="download" class="w-4 h-4"></i> Download current (.md)
+                    </button>
+ <label class="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all cursor-pointer ${busy ? 'opacity-60 pointer-events-none' : ''}">
+                        ${busy
+                            ? `<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> Comparing…`
+                            : `<i data-lucide="upload" class="w-4 h-4"></i> Upload edited (.md)`}
+                        <input type="file" accept=".md,.markdown,.txt,text/markdown,text/plain" class="hidden"
+                               onchange="window.uploadEditedConstitution(this)" ${busy ? 'disabled' : ''}>
+                    </label>
+                </div>
+                ${sum ? `
+ <div class="mt-4 p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">
+ <span class="font-black">${escapeHtml(sum.filename || 'Upload')}:</span> ${parts.length ? parts.join(', ') : 'no changes'} found. Review the selections below, remove any you do not want, then continue to write or adjust the proposed text.
+                </div>` : ''}
+                ${(sum?.warnings || []).map(w => `
+ <div class="mt-3 flex items-start gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
+ <i data-lucide="alert-triangle" class="w-4 h-4 mt-0.5 flex-shrink-0"></i><span>${escapeHtml(w)}</span>
+                </div>`).join('')}
+            </div>
+        </div>
+    </div>`;
+}
+
 export function renderWizard(state) {
     if (state.wizardSubmitted) return renderSuccess(state.wizardSubmitted);
     const step = state.wizardStep || 1;
@@ -123,7 +177,7 @@ function renderWizardBar(step, wizard, state) {
                    </button>
                    <button onclick="document.getElementById('constitution-col')?.scrollIntoView({behavior:'smooth',block:'start'})"
  class="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-colors">+ Add more</button>`
-                : `<span class="text-white/80 font-medium text-sm truncate text-center">Highlight text in the Constitution below, then choose Replace or Add After</span>`}
+                : `<span class="text-white/80 font-medium text-sm truncate text-center">Highlight text in the Constitution below, or upload an edited copy</span>`}
         </div>` : `<div class="flex-1"></div>`;
 
     const panel = open ? `
@@ -131,7 +185,7 @@ function renderWizardBar(step, wizard, state) {
  <div class="space-y-2 pb-1">
             ${(wizard.selectedText || []).map((sel, idx) => `
  <div class="flex items-start gap-3 p-3 rounded-xl bg-white/10 border border-white/10">
- <span class="flex-shrink-0 text-sm font-black px-2.5 py-0.5 rounded-full uppercase tracking-wider ${sel.kind === 'add_after' ? 'bg-cyan-500/25 text-cyan-200' : 'bg-white/15 text-white/70'}">${sel.kind === 'add_after' ? 'Add After' : 'Replace'}</span>
+ ${kindBadge(sel.kind, true)}
  <p class="flex-1 min-w-0 text-sm text-white/85 italic leading-snug line-clamp-2">"${escapeHtml(sel.text)}"</p>
                 <button onclick="window.removeWizardSelection(${idx})" title="Remove selection"
  class="flex-shrink-0 text-red-300 hover:text-red-200 hover:bg-white/10 p-1.5 rounded-lg transition-all">
@@ -281,10 +335,12 @@ function renderStep2(wizard, state) {
  <i data-lucide="mouse-pointer-2" class="w-5 h-5 text-blue-600 mt-1 flex-shrink-0"></i>
                 <div>
  <p class="font-bold text-slate-900 mb-2">Highlight the exact text you want to change in the Constitution below.</p>
- <p class="text-sm text-slate-600">When you release, choose <span class="font-black">Replace</span> to swap the wording, or <span class="font-black">Add After</span> to insert new text after it. Repeat to add more selections.</p>
+ <p class="text-sm text-slate-600">When you release, choose <span class="font-black">Replace</span> to swap the wording, <span class="font-black">Add After</span> to insert new text after it, or <span class="font-black">Delete</span> to remove it. Repeat to add more selections.</p>
                 </div>
             </div>
         </div>
+
+        ${renderUploadPanel(wizard, state)}
 
         ${selected.length > 0 ? `
  <div class="space-y-3 mb-8">
@@ -294,9 +350,7 @@ function renderStep2(wizard, state) {
  <div class="flex items-start justify-between gap-4 mb-2">
  <div class="flex items-center gap-2">
  <span class="text-sm font-black px-3 py-1 bg-blue-100 text-blue-600 rounded-full uppercase tracking-wider">Selection ${idx+1}</span>
-                        ${sel.kind === 'add_after'
- ? `<span class="text-sm font-black px-3 py-1 bg-cyan-100 text-cyan-600 rounded-full uppercase tracking-wider">Add After</span>`
- : `<span class="text-sm font-black px-3 py-1 bg-slate-100 text-slate-500 rounded-full uppercase tracking-wider">Replace</span>`}
+                        ${kindBadge(sel.kind)}
                     </div>
  <button onclick="window.removeWizardSelection(${idx})" class="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all">
  <i data-lucide="x" class="w-4 h-4"></i>
@@ -343,10 +397,20 @@ function renderStep3(wizard) {
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
  <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-4">Step 3: Propose changes</h2>
- <p class="text-slate-500 mb-8">Write your proposed text for each selection.</p>
+ <p class="text-slate-500 mb-8">Write your proposed text for each selection. Selections that came from an uploaded file are already filled in — adjust them if needed.</p>
         ${wizard.selectedText?.length > 0 ? `
  <div class="space-y-8">
-            ${wizard.selectedText.map((sel, idx) => sel.kind === 'add_after' ? `
+            ${wizard.selectedText.map((sel, idx) => sel.kind === 'delete' ? `
+ <div class="p-8 rounded-2xl bg-slate-50 border border-red-200 ">
+ <div class="mb-4">
+ <label class="text-sm font-black uppercase tracking-widest text-red-500 mb-2 block">Delete:</label>
+ <div class="p-4 bg-red-50 rounded-xl border-l-4 border-red-500">
+ <p class="text-sm text-slate-600 italic line-through whitespace-pre-wrap">${escapeHtml(sel.text)}</p>
+                    </div>
+                </div>
+ <p class="text-sm text-slate-500">This passage will be removed from the Constitution. There is nothing to write here — go back to Step 2 if you want to replace it with new wording instead.</p>
+            </div>
+            ` : sel.kind === 'add_after' ? `
  <div class="p-8 rounded-2xl bg-slate-50 border border-cyan-200 ">
  <div class="mb-4">
  <label class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2 block">Insert After:</label>
@@ -531,7 +595,7 @@ export function validateStep(step, wizard) {
         case 'propose': {
             const sels = wizard.selectedText || [];
             const revs = wizard.revisions || {};
-            if (sels.some((_, idx) => !(revs[idx] || '').trim()))
+            if (sels.some((sel, idx) => sel.kind !== 'delete' && !(revs[idx] || '').trim()))
                 return 'Write proposed text for every selection before continuing.';
             return null;
         }
@@ -562,8 +626,12 @@ export function buildMarkdown(wizard) {
         md += `### Structured Revisions (Contextual)\n\n`;
         wizard.selectedText.forEach((sel, idx) => {
             md += `#### Revision #${idx+1}: ${sel.section || 'General'}\n`;
-            md += `**Original Text:**\n> ${sel.text}\n\n`;
-            md += `**Proposed Revision:**\n${wizard.revisions?.[idx] || 'Not provided'}\n\n`;
+            if (sel.kind === 'delete') {
+                md += `**Deleted Text:**\n> ${sel.text}\n\n`;
+            } else {
+                md += `**${sel.kind === 'add_after' ? 'Insert After' : 'Original Text'}:**\n> ${sel.text}\n\n`;
+                md += `**Proposed ${sel.kind === 'add_after' ? 'Addition' : 'Revision'}:**\n${wizard.revisions?.[idx] || 'Not provided'}\n\n`;
+            }
         });
     }
     md += `### Links and Files\n${wizard.exhibits || 'None provided.'}\n\n`;

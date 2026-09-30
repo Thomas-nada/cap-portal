@@ -294,6 +294,8 @@ MAX_CO_AUTHORS = 20           # co-authors per proposal
 MAX_DRAFTS_PER_AUTHOR = 25    # saved wizard drafts per wallet
 MAX_DRAFT_TOTAL = 2_000_000   # whole draft blob (wizard state is larger than the
                               # final structured body: it also holds selections, etc.)
+MAX_CONSTITUTION_UPLOAD = 1_000_000  # an edited copy of the constitution uploaded to
+                                     # derive revisions (the base is ~70k characters)
 
 # Mainnet stake address (bech32, hrp "stake"). Used to validate co-author ids.
 _STAKE_ADDR_RE = re.compile(r"^stake1[0-9a-z]{50,70}$")
@@ -337,6 +339,8 @@ def _validate_structured(v):
             for rk, rv in rev.items():
                 if isinstance(rv, str) and len(rv) > MAX_REVISION_TEXT:
                     raise ValueError(f"Revision #{i + 1} ('{rk}') is too long (max {MAX_REVISION_TEXT:,} characters)")
+            if rev.get("type") == "deletion" and not (rev.get("original") or "").strip():
+                raise ValueError(f"Revision #{i + 1} is a deletion but names no passage to remove")
     # Co-authors are identified by mainnet stake address. This runs only on
     # create/edit, so existing proposals (all with empty co_authors) are never
     # re-validated and cannot be broken by it.
@@ -1764,6 +1768,13 @@ def _apply_revisions(base_content, revisions):
     applied = 0
     for rev in (revisions or []):
         proposed = (rev.get("proposed") or "").strip()
+        if rev.get("type") == "deletion":
+            original = (rev.get("original") or "").strip()
+            span = _match_span(modified, original) if original else None
+            if span:
+                modified = _remove_span(modified, *span)
+                applied += 1
+            continue
         if not proposed:
             continue
         if rev.get("type") == "addition":
@@ -1792,6 +1803,119 @@ def _apply_revisions(base_content, revisions):
                 modified = modified[:start] + proposed + modified[end:]
                 applied += 1
     return modified, applied
+
+
+def _remove_span(text, start, end):
+    """Delete text[start:end] together with the line break(s) that separated it
+    from its neighbours, so removing a paragraph or list item leaves no empty
+    line behind. The separator that preceded the passage is kept (a tight list
+    stays tight; prose keeps its blank line)."""
+    before, after = text[:start], text[end:]
+    before = before.rstrip(" \t")            # indentation of the removed line
+    seam = before.rstrip("\n")
+    sep = before[len(seam):]                  # the newline run before the passage
+    rest = after.lstrip("\n")
+    if not rest:
+        return seam + "\n" if seam else ""
+    return seam + sep + rest
+
+
+def _norm_upload_text(text):
+    return (text or "").replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff")
+
+
+def _line_units(text):
+    """Every non-blank line of `text` as (stripped_line, start, end), with
+    offsets into `text` that exclude leading/trailing whitespace. The
+    constitution keeps one paragraph, heading or list item per line, so a line
+    is the natural unit of change."""
+    units, pos = [], 0
+    for line in text.split("\n"):
+        stripped = line.strip()
+        if stripped:
+            start = pos + (len(line) - len(line.lstrip()))
+            units.append((stripped, start, start + len(stripped)))
+        pos += len(line) + 1
+    return units
+
+
+def _derive_revisions(base_text, new_text):
+    """Diff an edited copy of the constitution against the base and express the
+    differences as structured revisions — the same shape the wizard produces
+    from highlighted passages — so everything downstream (draft generation,
+    editor suggestions, the compare view) works unchanged.
+
+    Each run of changed lines becomes one revision: a replacement (original →
+    proposed), an addition (anchored after the preceding unchanged line) or a
+    deletion. Passages are sliced from the source texts so their exact spacing
+    survives; a passage that occurs more than once in the base is widened to
+    include preceding unchanged lines until it is unambiguous, because drafts
+    are applied by substring match."""
+    import difflib
+    base, new = _norm_upload_text(base_text), _norm_upload_text(new_text)
+    bu, nu = _line_units(base), _line_units(new)
+    if not nu:
+        raise ValueError("The uploaded file is empty")
+    sm = difflib.SequenceMatcher(None, [u[0] for u in bu], [u[0] for u in nu], autojunk=False)
+    opcodes = sm.get_opcodes()
+    matched = sum(i2 - i1 for tag, i1, i2, _j1, _j2 in opcodes if tag == "equal")
+    if bu and matched < len(bu) * 0.5:
+        raise ValueError("That file does not look like an edited copy of the current constitution "
+                         "— fewer than half of its lines match. Download the current constitution "
+                         "from this page, edit that copy, and upload it.")
+
+    # Nearest headings above each base line, for the revision's section label.
+    sections, h2, h3 = [], "", ""
+    for text, _s, _e in bu:
+        if text.startswith("## ") or text.startswith("# "):
+            h2, h3 = text.lstrip("#").strip(), ""
+        elif text.startswith("### "):
+            h3 = text.lstrip("#").strip()
+        sections.append(h2 + (" › " + h3 if h3 else ""))
+
+    def base_slice(i1, i2):
+        return base[bu[i1][1]:bu[i2 - 1][2]]
+
+    def new_slice(j1, j2):
+        raw = new[nu[j1][1]:nu[j2 - 1][2]]
+        return re.sub(r"[ \t]+\n", "\n", raw)        # no trailing spaces inside proposed text
+
+    revisions = []
+    for k, (tag, i1, i2, j1, j2) in enumerate(opcodes):
+        if tag == "equal":
+            continue
+        # Unchanged lines immediately above this change (available as context).
+        room = (opcodes[k - 1][2] - opcodes[k - 1][1]) if k > 0 and opcodes[k - 1][0] == "equal" else 0
+        section = sections[max(i1 - 1, 0)] if tag == "insert" else sections[i1]
+
+        if tag == "insert":
+            if i1 == 0:
+                # Nothing precedes the new text: express it as a replacement of
+                # the first line by "new text + first line".
+                tag, i2, j2 = "replace", 1, j2 + 1
+            else:
+                a = i1 - 1
+                anchor = base_slice(a, i1)
+                while base.count(anchor) > 1 and (i1 - 1 - a) < room - 1:
+                    a -= 1
+                    anchor = base_slice(a, i1)
+                revisions.append({"type": "addition", "insert_after": anchor,
+                                  "proposed": new_slice(j1, j2), "section": section})
+                continue
+
+        original = base_slice(i1, i2)
+        widened = 0
+        while base.count(original) > 1 and widened < room:
+            widened += 1
+            i1 -= 1
+            j1 -= 1                                  # the same unchanged line, in the new text
+            original = base_slice(i1, i2)
+        if tag == "delete" and widened == 0:
+            revisions.append({"type": "deletion", "original": original, "proposed": "", "section": section})
+        else:
+            proposed = new_slice(j1, j2) if j2 > j1 else ""
+            revisions.append({"original": original, "proposed": proposed, "section": section})
+    return revisions
 
 
 def _regenerate_all_drafts():
@@ -1865,6 +1989,39 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
     db.commit()
 
     return {"filename": filename, "applied": applied, "total": len(revisions)}
+
+
+class ConstitutionUpload(BaseModel):
+    content: str = Field(max_length=MAX_CONSTITUTION_UPLOAD)
+
+
+@app.post("/constitution/derive-revisions", tags=["constitution"],
+          summary="Turn an edited copy of the constitution into revisions",
+          description="Diffs the uploaded markdown against the current constitution and returns the "
+                      "differences as structured revisions (replacement / addition / deletion) ready "
+                      "for the proposal wizard. Nothing is stored. **Requires authentication.**")
+@limiter.limit("20/minute")
+def derive_revisions_from_upload(request: Request, req: ConstitutionUpload, user: dict = Depends(require_user)):
+    base = _base_constitution_content()
+    if base is None:
+        raise HTTPException(status_code=404, detail="No base constitution file found")
+    try:
+        revisions = _derive_revisions(base, req.content)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    warnings = []
+    for i, r in enumerate(revisions):
+        for key in ("original", "proposed", "insert_after"):
+            if len(r.get(key) or "") > MAX_REVISION_TEXT:
+                warnings.append(f"Change #{i + 1} is longer than {MAX_REVISION_TEXT:,} characters and will "
+                                f"be rejected on submit — split it into smaller edits.")
+                break
+    counts = {
+        "replacements": sum(1 for r in revisions if r.get("type") not in ("addition", "deletion")),
+        "additions": sum(1 for r in revisions if r.get("type") == "addition"),
+        "deletions": sum(1 for r in revisions if r.get("type") == "deletion"),
+    }
+    return {"revisions": revisions, "counts": counts, "warnings": warnings}
 
 
 # ── Editors ────────────────────────────────────────────────────────────────────
@@ -2329,6 +2486,8 @@ def _revision_subfield(structured, idx, sub):
         raise ValueError("insert_after applies only to insertion revisions")
     if sub == "original" and is_addition:
         raise ValueError("original applies only to replacement revisions")
+    if sub == "proposed" and rev.get("type") == "deletion":
+        raise ValueError("A deletion has no proposed text — suggest a change to its original passage instead")
     return rev.get(sub, "") or ""
 
 

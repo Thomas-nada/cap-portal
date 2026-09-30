@@ -1,4 +1,5 @@
 import { shortAddress, formatUser } from '../wallet.js';
+import { revisionHasEffect, countEffectiveRevisions } from '../revisions.js';
 
 function stripFrontmatter(body) {
     if (!body) return '';
@@ -25,7 +26,14 @@ function renderStructuredBody(s, type) {
     }
 
     if (s.revisions?.length) {
-        const revHtml = s.revisions.map((r, i) => r.type === 'addition' ? `
+        const revHtml = s.revisions.map((r, i) => r.type === 'deletion' ? `
+ <div class="rounded-2xl border border-red-100 overflow-hidden mb-4">
+ ${r.section ? `<div class="px-5 py-2 bg-red-50 text-sm font-black text-red-400 uppercase tracking-widest">${escapeHtml(r.section)}</div>` : ''}
+ <div class="p-5">
+ <div class="text-sm font-black uppercase tracking-widest text-red-500 mb-2">Removed</div>
+ <div class="text-sm text-slate-500 font-mono leading-relaxed whitespace-pre-wrap line-through">${escapeHtml(r.original || '')}</div>
+                    </div>
+            </div>` : r.type === 'addition' ? `
  <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
  ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest">${r.section}</div>` : ''}
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
@@ -470,7 +478,7 @@ export function renderDetail(state) {
                         ${p.structured ? renderStructuredBody(p.structured, p.type) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
                     </article>
 
-                    ${(p.structured?.revisions?.length && p.structured.revisions.some(r => (r.original && r.proposed) || (r.insert_after && r.proposed))) ? `
+                    ${(p.structured?.revisions?.length && p.structured.revisions.some(revisionHasEffect)) ? `
  <div class="bg-blue-50/60 border border-blue-100 rounded-[3rem] p-8 flex items-center justify-between gap-6">
  <div class="flex items-center gap-4">
  <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
@@ -478,7 +486,7 @@ export function renderDetail(state) {
                             </div>
                             <div>
  <p class="text-sm font-black text-slate-900 ">Proposed Constitution Draft</p>
- <p class="text-sm text-slate-500 mt-0.5">${p.structured.revisions.filter(r => (r.original && r.proposed) || (r.insert_after && r.proposed)).length} change${p.structured.revisions.filter(r => (r.original && r.proposed) || (r.insert_after && r.proposed)).length !== 1 ? 's' : ''} — view side-by-side diff against current</p>
+ <p class="text-sm text-slate-500 mt-0.5">${countEffectiveRevisions(p.structured.revisions)} change${countEffectiveRevisions(p.structured.revisions) !== 1 ? 's' : ''} — view side-by-side diff against current</p>
                             </div>
                         </div>
                         <button onclick="window.viewProposalDiff(${p.number})"

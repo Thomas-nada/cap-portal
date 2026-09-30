@@ -193,6 +193,12 @@ export async function fetchConstitutionContent(filename) {
     return req('GET', `/constitution/${encodeURIComponent(filename)}`);
 }
 
+// Diff an edited copy of the constitution against the current one; returns
+// { revisions, counts, warnings } without storing anything.
+export async function deriveRevisionsFromUpload(content) {
+    return req('POST', '/constitution/derive-revisions', { content }, true);
+}
+
 // ── Editors ───────────────────────────────────────────────────────────────────
 
 export async function fetchEditors() {
