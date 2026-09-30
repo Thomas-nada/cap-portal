@@ -2480,7 +2480,7 @@ window.downloadBaseConstitutionMd = async () => {
         a.click();
         setTimeout(() => URL.revokeObjectURL(a.href), 1000);
     } catch (e) {
-        state.wizardError = e.message; updateUI();
+        state.uploadError = e.message; updateUI();
     }
 };
 
@@ -2488,8 +2488,9 @@ window.uploadEditedConstitution = async (input) => {
     const file = input.files?.[0];
     input.value = '';  // allow re-uploading the same file after fixing it
     if (!file) return;
+    state.uploadError = null;
     if (file.size > 1_000_000) {
-        state.wizardError = 'That file is too large (max 1 MB). Upload the edited constitution markdown only.';
+        state.uploadError = 'That file is too large (max 1 MB). Upload the edited constitution markdown only.';
         updateUI(); return;
     }
     const existing = state.wizardData.selectedText || [];
@@ -2502,7 +2503,7 @@ window.uploadEditedConstitution = async (input) => {
         const res = await deriveRevisionsFromUpload(content);
         const revs = res.revisions || [];
         if (!revs.length) {
-            state.wizardError = 'No differences found between that file and the current constitution.';
+            state.uploadError = 'No differences found between that file and the current constitution.';
             return;
         }
         const stamp = Date.now();
@@ -2522,8 +2523,9 @@ window.uploadEditedConstitution = async (input) => {
         state.wizardSelPanelOpen = false;
         scheduleDraftAutosave();
     } catch (e) {
-        if (e.message === 'AUTH_EXPIRED') { state.wizardError = 'Your session expired — connect your wallet again and retry the upload.'; }
-        else state.wizardError = e.message;
+        if (e.message === 'AUTH_EXPIRED') state.uploadError = 'Your session expired — connect your wallet again and retry the upload.';
+        else if (/Method Not Allowed|Not Found/i.test(e.message)) state.uploadError = 'The backend does not support constitution uploads yet — it is running older code. Restart it from this version and try again.';
+        else state.uploadError = e.message;
     } finally {
         state.loading = { ...state.loading, deriving: false };
         updateUI();

@@ -45,6 +45,10 @@ function renderUploadPanel(wizard, state) {
  <div class="mt-4 p-4 rounded-xl bg-green-50 border border-green-200 text-sm text-green-800">
  <span class="font-black">${escapeHtml(sum.filename || 'Upload')}:</span> ${parts.length ? parts.join(', ') : 'no changes'} found. Review the selections below, remove any you do not want, then continue to write or adjust the proposed text.
                 </div>` : ''}
+                ${state.uploadError ? `
+ <div class="mt-4 flex items-start gap-2 p-4 rounded-xl bg-red-50 border border-red-200 text-sm text-red-700">
+ <i data-lucide="alert-triangle" class="w-4 h-4 mt-0.5 flex-shrink-0"></i><span>${escapeHtml(state.uploadError)}</span>
+                </div>` : ''}
                 ${(sum?.warnings || []).map(w => `
  <div class="mt-3 flex items-start gap-2 p-4 rounded-xl bg-amber-50 border border-amber-200 text-sm text-amber-800">
  <i data-lucide="alert-triangle" class="w-4 h-4 mt-0.5 flex-shrink-0"></i><span>${escapeHtml(w)}</span>
