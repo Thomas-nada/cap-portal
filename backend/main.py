@@ -1824,6 +1824,31 @@ def _norm_upload_text(text):
     return (text or "").replace("\r\n", "\n").replace("\r", "\n").lstrip("\ufeff")
 
 
+# Markdown editors re-serialise a file on save: "-" bullets become "*", dots in
+# numbered headings and characters like "[" or "~" get backslash-escaped, quotes
+# turn curly. None of that is a change the author made, so lines are compared in
+# a canonical form, and proposed text is brought back to the constitution's own
+# style (it contains no escapes, "-" bullets and straight quotes).
+_QUOTE_MAP = str.maketrans({"\u2018": "'", "\u2019": "'", "\u201c": '"', "\u201d": '"', "\u00a0": " "})
+_MD_ESCAPE_RE = re.compile(r"\\([\\`*_{}\[\]()#+\-.!~>|\"'])")
+
+
+def _canon_line(line):
+    l = line.strip().translate(_QUOTE_MAP)
+    l = re.sub(r"^[*+]\s+", "- ", l)            # bullet marker style
+    l = _MD_ESCAPE_RE.sub(r"\1", l)             # editor-added escapes
+    return re.sub(r"[ \t]{2,}", " ", l)
+
+
+def _canon_block(text):
+    """_canon_line applied per line, keeping blank lines and indentation."""
+    out = []
+    for line in text.split("\n"):
+        lead = line[:len(line) - len(line.lstrip())]
+        out.append(lead + _canon_line(line) if line.strip() else "")
+    return "\n".join(out)
+
+
 def _line_units(text):
     """Every non-blank line of `text` as (stripped_line, start, end), with
     offsets into `text` that exclude leading/trailing whitespace. The
@@ -1856,7 +1881,7 @@ def _derive_revisions(base_text, new_text):
     bu, nu = _line_units(base), _line_units(new)
     if not nu:
         raise ValueError("The uploaded file is empty")
-    sm = difflib.SequenceMatcher(None, [u[0] for u in bu], [u[0] for u in nu], autojunk=False)
+    sm = difflib.SequenceMatcher(None, [_canon_line(u[0]) for u in bu], [_canon_line(u[0]) for u in nu], autojunk=False)
     opcodes = sm.get_opcodes()
     matched = sum(i2 - i1 for tag, i1, i2, _j1, _j2 in opcodes if tag == "equal")
     if bu and matched < len(bu) * 0.5:
@@ -1878,7 +1903,7 @@ def _derive_revisions(base_text, new_text):
 
     def new_slice(j1, j2):
         raw = new[nu[j1][1]:nu[j2 - 1][2]]
-        return re.sub(r"[ \t]+\n", "\n", raw)        # no trailing spaces inside proposed text
+        return _canon_block(re.sub(r"[ \t]+\n", "\n", raw))
 
     revisions = []
     for k, (tag, i1, i2, j1, j2) in enumerate(opcodes):

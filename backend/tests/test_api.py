@@ -1773,3 +1773,33 @@ def test_suggest_proposed_on_deletion_rejected(client, db):
     ok = client.post("/proposals/1/suggestions", json={"field": "revisions[0].original", "suggested_value": "x"},
                      headers=auth(EDITOR_ADDR))
     assert ok.status_code == 201
+
+
+def test_derive_revisions_ignores_markdown_editor_noise(client, db):
+    """An editor that re-serialises markdown on save ("-" -> "*" bullets,
+    backslash escapes, curly quotes) must not produce spurious changes, and the
+    proposed text must come back in the constitution's own style."""
+    import re
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    base = _base_text()
+    lines = base.split("\n")
+    noisy = [re.sub(r"^- ", "* ", l) for l in lines]                       # bullet style
+    noisy = [re.sub(r"^(#+ \d+)\. ", r"\1\\. ", l) for l in noisy]          # "### 1\. Intro"
+    noisy = [l.replace("[", "\\[").replace("~", "\\~") for l in noisy]      # escapes
+    i_para = next(i for i, l in enumerate(lines) if l.startswith("With these purposes in mind"))
+    noisy[i_para] = noisy[i_para] + " Hello"
+    i_del = next(i for i, l in enumerate(lines) if l.startswith("TENET 10"))
+    del noisy[i_del]
+    i_li = next(i for i, l in enumerate(noisy) if l.startswith("* External economic factors"))
+    noisy[i_li] = "* External economic factors — “quoted” [note]"   # real edit, curly quotes
+    r = client.post("/constitution/derive-revisions", json={"content": "\n".join(noisy)}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200, r.text
+    revs = r.json()["revisions"]
+    assert r.json()["counts"] == {"replacements": 2, "additions": 0, "deletions": 1}
+    kinds = [rv.get("type", "replace") for rv in revs]
+    assert kinds == ["replace", "deletion", "replace"]
+    assert revs[0]["proposed"].endswith("in order to participate in the governance of the Cardano Blockchain ecosystem. We invite all who share our values to join us for as long as they wish, while honoring the freedom to take another path. Hello")
+    assert revs[2]["original"] == "- External economic factors"
+    assert revs[2]["proposed"] == '- External economic factors — "quoted" [note]'   # "-" bullet, straight quotes, no escapes
+    modified, applied = main._apply_revisions(base, revs)
+    assert applied == 3 and "\\" not in modified and "\n* " not in modified
