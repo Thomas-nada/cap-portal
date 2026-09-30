@@ -1841,6 +1841,24 @@ def _canon_line(line):
 
 
 _LIST_MARKER_RE = re.compile(r"^(?:\d+\.|[-*+])\s+")
+_BLOCK_START_RE = re.compile(r"^(?:#{1,6}\s|(?:\d+\.|[-*+])\s|>|\||```|---|\*\*\*)")
+
+
+def _unwrap_paragraphs(text):
+    """Join hard-wrapped continuation lines back into their paragraph or list
+    item. Some editors wrap long lines at 80 columns on save; in markdown a
+    line that directly follows another (no blank line between) without starting
+    a block of its own belongs to the same paragraph, and the constitution keeps
+    every paragraph on a single line."""
+    out = []
+    for line in text.split("\n"):
+        s = line.strip()
+        prev = out[-1] if out else ""
+        if s and prev.strip() and not _BLOCK_START_RE.match(s) and not prev.lstrip().startswith("#"):
+            out[-1] = prev.rstrip() + " " + s
+        else:
+            out.append(line)
+    return "\n".join(out)
 
 
 def _without_list_marker(text, base):
@@ -1895,7 +1913,7 @@ def _derive_revisions(base_text, new_text):
     include preceding unchanged lines until it is unambiguous, because drafts
     are applied by substring match."""
     import difflib
-    base, new = _norm_upload_text(base_text), _norm_upload_text(new_text)
+    base, new = _norm_upload_text(base_text), _unwrap_paragraphs(_norm_upload_text(new_text))
     bu, nu = _line_units(base), _line_units(new)
     if not nu:
         raise ValueError("The uploaded file is empty")
@@ -1967,7 +1985,27 @@ def _derive_revisions(base_text, new_text):
                 if stripped and mp and mo.group(0).strip() == mp.group(0).strip():
                     original, proposed = stripped, proposed[mp.end():]
             revisions.append({"original": original, "proposed": proposed, "section": section})
-    return revisions
+    return _deletions_before_matching_additions(revisions)
+
+
+def _deletions_before_matching_additions(revisions):
+    """Drafts apply revisions in list order by substring match. A block moved
+    later in the document derives as an addition (a copy of the block) followed
+    by a deletion of the original; applied in that order the deletion would hit
+    the freshly inserted copy. So a deletion whose text an earlier addition
+    re-inserts is pulled ahead of that addition. Document order is kept
+    otherwise."""
+    key = lambda t: _canon_block(t or "").strip()
+    pending, ordered = list(revisions), []
+    while pending:
+        r = pending.pop(0)
+        if r.get("type") == "addition":
+            moved = [d for d in pending if d.get("type") == "deletion" and key(d["original"]) == key(r["proposed"])]
+            for d in moved:
+                pending.remove(d)
+                ordered.append(d)
+        ordered.append(r)
+    return ordered
 
 
 def _regenerate_all_drafts():
@@ -2044,7 +2082,15 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
 
 
 class ConstitutionUpload(BaseModel):
-    content: str = Field(max_length=MAX_CONSTITUTION_UPLOAD)
+    content: str
+
+    @field_validator("content")
+    @classmethod
+    def _v_size(cls, v):
+        if len(v) > MAX_CONSTITUTION_UPLOAD:
+            raise ValueError(f"The uploaded file is too large (max {MAX_CONSTITUTION_UPLOAD:,} characters). "
+                             "Upload the edited constitution markdown only.")
+        return v
 
 
 @app.post("/constitution/derive-revisions", tags=["constitution"],

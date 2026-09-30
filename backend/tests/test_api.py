@@ -1837,3 +1837,41 @@ def test_derived_list_item_edit_matches_highlight_style(client, db):
     assert "7. Net Change Limit. The maximum" in modified and " Extra words." in modified
     assert "- Network security concerns and threats" in modified
     assert "TENET 10" not in modified
+
+
+# ── docs/upload-test-files: every fixture behaves as its README says ──────────
+
+def _fixture_cases():
+    import importlib.util
+    from pathlib import Path
+    path = Path(__file__).resolve().parents[2] / "docs" / "upload-test-files" / "make_fixtures.py"
+    spec = importlib.util.spec_from_file_location("make_fixtures", path)
+    mod = importlib.util.module_from_spec(spec); spec.loader.exec_module(mod)
+    return mod.build(_base_text())
+
+
+@pytest.mark.parametrize("case", _fixture_cases(), ids=lambda c: c["file"])
+def test_upload_fixture(client, db, case):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    exp = case["expect"]
+    r = client.post("/constitution/derive-revisions", json={"content": case["text"]}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == exp["status"], r.text[:300]
+    if exp["status"] != 200:
+        assert exp["detail"] in r.json()["detail"]
+        return
+    body = r.json()
+    if "counts" in exp:
+        assert body["counts"] == exp["counts"], body["counts"]
+    assert len(body["warnings"]) == exp.get("warnings", 0)
+    base = _base_text()
+    if exp.get("unique_originals"):
+        for rv in body["revisions"]:
+            assert base.count(rv["original"]) == 1
+    if exp.get("no_markers"):
+        for rv in body["revisions"]:
+            assert not main._LIST_MARKER_RE.match(rv["original"]) and not main._LIST_MARKER_RE.match(rv["proposed"])
+    # Whatever the shape of the revisions, applying them must reproduce the upload.
+    modified, applied = main._apply_revisions(base, body["revisions"])
+    assert applied == len(body["revisions"])
+    canon = lambda t: [main._canon_line(l) for l in main._unwrap_paragraphs(main._norm_upload_text(t)).split("\n") if l.strip()]
+    assert canon(modified) == canon(case["text"]), case["file"]
