@@ -1805,3 +1805,35 @@ def test_derive_revisions_ignores_markdown_editor_noise(client, db):
     assert revs[2]["proposed"].endswith('\n\n- External economic factors \u2014 "quoted" [note]')   # "-" bullet, straight quotes, no escapes
     modified, applied = main._apply_revisions(base, revs)
     assert applied == 3 and "\\" not in modified and "\n* " not in modified
+
+
+def test_derived_list_item_edit_matches_highlight_style(client, db):
+    """Editing one numbered/bulleted line yields original/proposed without the
+    list marker (as a highlight of the rendered text would), yet the draft keeps
+    the marker. A deleted list item keeps its marker so the whole line goes."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    base = _base_text()
+    lines = base.split("\n")
+    i7 = next(i for i, l in enumerate(lines) if l.startswith("7. Net Change Limit."))
+    i_del = next(i for i, l in enumerate(lines) if l.startswith("TENET 10"))
+    edited = lines[:]
+    edited[i7] = lines[i7] + " Extra words."
+    i_b = next(i for i, l in enumerate(lines) if l == "- Network security concerns")
+    edited[i_b] = "- Network security concerns and threats"
+    del edited[i_del]
+    r = client.post("/constitution/derive-revisions", json={"content": "\n".join(edited)}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200, r.text
+    revs = r.json()["revisions"]
+    seven = next(rv for rv in revs if "Net Change Limit" in rv.get("original", ""))
+    assert seven["original"].startswith("Net Change Limit. The maximum")      # no "7. "
+    assert seven["proposed"].startswith("Net Change Limit.") and seven["proposed"].endswith(" Extra words.")
+    bullet = next(rv for rv in revs if "Network security" in rv.get("original", ""))
+    assert bullet["original"] == "Network security concerns"                # no "- "
+    assert bullet["proposed"] == "Network security concerns and threats"
+    dele = next(rv for rv in revs if rv.get("type") == "deletion")
+    assert dele["original"] == lines[i_del].strip()
+    modified, applied = main._apply_revisions(base, revs)
+    assert applied == 3
+    assert "7. Net Change Limit. The maximum" in modified and " Extra words." in modified
+    assert "- Network security concerns and threats" in modified
+    assert "TENET 10" not in modified

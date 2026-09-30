@@ -1840,6 +1840,24 @@ def _canon_line(line):
     return re.sub(r"[ \t]{2,}", " ", l)
 
 
+_LIST_MARKER_RE = re.compile(r"^(?:\d+\.|[-*+])\s+")
+
+
+def _without_list_marker(text, base):
+    """A single-line list item without its leading "7. " / "- " marker, when that
+    is still unambiguous in `base`; else None. A highlight of the rendered
+    constitution never includes the marker (the browser draws it), so derived
+    revisions present list items the same way. The draft is unaffected: the
+    match starts after the marker, which stays in place."""
+    if "\n" in text:
+        return None
+    m = _LIST_MARKER_RE.match(text)
+    if not m:
+        return None
+    stripped = text[m.end():]
+    return stripped if stripped and base.count(stripped) == 1 else None
+
+
 def _canon_block(text):
     """_canon_line applied per line, keeping blank lines and indentation."""
     out = []
@@ -1924,6 +1942,7 @@ def _derive_revisions(base_text, new_text):
                 while base.count(anchor) > 1 and (i1 - 1 - a) < room - 1:
                     a -= 1
                     anchor = base_slice(a, i1)
+                anchor = _without_list_marker(anchor, base) or anchor
                 revisions.append({"type": "addition", "insert_after": anchor,
                                   "proposed": new_slice(j1, j2), "section": section})
                 continue
@@ -1936,9 +1955,17 @@ def _derive_revisions(base_text, new_text):
             j1 -= 1                                  # the same unchanged line, in the new text
             original = base_slice(i1, i2)
         if tag == "delete" and widened == 0:
+            # A deletion keeps its marker so the whole line goes, not just the text after "7. ".
             revisions.append({"type": "deletion", "original": original, "proposed": "", "section": section})
         else:
             proposed = new_slice(j1, j2) if j2 > j1 else ""
+            if i2 - i1 == 1 and j2 - j1 == 1:
+                # Same list marker on both sides of a one-line edit: present it
+                # without the marker, as a highlight of the rendered text would.
+                mo, mp = _LIST_MARKER_RE.match(original), _LIST_MARKER_RE.match(proposed)
+                stripped = _without_list_marker(original, base)
+                if stripped and mp and mo.group(0).strip() == mp.group(0).strip():
+                    original, proposed = stripped, proposed[mp.end():]
             revisions.append({"original": original, "proposed": proposed, "section": section})
     return revisions
 
