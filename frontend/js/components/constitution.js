@@ -287,15 +287,7 @@ export function renderConstitution(state) {
             </aside>
 
  <div id="constitution-col" class="lg:col-span-3">
-                ${isDiffMode && state.constitutionDiffNotice ? `
-                <div class="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-5 py-4">
-                    <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
-                    <div class="text-sm">
-                        <p class="font-bold">Some proposed changes couldn't be matched to the current constitution.</p>
-                        <p class="mt-1">${state.constitutionDiffNotice.applied} of ${state.constitutionDiffNotice.total} revision${state.constitutionDiffNotice.total !== 1 ? 's' : ''} were applied${state.constitutionDiffNotice.unmatched?.length ? ` (could not locate revision${state.constitutionDiffNotice.unmatched.length !== 1 ? 's' : ''} ${state.constitutionDiffNotice.unmatched.join(', ')})` : ''}. This usually means the passage no longer exists in the current constitution. The diff below may be partial.</p>
-                        ${state.constitutionDiffNotice.ambiguous?.length ? `<p class="mt-1">Revision${state.constitutionDiffNotice.ambiguous.length !== 1 ? 's' : ''} ${state.constitutionDiffNotice.ambiguous.join(', ')} match${state.constitutionDiffNotice.ambiguous.length === 1 ? 'es' : ''} more than one passage and ${state.constitutionDiffNotice.ambiguous.length === 1 ? 'was' : 'were'} applied at the most likely one, following the order of the selections. If that is not the intended place, re-select ${state.constitutionDiffNotice.ambiguous.length === 1 ? 'it' : 'them'} in the wizard to pin it down.</p>` : ''}
-                    </div>
-                </div>` : ''}
+                ${isDiffMode && state.constitutionDiffNotice ? renderDiffNotice(state.constitutionDiffNotice) : ''}
                 ${isDiffMode ? renderDiffView(baseVersion, compareVersion) : renderSingleView(currentVersion)}
             </div>
         </div>
@@ -385,6 +377,35 @@ function applyLineGroup(delLines, insLines) {
     } else {
  return { oH: '', nH: `<mark class="diff-ins">${escapeHtml(insStr)}</mark>\n` };
     }
+}
+
+// Amber box above a proposal's diff when draft generation could not place
+// every revision cleanly. `n` is { applied, total, unmatched, ambiguous }:
+// unmatched revisions are missing from the draft; ambiguous ones were applied
+// at the most likely of several matching passages.
+function renderDiffNotice(n) {
+    const plural = (k, one, many) => (k === 1 ? one : many);
+    const list = (ids) => ids.join(', ');
+    const unmatched = n.unmatched || [], ambiguous = n.ambiguous || [];
+    const missing = n.applied < n.total;
+    const title = missing
+        ? "Some proposed changes couldn't be matched to the current constitution."
+        : `${ambiguous.length === 1 ? 'One proposed change matches' : 'Some proposed changes match'} more than one passage.`;
+    const body = [];
+    if (missing) {
+        body.push(`${n.applied} of ${n.total} revision${plural(n.total, '', 's')} were applied${unmatched.length ? ` (could not locate revision${plural(unmatched.length, '', 's')} ${list(unmatched)})` : ''}. This usually means the passage no longer exists in the current constitution. The diff below may be partial.`);
+    }
+    if (ambiguous.length) {
+        body.push(`Revision${plural(ambiguous.length, '', 's')} ${list(ambiguous)} ${plural(ambiguous.length, 'matches', 'match')} more than one passage and ${plural(ambiguous.length, 'was', 'were')} applied at the most likely one, following the order of the selections. ${missing ? '' : 'All changes are included below. '}If that is not the intended place, re-select ${plural(ambiguous.length, 'it', 'them')} in the wizard to pin it down.`);
+    }
+    return `
+ <div class="mb-6 flex items-start gap-3 bg-amber-50 border border-amber-200 text-amber-900 rounded-2xl px-5 py-4">
+ <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
+ <div class="text-sm">
+ <p class="font-bold">${title}</p>
+            ${body.map(t => `<p class="mt-1">${t}</p>`).join('')}
+        </div>
+    </div>`;
 }
 
 function renderDiffView(currentVersion, compareVersion) {
