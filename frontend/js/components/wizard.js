@@ -184,25 +184,43 @@ function renderWizardBar(step, wizard, state) {
                 : `<span class="text-white/80 font-medium text-sm truncate text-center">Highlight text in the Constitution below, or upload an edited copy</span>`}
         </div>` : `<div class="flex-1"></div>`;
 
-    const panel = open ? `
- <div class="max-w-5xl mx-auto px-4 sm:px-6 pt-4 max-h-[45vh] overflow-y-auto">
- <div class="space-y-2 pb-1">
-            ${(wizard.selectedText || []).map((sel, idx) => `
+    // One selection: `stacked` puts the badge above the text for the narrow drawer.
+    const removeBtn = (idx) => `<button onclick="window.removeWizardSelection(${idx})" title="Remove selection"
+ class="flex-shrink-0 text-red-300 hover:text-red-200 hover:bg-white/10 p-1.5 rounded-lg transition-all"><i data-lucide="x" class="w-4 h-4"></i></button>`;
+    const selItem = (sel, idx, stacked) => stacked ? `
+ <div class="p-3 rounded-xl bg-white/10 border border-white/10">
+ <div class="flex items-center justify-between gap-2 mb-2">${kindBadge(sel.kind, true)}${removeBtn(idx)}</div>
+ <p class="text-sm text-white/85 italic leading-snug line-clamp-3">"${escapeHtml(sel.text)}"</p>
+        </div>` : `
  <div class="flex items-start gap-3 p-3 rounded-xl bg-white/10 border border-white/10">
  ${kindBadge(sel.kind, true)}
  <p class="flex-1 min-w-0 text-sm text-white/85 italic leading-snug line-clamp-2">"${escapeHtml(sel.text)}"</p>
-                <button onclick="window.removeWizardSelection(${idx})" title="Remove selection"
- class="flex-shrink-0 text-red-300 hover:text-red-200 hover:bg-white/10 p-1.5 rounded-lg transition-all">
+            ${removeBtn(idx)}
+        </div>`;
+    const sels = wizard.selectedText || [];
+
+    // The list of selections: on wide screens (2xl and up) a drawer in the
+    // page's left margin, where it covers nothing; on smaller screens a short
+    // sheet above the bar. It must be a sibling of the bar, not a child: the
+    // bar's backdrop blur would make a fixed child position relative to it.
+    const drawer = open ? `
+ <aside id="wizard-sel-drawer" class="hidden 2xl:flex fixed left-3 top-44 bottom-24 w-60 z-40 flex-col rounded-2xl bg-slate-900/95 backdrop-blur border border-white/10 shadow-2xl">
+ <div class="flex items-center justify-between px-4 py-3 border-b border-white/10">
+ <span class="text-sm font-black uppercase tracking-widest text-white/70">${n} passage${n === 1 ? '' : 's'}</span>
+            <button onclick="window.toggleWizardSelPanel()" title="Hide selections" class="text-white/60 hover:text-white hover:bg-white/10 p-1.5 rounded-lg transition-all">
  <i data-lucide="x" class="w-4 h-4"></i>
-                </button>
-            </div>
-            `).join('')}
+            </button>
         </div>
+ <div class="flex-1 overflow-y-auto p-3 space-y-2">${sels.map((sel, idx) => selItem(sel, idx, true)).join('')}</div>
+    </aside>` : '';
+    const sheet = open ? `
+ <div id="wizard-sel-sheet" class="2xl:hidden max-w-5xl mx-auto px-4 sm:px-6 pt-4 max-h-[30vh] overflow-y-auto">
+ <div class="space-y-2 pb-1">${sels.map((sel, idx) => selItem(sel, idx, false)).join('')}</div>
     </div>` : '';
 
-    return `
+    return `${drawer}
  <div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.25)]">
-        ${panel}
+        ${sheet}
  <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
             ${leftBtn}
             ${center}

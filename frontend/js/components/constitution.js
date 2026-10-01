@@ -88,6 +88,7 @@ export function initConstitutionSelection() {
                 list.push({ id: `sel-${Date.now()}`, text, sectionId, type: 'CAP', kind });
             }
             window.state.wizardData = { ...w, selectedText: list, type: 'CAP' };
+            if (window.matchMedia?.('(min-width: 1536px)').matches) window.state.wizardSelPanelOpen = true;  // side drawer, not a sheet
             window.stagedSelections = [];
             window.updateUI(true);
             return;

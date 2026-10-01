@@ -2520,7 +2520,7 @@ window.uploadEditedConstitution = async (input) => {
             ...state.wizardData, type: 'CAP', selectedText, revisions,
             uploadSummary: { filename: file.name, counts: res.counts || {}, warnings: res.warnings || [] },
         };
-        state.wizardSelPanelOpen = false;
+        state.wizardSelPanelOpen = !!window.matchMedia?.('(min-width: 1536px)').matches;  // drawer on wide screens only
         scheduleDraftAutosave();
     } catch (e) {
         if (e.message === 'AUTH_EXPIRED') state.uploadError = 'Your session expired — connect your wallet again and retry the upload.';
