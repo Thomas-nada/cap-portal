@@ -1975,3 +1975,39 @@ def test_legacy_ambiguous_anchors_follow_reading_order(client, db):
     assert pos[0] < groups and pos[4] > groups   # govDeposit in 2.1, minPoolCost in the groups list
     assert out[pos[0] - 2] == "- *governance action deposit* (*govDeposit*)"   # prose insert: blank line between
     assert out[pos[4] - 2] == "- *minimum fixed rewards cut for pools* (*minPoolCost*)"
+
+
+def test_live_cap12_dijkstra_draft_applies_as_intended(client, db):
+    """CAP-12 as submitted on the live portal (before heading chains existed)
+    reported "1 of 7 revisions were applied". Its revisions, verbatim in the
+    author's order: the new parameter bullets go into BOTH parameter lists
+    (revision 2 in 2.1, revision 5 in the group list), minPoolMargin next to
+    minPoolCost in the group list."""
+    base = _base_text()
+    new_bullets = "-   *maximum Endorser Block size* (*maxEndorserBlockReferencesSize*)\n\n-   *maximum total transaction size per Endorser Block* (*maxTxSizePerEndorserBlock*)"
+    revs = [
+        {"type": "addition", "section": "Appendix I Guardrails", "insert_after": "interchangeably.",
+         "proposed": "Under Ouroboros Leios, a Block is also referred to as a Ranking Block (RB)."},
+        {"type": "addition", "section": "Appendix I Guardrails", "insert_after": "governance action deposit (govDeposit)", "proposed": new_bullets},
+        {"type": "addition", "section": "Appendix I Guardrails",
+         "insert_after": 'MBHS-05 (x - "should") maxBlockHeaderSize should be within TCP\'s initial congestion window (3 or 10 MTUs)',
+         "proposed": "#### **Maximum Endorser Block Size (maxEndorserBlockReferencesSize)**\n\nThe maximum size, in bytes."},
+        {"type": "addition", "section": "Appendix I Guardrails",
+         "insert_after": 'PPI-04 (x - "should") poolPledgeInfluence should not vary by more than +/- 10% in any 18-epoch period (approximately 3 months)',
+         "proposed": "#### **Maximum Pledge Leverage (maxPledgeLeverage)**\n\nPart of the rewards mechanism."},
+        {"type": "addition", "section": "Appendix I Guardrails", "insert_after": "maximum number of collateral inputs (maxCollateralInputs)", "proposed": new_bullets},
+        {"type": "addition", "section": "Appendix I Guardrails", "insert_after": "minimum fixed rewards cut for pools (minPoolCost)", "proposed": "-   *minimum pool margin* (*minPoolMargin*)"},
+        {"type": "addition", "section": "Appendix I Guardrails", "insert_after": "pool pledge influence (poolPledgeInfluence)", "proposed": "-   *maximum pledge leverage* (*maxPledgeLeverage*)"},
+    ]
+    unmatched, ambiguous = [], []
+    modified, applied = main._apply_revisions(base, revs, unmatched, ambiguous)
+    assert applied == 7 and unmatched == [] and ambiguous == [2, 6]
+    out = modified.split("\n")
+    heading_above = lambda k: next(out[j] for j in range(k, -1, -1) if out[j].startswith("#"))
+    hits = [i for i, l in enumerate(out) if l.strip() == new_bullets.split("\n")[0].strip()]
+    assert len(hits) == 2
+    assert heading_above(hits[0]) == "#### Parameters that are Critical to the Operation of the Blockchain"
+    assert heading_above(hits[1]) == "### 9. List of Protocol Parameter Groups"
+    k = next(i for i, l in enumerate(out) if "*minPoolMargin*" in l)
+    assert heading_above(k) == "### 9. List of Protocol Parameter Groups"
+    assert out[k - 1] == "- *minimum fixed rewards cut for pools* (*minPoolCost*)"
