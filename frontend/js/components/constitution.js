@@ -75,7 +75,7 @@ export function initConstitutionSelection() {
 
     window.commitSelection = (type, kind = 'replace') => {
         if (!window.currentSelection?.text) return;
-        const { text, sectionId } = window.currentSelection;
+        const { text, sectionId, context } = window.currentSelection;
         window.currentSelection = null;
         window.getSelection()?.removeAllRanges();
         hidePopup();
@@ -84,8 +84,9 @@ export function initConstitutionSelection() {
         if (inWizard()) {
             const w = window.state.wizardData || {};
             const list = (w.selectedText || []).slice();
-            if (!list.some(s => s.text === text && s.kind === kind)) {
-                list.push({ id: `sel-${Date.now()}`, text, sectionId, type: 'CAP', kind });
+            // Same text under a different heading is a different passage.
+            if (!list.some(s => s.text === text && s.kind === kind && (s.context || '') === (context || ''))) {
+                list.push({ id: `sel-${Date.now()}`, text, sectionId, context, type: 'CAP', kind });
             }
             window.state.wizardData = { ...w, selectedText: list, type: 'CAP' };
             if (window.matchMedia?.('(min-width: 1536px)').matches) window.state.wizardSelPanelOpen = true;  // side drawer, not a sheet
@@ -95,8 +96,8 @@ export function initConstitutionSelection() {
         }
 
         // Standalone Constitution page: keep the "start a CAP here" flow.
-        if (!window.stagedSelections.some(s => s.text === text && s.type === type && s.kind === kind)) {
-            window.stagedSelections.push({ id: `sel-${Date.now()}`, text, sectionId, type, kind });
+        if (!window.stagedSelections.some(s => s.text === text && s.type === type && s.kind === kind && (s.context || '') === (context || ''))) {
+            window.stagedSelections.push({ id: `sel-${Date.now()}`, text, sectionId, context, type, kind });
         }
         if (type === 'CAP') window.addTextToCAP?.();
         else window.addTextToCIS?.();
@@ -138,7 +139,17 @@ export function initConstitutionSelection() {
                     node = target?.parentElement;
                 }
                 const sectionId = contextId.split('-').map(w => w.charAt(0).toUpperCase() + w.slice(1)).join(' ');
-                window.currentSelection = { text, sectionId };
+                // The chain of headings above the selection (top-down), so a
+                // passage that occurs several times can be pinned to this one.
+                const article = document.getElementById('constitution-content');
+                let block = selection.anchorNode;
+                while (block && block.parentElement && block.parentElement !== article) block = block.parentElement;
+                const chain = []; let level = 99;
+                for (let el = block?.previousElementSibling; el; el = el.previousElementSibling) {
+                    const m = /^H([1-6])$/.exec(el.tagName);
+                    if (m && Number(m[1]) < level) { level = Number(m[1]); chain.unshift(el.textContent.trim()); if (level <= 2) break; }
+                }
+                window.currentSelection = { text, sectionId, context: chain.join(' › ') };
                 showSelectionPopup(selection.getRangeAt(0).getBoundingClientRect());
             } else { hidePopup(); }
         } catch (err) { console.warn('Selection handler error:', err); }
@@ -281,7 +292,8 @@ export function renderConstitution(state) {
                     <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
                     <div class="text-sm">
                         <p class="font-bold">Some proposed changes couldn't be matched to the current constitution.</p>
-                        <p class="mt-1">${state.constitutionDiffNotice.applied} of ${state.constitutionDiffNotice.total} revision${state.constitutionDiffNotice.total !== 1 ? 's' : ''} were applied. This usually means a revision's original passage was copied from the rendered page and no longer matches the source text exactly (e.g. missing list numbering). The diff below may be partial.</p>
+                        <p class="mt-1">${state.constitutionDiffNotice.applied} of ${state.constitutionDiffNotice.total} revision${state.constitutionDiffNotice.total !== 1 ? 's' : ''} were applied${state.constitutionDiffNotice.unmatched?.length ? ` (could not locate revision${state.constitutionDiffNotice.unmatched.length !== 1 ? 's' : ''} ${state.constitutionDiffNotice.unmatched.join(', ')})` : ''}. This usually means the passage no longer exists in the current constitution. The diff below may be partial.</p>
+                        ${state.constitutionDiffNotice.ambiguous?.length ? `<p class="mt-1">Revision${state.constitutionDiffNotice.ambiguous.length !== 1 ? 's' : ''} ${state.constitutionDiffNotice.ambiguous.join(', ')} match${state.constitutionDiffNotice.ambiguous.length === 1 ? 'es' : ''} more than one passage and ${state.constitutionDiffNotice.ambiguous.length === 1 ? 'was' : 'were'} applied at the first. Re-select ${state.constitutionDiffNotice.ambiguous.length === 1 ? 'it' : 'them'} in the wizard to pin down the intended one.</p>` : ''}
                     </div>
                 </div>` : ''}
                 ${isDiffMode ? renderDiffView(baseVersion, compareVersion) : renderSingleView(currentVersion)}

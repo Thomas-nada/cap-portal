@@ -1717,39 +1717,135 @@ def get_constitution(filename: str, db: Session = Depends(get_db)):
     return {"filename": filename, "content": path.read_text(encoding="utf-8")}
 
 
-def _match_span(haystack: str, needle: str):
+_INLINE_MD_CHARS = frozenset("*_`~")
+_ROMAN_RE = re.compile(r"^[ivx]+$")
+
+
+def _strip_inline_md(text):
+    """`text` without markdown emphasis/code characters, plus a map from each
+    kept character back to its index in `text`. The rendered constitution
+    shows "governance action deposit (govDeposit)" for the source line
+    "*governance action deposit* (*govDeposit*)"."""
+    out, index = [], []
+    for i, ch in enumerate(text):
+        if ch not in _INLINE_MD_CHARS:
+            out.append(ch)
+            index.append(i)
+    return "".join(out), index
+
+
+def _h2_section_span(haystack, section):
+    """(start, end) of the "## ..." section a revision's `section` label names,
+    or None. Labels come from the reader (the nearest h2's id, e.g. "Appendix I
+    Guardrails") or from an uploaded diff ("APPENDIX I. CARDANO BLOCKCHAIN
+    GUARDRAILS › 2.1. ..."). Articles/appendices are matched by their roman
+    numeral; other headings by their leading words."""
+    words = re.findall(r"[a-z0-9]+", (section or "").split("›")[0].lower())
+    if not words:
+        return None
+    heads = [(m.start(), re.findall(r"[a-z0-9]+", m.group(1).lower()))
+             for m in re.finditer(r"^##\s+(.+)$", haystack, re.M)]
+    if words[0] in ("article", "appendix") and len(words) > 1 and _ROMAN_RE.match(words[1]):
+        hits = [st for st, hw in heads if hw[:2] == words[:2]]
+    else:
+        hits = [st for st, hw in heads if hw[:len(words)] == words or (hw and words[:len(hw)] == hw)]
+    if len(hits) != 1:
+        return None
+    start = hits[0]
+    nxt = re.compile(r"^##\s", re.M).search(haystack, start + 3)
+    return (start, nxt.start() if nxt else len(haystack))
+
+
+_HEADING_LINE_RE = re.compile(r"^(#{1,6})\s+(.+)$", re.M)
+
+
+def _context_span(haystack, context):
+    """Narrow `haystack` to the part under a chain of headings such as
+    "APPENDIX I. ... › 2.1. Critical Protocol Parameters › Parameters that are
+    Critical to the Operation of the Blockchain" (top-down, as the reader
+    records it for a highlight and the upload diff derives it). Each step must
+    match exactly one heading inside the span so far; the chain stops
+    narrowing at the first step that does not. None when nothing matched."""
+    words = lambda t: re.findall(r"[a-z0-9]+", t.lower())
+    span = None
+    for part in (context or "").split("›"):
+        want = words(part)
+        if not want:
+            continue
+        lo, hi = span or (0, len(haystack))
+        hits = [(m.start(), len(m.group(1))) for m in _HEADING_LINE_RE.finditer(haystack, lo, hi)
+                if words(m.group(2)) == want]
+        if len(hits) != 1:
+            break
+        start, level = hits[0]
+        end = hi
+        for m in _HEADING_LINE_RE.finditer(haystack, start + 1, hi):
+            if len(m.group(1)) <= level:
+                end = m.start()
+                break
+        span = (start, end)
+    return span
+
+
+def _match_span(haystack: str, needle: str, section: str = None, context: str = None, ambiguous=None):
     """Locate `needle` inside `haystack`, returning (start, end) or None.
 
     A proposal's `original`/`insert_after` text must be found in the current
     constitution before it can be substituted. We first try an exact match
     (unchanged behaviour for well-formed submissions). If that fails we fall
-    back to a whitespace- and list-marker-tolerant search: authors frequently
-    copy the *rendered* constitution, which drops the markdown ordered-list
-    prefixes ("5.  ") that sit between clauses, so an otherwise-correct passage
-    fails a byte-exact comparison. The fallback only accepts a single,
-    unambiguous match — we never guess which of several passages was meant.
+    back to a tolerant search: authors copy the *rendered* constitution, which
+    drops markdown list markers ("5.  ") and emphasis ("*govDeposit*"), so an
+    otherwise-correct passage fails a byte-exact comparison. The fallback
+    ignores those characters and tolerates any whitespace between words. When
+    the passage occurs several times, the revision's heading `context` (the
+    chain of headings the author was reading under) or, failing that, its h2
+    `section` picks the occurrence. If that still leaves several, the first
+    one in the narrowest region is used and the call is flagged in
+    `ambiguous` (a list, when given) so the author can be told to pin it down.
     """
     needle = (needle or "").strip()
     if not needle:
         return None
-    # Fast path: exact substring — identical to the original .find()/.replace().
-    idx = haystack.find(needle)
-    if idx != -1:
-        return (idx, idx + len(needle))
+
+    def pick(spans):
+        if len(spans) == 1:
+            return spans[0]
+        for region in (_context_span(haystack, context), _h2_section_span(haystack, section)):
+            if region:
+                inside = [sp for sp in spans if region[0] <= sp[0] < region[1]]
+                if len(inside) == 1:
+                    return inside[0]
+                if inside:
+                    spans = inside
+                    break
+        if ambiguous is not None:
+            ambiguous.append(True)
+        return spans[0]
+
+    # Fast path: exact substring. Several occurrences: the section decides,
+    # else the first (the historical .find() behaviour).
+    exact, pos = [], haystack.find(needle)
+    while pos != -1:
+        exact.append((pos, pos + len(needle)))
+        pos = haystack.find(needle, pos + 1)
+    if exact:
+        return pick(exact)
+
     # Fallback: literal words joined by a separator that tolerates any run of
     # whitespace plus an optional markdown list marker (ordered "5." or an
-    # unordered -/*/+ bullet) between them. Every word is re.escape()d, so the
-    # pattern is injection-safe and — because the words are literal, not
-    # quantified — free of catastrophic backtracking.
-    tokens = needle.split()
+    # unordered -/*/+ bullet) between them, searched in a copy of the text with
+    # emphasis characters removed. Every word is re.escape()d, so the pattern
+    # is injection-safe and — because the words are literal, not quantified —
+    # free of catastrophic backtracking.
+    stripped_needle, _ = _strip_inline_md(needle)
+    tokens = stripped_needle.split()
     if not tokens:
         return None
     sep = r"\s+(?:(?:\d+\.|[-*+])\s+)?"
     pattern = sep.join(re.escape(t) for t in tokens)
-    found = list(re.finditer(pattern, haystack))
-    if len(found) == 1:
-        return (found[0].start(), found[0].end())
-    return None
+    stripped, index = _strip_inline_md(haystack)
+    found = [(index[m.start()], index[m.end() - 1] + 1) for m in re.finditer(pattern, stripped)]
+    return pick(found) if found else None
 
 
 def _base_constitution_content():
@@ -1761,25 +1857,38 @@ def _base_constitution_content():
     return files[0].read_text(encoding="utf-8") if files else None
 
 
-def _apply_revisions(base_content, revisions):
+def _apply_revisions(base_content, revisions, unmatched=None, ambiguous=None):
     """Apply a proposal's revisions to the base constitution, tolerant of
-    whitespace/list-marker differences. Returns (modified_text, applied_count)."""
+    whitespace/list-marker/emphasis differences. Returns (modified_text,
+    applied_count). When lists are given, the 1-based numbers of revisions
+    that could not be located go to `unmatched`, and of those whose passage
+    occurs in several places and was applied at the first of them to
+    `ambiguous`."""
     modified = base_content
     applied = 0
-    for rev in (revisions or []):
+    for i, rev in enumerate(revisions or []):
         proposed = (rev.get("proposed") or "").strip()
+        section, context = rev.get("section"), rev.get("context")
+        amb = []
+        locate = lambda text: _match_span(modified, text, section, context, amb) if text else None
         if rev.get("type") == "deletion":
             original = (rev.get("original") or "").strip()
-            span = _match_span(modified, original) if original else None
+            span = locate(original)
+            if amb and ambiguous is not None:
+                ambiguous.append(i + 1)
             if span:
                 modified = _remove_span(modified, *span)
                 applied += 1
+            elif unmatched is not None:
+                unmatched.append(i + 1)
             continue
         if not proposed:
             continue
         if rev.get("type") == "addition":
             anchor = (rev.get("insert_after") or "").strip()
-            span = _match_span(modified, anchor) if anchor else None
+            span = locate(anchor)
+            if amb and ambiguous is not None:
+                ambiguous.append(i + 1)
             if span:
                 # "Add After" inserts a new block after the anchor's line, not
                 # after the matched substring. Authors select the *rendered* text,
@@ -1795,13 +1904,19 @@ def _apply_revisions(base_content, revisions):
                 sep = "\n" if re.match(r"^(?:[-*+]|\d+\.)\s", proposed) else "\n\n"
                 modified = modified[:line_end] + sep + proposed + modified[line_end:]
                 applied += 1
+            elif unmatched is not None:
+                unmatched.append(i + 1)
         else:
             original = (rev.get("original") or "").strip()
-            span = _match_span(modified, original) if original else None
+            span = locate(original)
+            if amb and ambiguous is not None:
+                ambiguous.append(i + 1)
             if span:
                 start, end = span
                 modified = modified[:start] + proposed + modified[end:]
                 applied += 1
+            elif unmatched is not None:
+                unmatched.append(i + 1)
     return modified, applied
 
 
@@ -1925,14 +2040,20 @@ def _derive_revisions(base_text, new_text):
                          "— fewer than half of its lines match. Download the current constitution "
                          "from this page, edit that copy, and upload it.")
 
-    # Nearest headings above each base line, for the revision's section label.
-    sections, h2, h3 = [], "", ""
+    # Nearest headings above each base line: a short label for display and the
+    # full heading chain (top-down) that pins the passage down when applied.
+    sections, contexts, h2, h3, stack = [], [], "", "", []
     for text, _s, _e in bu:
-        if text.startswith("## ") or text.startswith("# "):
-            h2, h3 = text.lstrip("#").strip(), ""
-        elif text.startswith("### "):
-            h3 = text.lstrip("#").strip()
+        m = re.match(r"^(#{1,6})\s+(.+)$", text)
+        if m:
+            level, title = len(m.group(1)), m.group(2).strip()
+            stack = [(l, t) for l, t in stack if l < level] + [(level, title)]
+            if level <= 2:
+                h2, h3 = title, ""
+            elif level == 3:
+                h3 = title
         sections.append(h2 + (" › " + h3 if h3 else ""))
+        contexts.append(" › ".join(t for l, t in stack if l >= 2))
 
     def base_slice(i1, i2):
         return base[bu[i1][1]:bu[i2 - 1][2]]
@@ -1947,7 +2068,8 @@ def _derive_revisions(base_text, new_text):
             continue
         # Unchanged lines immediately above this change (available as context).
         room = (opcodes[k - 1][2] - opcodes[k - 1][1]) if k > 0 and opcodes[k - 1][0] == "equal" else 0
-        section = sections[max(i1 - 1, 0)] if tag == "insert" else sections[i1]
+        at = max(i1 - 1, 0) if tag == "insert" else i1
+        section, context = sections[at], contexts[at]
 
         if tag == "insert":
             if i1 == 0:
@@ -1962,7 +2084,7 @@ def _derive_revisions(base_text, new_text):
                     anchor = base_slice(a, i1)
                 anchor = _without_list_marker(anchor, base) or anchor
                 revisions.append({"type": "addition", "insert_after": anchor,
-                                  "proposed": new_slice(j1, j2), "section": section})
+                                  "proposed": new_slice(j1, j2), "section": section, "context": context})
                 continue
 
         original = base_slice(i1, i2)
@@ -1974,7 +2096,7 @@ def _derive_revisions(base_text, new_text):
             original = base_slice(i1, i2)
         if tag == "delete" and widened == 0:
             # A deletion keeps its marker so the whole line goes, not just the text after "7. ".
-            revisions.append({"type": "deletion", "original": original, "proposed": "", "section": section})
+            revisions.append({"type": "deletion", "original": original, "proposed": "", "section": section, "context": context})
         else:
             proposed = new_slice(j1, j2) if j2 > j1 else ""
             if i2 - i1 == 1 and j2 - j1 == 1:
@@ -1984,7 +2106,7 @@ def _derive_revisions(base_text, new_text):
                 stripped = _without_list_marker(original, base)
                 if stripped and mp and mo.group(0).strip() == mp.group(0).strip():
                     original, proposed = stripped, proposed[mp.end():]
-            revisions.append({"original": original, "proposed": proposed, "section": section})
+            revisions.append({"original": original, "proposed": proposed, "section": section, "context": context})
     return _deletions_before_matching_additions(revisions)
 
 
@@ -2068,7 +2190,8 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
         raise HTTPException(status_code=404, detail="No base constitution file found")
 
     # Apply each revision: text substitution, whitespace/list-marker tolerant.
-    modified, applied = _apply_revisions(content, revisions)
+    unmatched, ambiguous = [], []
+    modified, applied = _apply_revisions(content, revisions, unmatched, ambiguous)
 
     filename = f"cap-{number}-proposed.md"
     doc = db.query(ConstitutionDoc).filter(ConstitutionDoc.filename == filename).first()
@@ -2078,7 +2201,8 @@ def generate_draft_constitution(number: int, user: dict = Depends(require_user),
         db.add(ConstitutionDoc(filename=filename, content=modified))
     db.commit()
 
-    return {"filename": filename, "applied": applied, "total": len(revisions)}
+    return {"filename": filename, "applied": applied, "total": len(revisions),
+            "unmatched": unmatched, "ambiguous": ambiguous}
 
 
 class ConstitutionUpload(BaseModel):

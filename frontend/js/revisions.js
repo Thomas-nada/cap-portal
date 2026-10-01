@@ -26,7 +26,8 @@ export function countEffectiveRevisions(revisions) {
 // Wizard selection (+ its proposed text) -> stored revision.
 export function selectionToRevision(sel, proposed) {
     const section = sel.sectionId || '';
-    if (sel.kind === 'add_after') return { type: 'addition', insert_after: sel.text || '', proposed: proposed || '', section };
-    if (sel.kind === 'delete')    return { type: 'deletion', original: sel.text || '', proposed: '', section };
-    return { original: sel.text || '', proposed: proposed || '', section };
+    const context = sel.context || '';   // heading chain above the passage, pins repeated passages
+    if (sel.kind === 'add_after') return { type: 'addition', insert_after: sel.text || '', proposed: proposed || '', section, context };
+    if (sel.kind === 'delete')    return { type: 'deletion', original: sel.text || '', proposed: '', section, context };
+    return { original: sel.text || '', proposed: proposed || '', section, context };
 }

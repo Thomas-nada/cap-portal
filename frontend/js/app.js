@@ -1833,6 +1833,7 @@ function structuredToWizard(p) {
         id: `sel-edit-${i}`,
         text: r.type === 'addition' ? (r.insert_after || '') : (r.original || ''),
         sectionId: r.section || '',
+        context: r.context || '',
         type: 'CAP',
         kind: r.type === 'addition' ? 'add_after' : r.type === 'deletion' ? 'delete' : 'replace',
     }));
@@ -2511,6 +2512,7 @@ window.uploadEditedConstitution = async (input) => {
             id: `sel-upload-${stamp}-${i}`,
             text: r.type === 'addition' ? (r.insert_after || '') : (r.original || ''),
             sectionId: r.section || '',
+            context: r.context || '',
             type: 'CAP',
             kind: r.type === 'addition' ? 'add_after' : r.type === 'deletion' ? 'delete' : 'replace',
         }));
@@ -2573,8 +2575,8 @@ window.viewProposalDiff = async (proposalNumber) => {
             // The backend reports how many revisions it could locate in the
             // current constitution. If some couldn't be matched, the diff will be
             // partial or empty — warn instead of silently showing "identical".
-            if (gen && typeof gen.applied === 'number' && gen.applied < gen.total) {
-                state.constitutionDiffNotice = { applied: gen.applied, total: gen.total };
+            if (gen && typeof gen.applied === 'number' && (gen.applied < gen.total || gen.ambiguous?.length)) {
+                state.constitutionDiffNotice = { applied: gen.applied, total: gen.total, unmatched: gen.unmatched || [], ambiguous: gen.ambiguous || [] };
             }
             raw = await fetchConstitutionVersions();
         } catch (_) {

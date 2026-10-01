@@ -1126,8 +1126,11 @@ def test_match_span_refuses_ambiguous_match():
     """When a passage could match more than one place, we refuse rather than
     guess which clause the author meant to change."""
     doc = "The council shall vote.\n\nThe council shall vote.\n\nDone."
-    # Force the tolerant path with a whitespace difference; two candidates exist.
-    assert main._match_span(doc, "The  council  shall  vote.") is None
+    # Force the tolerant path with a whitespace difference; two candidates exist
+    # and nothing narrows them: the first is used and the call is flagged.
+    amb = []
+    assert main._match_span(doc, "The  council  shall  vote.", ambiguous=amb) == (0, 23)
+    assert amb == [True]
 
 
 def test_match_span_empty_needle():
@@ -1875,3 +1878,75 @@ def test_upload_fixture(client, db, case):
     assert applied == len(body["revisions"])
     canon = lambda t: [main._canon_line(l) for l in main._unwrap_paragraphs(main._norm_upload_text(t)).split("\n") if l.strip()]
     assert canon(modified) == canon(case["text"]), case["file"]
+
+
+# ── Highlighted (rendered) passages: emphasis dropped, repeated lines ──────────
+
+def test_rendered_anchor_with_emphasis_and_repeats_is_located_by_section(client, db):
+    """A highlight of the rendered page yields "governance action deposit (govDeposit)"
+    for the source line "- *governance action deposit* (*govDeposit*)", which
+    occurs in both Appendix I and Appendix II. The emphasis must be ignored and
+    the revision's section label must pick the right occurrence."""
+    base = _base_text()
+    lines = base.split("\n")
+    occ = [i for i, l in enumerate(lines) if l == "- *governance action deposit* (*govDeposit*)"]
+    assert len(occ) == 2
+    anchor = "governance action deposit (govDeposit)"
+    # Both occurrences sit under Appendix I, so the h2 section cannot decide:
+    # the first is used and the call is flagged as ambiguous.
+    amb = []
+    assert main._match_span(base, anchor, "Appendix I Guardrails", None, amb) is not None and amb
+    # The reader records the heading chain above a highlight; that decides.
+    chains = (("APPENDIX I. CARDANO BLOCKCHAIN GUARDRAILS › 2.1. Critical Protocol Parameters › Parameters that are Critical to the Operation of the Blockchain", occ[0]),
+              ("APPENDIX I. CARDANO BLOCKCHAIN GUARDRAILS › 9. List of Protocol Parameter Groups", occ[1]))
+    for context, want in chains:
+        revs = [{"type": "addition", "insert_after": anchor, "proposed": "- *new parameter* (*newParam*)", "section": "Appendix I Guardrails", "context": context}]
+        unmatched, ambiguous = [], []
+        modified, applied = main._apply_revisions(base, revs, unmatched, ambiguous)
+        assert applied == 1 and unmatched == [] and ambiguous == [], context
+        out = modified.split("\n")
+        assert out[want + 1] == "- *new parameter* (*newParam*)", context
+    # The six anchors from the live draft (all rendered list items), each in Appendix I.
+    anchors = ["governance action deposit (govDeposit)",
+               "maximum number of collateral inputs (maxCollateralInputs)",
+               "minimum fixed rewards cut for pools (minPoolCost)",
+               "pool pledge influence (poolPledgeInfluence)"]
+    revs = [{"type": "addition", "insert_after": a, "proposed": f"- *added after {i}*", "section": "Appendix I Guardrails"} for i, a in enumerate(anchors)]
+    unmatched, ambiguous = [], []
+    modified, applied = main._apply_revisions(base, revs, unmatched, ambiguous)
+    assert applied == len(anchors) and unmatched == []
+    assert ambiguous, "repeated lines without a heading chain are applied at the first and flagged"
+    # A replacement whose rendered original lost the emphasis around a term.
+    revs = [{"original": "MPC-01 (y) minPoolCost must not be negative", "proposed": "MPC-01 (y) *minPoolCost* must be positive", "section": "Appendix I Guardrails"}]
+    modified, applied = main._apply_revisions(base, revs)
+    assert applied == 1 and "MPC-01 (y) *minPoolCost* must be positive" in modified and "MPC-01 (y) *minPoolCost* must not be negative" not in modified
+
+
+def test_exact_match_of_repeated_line_prefers_heading_context(client, db):
+    base = _base_text()
+    lines = base.split("\n")
+    occ = [i for i, l in enumerate(lines) if l == "- *maximum transaction size* (*maxTxSize*)"]
+    assert len(occ) == 2
+    revs = [{"original": "- *maximum transaction size* (*maxTxSize*)", "proposed": "- *maximum transaction size* (*maxTxSize*) in bytes",
+             "section": "Appendix I Guardrails", "context": "APPENDIX I. CARDANO BLOCKCHAIN GUARDRAILS › 9. List of Protocol Parameter Groups"}]
+    ambiguous = []
+    modified, _ = main._apply_revisions(base, revs, None, ambiguous)
+    out = modified.split("\n")
+    assert out[occ[1]].endswith("in bytes") and out[occ[0]] == lines[occ[0]] and ambiguous == []
+    # Without a usable context the first occurrence is used, as before, and flagged.
+    revs[0]["context"] = ""
+    ambiguous = []
+    modified, _ = main._apply_revisions(base, revs, None, ambiguous)
+    out = modified.split("\n")
+    assert out[occ[0]].endswith("in bytes") and ambiguous == [1]
+
+
+def test_generate_draft_reports_unmatched_revisions(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    revs = [{"original": "This passage does not exist anywhere", "proposed": "x", "section": "Preamble"},
+            {"original": "Cardano is a decentralized ecosystem", "proposed": "Cardano is a decentralised ecosystem", "section": "Preamble"},
+            {"type": "addition", "insert_after": "nor this one", "proposed": "y", "section": ""}]
+    client.post("/proposals", json=proposal_body(revisions=revs), headers=auth(AUTHOR_ADDR, "Alice"))
+    g = client.post("/proposals/1/generate-draft-constitution", headers=auth(AUTHOR_ADDR, "Alice"))
+    assert g.status_code == 200
+    assert g.json()["applied"] == 1 and g.json()["total"] == 3 and g.json()["unmatched"] == [1, 3] and g.json()["ambiguous"] == []
