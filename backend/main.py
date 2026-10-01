@@ -1787,7 +1787,7 @@ def _context_span(haystack, context):
     return span
 
 
-def _match_span(haystack: str, needle: str, section: str = None, context: str = None, ambiguous=None):
+def _match_span(haystack: str, needle: str, section: str = None, context: str = None, ambiguous=None, after=None):
     """Locate `needle` inside `haystack`, returning (start, end) or None.
 
     A proposal's `original`/`insert_after` text must be found in the current
@@ -1800,8 +1800,10 @@ def _match_span(haystack: str, needle: str, section: str = None, context: str = 
     the passage occurs several times, the revision's heading `context` (the
     chain of headings the author was reading under) or, failing that, its h2
     `section` picks the occurrence. If that still leaves several, the first
-    one in the narrowest region is used and the call is flagged in
-    `ambiguous` (a list, when given) so the author can be told to pin it down.
+    one at or beyond `after` (where the previous revision landed: authors
+    select passages in reading order) is used, else the first in the
+    narrowest region, and the call is flagged in `ambiguous` (a list, when
+    given) so the author can be told to pin it down.
     """
     needle = (needle or "").strip()
     if not needle:
@@ -1820,7 +1822,8 @@ def _match_span(haystack: str, needle: str, section: str = None, context: str = 
                     break
         if ambiguous is not None:
             ambiguous.append(True)
-        return spans[0]
+        later = [sp for sp in spans if sp[0] >= after] if after is not None else []
+        return later[0] if later else spans[0]
 
     # Fast path: exact substring. Several occurrences: the section decides,
     # else the first (the historical .find() behaviour).
@@ -1866,11 +1869,12 @@ def _apply_revisions(base_content, revisions, unmatched=None, ambiguous=None):
     `ambiguous`."""
     modified = base_content
     applied = 0
+    cursor = 0   # where the previous revision landed; breaks ties in reading order
     for i, rev in enumerate(revisions or []):
         proposed = (rev.get("proposed") or "").strip()
         section, context = rev.get("section"), rev.get("context")
         amb = []
-        locate = lambda text: _match_span(modified, text, section, context, amb) if text else None
+        locate = lambda text: _match_span(modified, text, section, context, amb, cursor) if text else None
         if rev.get("type") == "deletion":
             original = (rev.get("original") or "").strip()
             span = locate(original)
@@ -1878,6 +1882,7 @@ def _apply_revisions(base_content, revisions, unmatched=None, ambiguous=None):
                 ambiguous.append(i + 1)
             if span:
                 modified = _remove_span(modified, *span)
+                cursor = span[0]
                 applied += 1
             elif unmatched is not None:
                 unmatched.append(i + 1)
@@ -1903,6 +1908,7 @@ def _apply_revisions(base_content, revisions, unmatched=None, ambiguous=None):
                 # a prose block is separated by a blank line.
                 sep = "\n" if re.match(r"^(?:[-*+]|\d+\.)\s", proposed) else "\n\n"
                 modified = modified[:line_end] + sep + proposed + modified[line_end:]
+                cursor = line_end + len(sep) + len(proposed)
                 applied += 1
             elif unmatched is not None:
                 unmatched.append(i + 1)
@@ -1914,6 +1920,7 @@ def _apply_revisions(base_content, revisions, unmatched=None, ambiguous=None):
             if span:
                 start, end = span
                 modified = modified[:start] + proposed + modified[end:]
+                cursor = start + len(proposed)
                 applied += 1
             elif unmatched is not None:
                 unmatched.append(i + 1)

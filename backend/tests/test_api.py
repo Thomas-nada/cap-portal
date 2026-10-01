@@ -1950,3 +1950,28 @@ def test_generate_draft_reports_unmatched_revisions(client, db):
     g = client.post("/proposals/1/generate-draft-constitution", headers=auth(AUTHOR_ADDR, "Alice"))
     assert g.status_code == 200
     assert g.json()["applied"] == 1 and g.json()["total"] == 3 and g.json()["unmatched"] == [1, 3] and g.json()["ambiguous"] == []
+
+
+def test_legacy_ambiguous_anchors_follow_reading_order(client, db):
+    """Revisions saved before heading chains existed: when a rendered anchor
+    occurs twice, the occurrence after the previous revision's position wins.
+    This is the live draft that reported "1 of 7 applied", in its order."""
+    base = _base_text()
+    anchors = ["governance action deposit (govDeposit)",                         # lines 339 / 1245
+               'MBHS-05 (x - "should") maxBlockHeaderSize should be within TCP\'s initial congestion window (3 or 10 MTUs)',   # 751
+               'PPI-04 (x - "should") poolPledgeInfluence should not vary by more than +/- 10% in any 18-epoch period (approximately 3 months)',  # 823
+               "maximum number of collateral inputs (maxCollateralInputs)",      # 1203
+               "minimum fixed rewards cut for pools (minPoolCost)",              # 353 / 1221
+               "pool pledge influence (poolPledgeInfluence)"]                    # 1229
+    revs = [{"type": "addition", "insert_after": a, "proposed": f"INSERTED-{i} [PENDING]", "section": "Appendix I Guardrails"} for i, a in enumerate(anchors)]
+    unmatched, ambiguous = [], []
+    modified, applied = main._apply_revisions(base, revs, unmatched, ambiguous)
+    assert applied == 6 and unmatched == []
+    assert ambiguous == [1, 5]            # the two repeated lines are flagged, the rest are unique
+    out = modified.split("\n")
+    pos = [next(i for i, l in enumerate(out) if l.startswith(f"INSERTED-{k}")) for k in range(6)]
+    assert pos == sorted(pos), "inserts land in reading order"
+    groups = out.index("### 9. List of Protocol Parameter Groups")
+    assert pos[0] < groups and pos[4] > groups   # govDeposit in 2.1, minPoolCost in the groups list
+    assert out[pos[0] - 2] == "- *governance action deposit* (*govDeposit*)"   # prose insert: blank line between
+    assert out[pos[4] - 2] == "- *minimum fixed rewards cut for pools* (*minPoolCost*)"
