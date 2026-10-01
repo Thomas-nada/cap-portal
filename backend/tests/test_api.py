@@ -2011,3 +2011,24 @@ def test_live_cap12_dijkstra_draft_applies_as_intended(client, db):
     k = next(i for i, l in enumerate(out) if "*minPoolMargin*" in l)
     assert heading_above(k) == "### 9. List of Protocol Parameter Groups"
     assert out[k - 1] == "- *minimum fixed rewards cut for pools* (*minPoolCost*)"
+
+
+def test_derive_revisions_rejects_too_many_lines(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = client.post("/constitution/derive-revisions", json={"content": "x\n\n" * 20_001}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 400 and "too many lines" in r.json()["detail"]
+
+
+def test_startup_regeneration_covers_deletion_only_proposals(client, db):
+    """_regenerate_all_drafts must not skip a proposal whose only revision is a deletion."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    base = _base_text()
+    target = next(l for l in base.split("\n") if l.startswith("Through unbiased processing"))
+    revs = [{"type": "deletion", "original": target, "proposed": "", "section": "Preamble"}]
+    client.post("/proposals", json=proposal_body(revisions=revs), headers=auth(AUTHOR_ADDR, "Alice"))
+    import main as _m
+    from unittest.mock import patch
+    with patch.object(_m, "SessionLocal", lambda: db, create=True), patch("database.SessionLocal", lambda: db):
+        _m._regenerate_all_drafts()
+    draft = client.get("/constitution/cap-1-proposed.md")
+    assert draft.status_code == 200 and target not in draft.json()["content"]

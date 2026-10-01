@@ -296,6 +296,8 @@ MAX_DRAFT_TOTAL = 2_000_000   # whole draft blob (wizard state is larger than th
                               # final structured body: it also holds selections, etc.)
 MAX_CONSTITUTION_UPLOAD = 1_000_000  # an edited copy of the constitution uploaded to
                                      # derive revisions (the base is ~70k characters)
+MAX_CONSTITUTION_LINES = 20_000      # non-blank lines in such an upload (the base has ~640);
+                                     # bounds the line diff, which is quadratic in the worst case
 
 # Mainnet stake address (bech32, hrp "stake"). Used to validate co-author ids.
 _STAKE_ADDR_RE = re.compile(r"^stake1[0-9a-z]{50,70}$")
@@ -2039,6 +2041,9 @@ def _derive_revisions(base_text, new_text):
     bu, nu = _line_units(base), _line_units(new)
     if not nu:
         raise ValueError("The uploaded file is empty")
+    if len(nu) > MAX_CONSTITUTION_LINES:
+        raise ValueError(f"The uploaded file has too many lines (max {MAX_CONSTITUTION_LINES:,}). "
+                         "Upload the edited constitution markdown only.")
     sm = difflib.SequenceMatcher(None, [_canon_line(u[0]) for u in bu], [_canon_line(u[0]) for u in nu], autojunk=False)
     opcodes = sm.get_opcodes()
     matched = sum(i2 - i1 for tag, i1, i2, _j1, _j2 in opcodes if tag == "equal")
@@ -2156,7 +2161,9 @@ def _regenerate_all_drafts():
                 except Exception:
                     continue
                 revisions = structured.get("revisions") or []
-                if not any((r.get("proposed") or "").strip() for r in revisions):
+                if not any((r.get("proposed") or "").strip()
+                           or (r.get("type") == "deletion" and (r.get("original") or "").strip())
+                           for r in revisions):
                     continue
                 modified, _applied = _apply_revisions(base, revisions)
                 filename = f"cap-{p.number}-proposed.md"
