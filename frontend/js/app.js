@@ -1179,28 +1179,100 @@ window.openVersionModal = async (number, version) => {
  if (s.exhibits) fullSections.push(`<h2 class="text-xl font-black text-slate-900 mt-2 mb-3">Links &amp; Files</h2><div class="prose max-w-none text-sm">${renderMd(s.exhibits)}</div>`);
  const fullContent = `<h1 class="text-2xl font-black tracking-tight text-slate-900 mb-6">${esc(v.title)}</h1>` + fullSections.join('<hr class="border-slate-100 my-4">');
 
-        // Diff view — field by field word diff
-        const DIFF_FIELDS = [
-            { label: 'Title',       cur: v.title,     old: prev?.title },
-            { label: 'Summary',     cur: s.abstract,  old: sp.abstract },
-            { label: isCIS ? 'Problem' : 'Why is this change needed?', cur: s.motivation, old: sp.motivation },
-            { label: isCIS ? 'Context' : 'Analysis & Test', cur: s.analysis, old: sp.analysis },
-            { label: 'Impact',      cur: s.impact,    old: sp.impact },
-            { label: 'Links & Files', cur: s.exhibits, old: sp.exhibits },
+        // Changes view — what differs from the previous version, and nothing else.
+        const SECTION_FIELDS = [
+            { key: 'title',      label: 'Title',       cur: v.title,     old: prev?.title },
+            { key: 'category',   label: 'Category',    cur: s.category,  old: sp.category, plain: true },
+            { key: 'abstract',   label: 'Summary',     cur: s.abstract,  old: sp.abstract },
+            { key: 'motivation', label: isCIS ? 'Problem' : 'Why is this change needed?', cur: s.motivation, old: sp.motivation },
+            { key: 'analysis',   label: isCIS ? 'Context' : 'Analysis & Test', cur: s.analysis, old: sp.analysis },
+            { key: 'impact',     label: 'Impact',      cur: s.impact,    old: sp.impact },
+            { key: 'exhibits',   label: 'Links & Files', cur: s.exhibits, old: sp.exhibits },
         ].filter(f => f.cur || f.old);
+        const changedFields = SECTION_FIELDS.filter(f => (f.cur || '') !== (f.old || ''));
+        const unchangedFields = SECTION_FIELDS.filter(f => (f.cur || '') === (f.old || ''));
 
-        const diffFields = DIFF_FIELDS.map(f => {
-            const changed = (f.cur || '') !== (f.old || '');
-            const diffHtml = prev ? versionWordDiff(f.old || '', f.cur || '') : esc(f.cur || '');
+        // Revisions: pair each current revision with the previous version's by
+        // what it is anchored to (the passage being replaced / inserted after).
+        const revKey = r => `${r?.type || 'replace'}\u0000${((r?.type === 'addition' ? r?.insert_after : r?.original) || '').trim()}`;
+        const pool = new Map();
+        (sp.revisions || []).forEach((r, i) => { const k = revKey(r); if (!pool.has(k)) pool.set(k, []); pool.get(k).push({ r, i }); });
+        const revRows = (s.revisions || []).map((r, i) => {
+            const m = pool.get(revKey(r)); const prevRev = m && m.length ? m.shift() : null;
+            if (!prevRev) return { status: 'added', r, i };
+            const same = (prevRev.r.proposed || '').trim() === (r.proposed || '').trim();
+            return { status: same ? 'unchanged' : 'edited', r, i, prevRev: prevRev.r };
+        });
+        const removedRevs = [...pool.values()].flat().map(({ r, i }) => ({ status: 'removed', r, i }));
+        const kindLabel = r => r.type === 'addition' ? 'Add after' : r.type === 'deletion' ? 'Delete' : 'Replace';
+        const passage = r => r.type === 'addition' ? (r.insert_after || '') : (r.original || '');
+        const changedRevs = revRows.filter(x => x.status !== 'unchanged');
+        const unchangedRevCount = revRows.length - changedRevs.length;
+
+        const chips = [
+            ...changedFields.map(f => f.label),
+            ...changedRevs.map(x => `Revision ${x.i + 1}${x.status === 'added' ? ' (new)' : ''}`),
+            ...removedRevs.map(() => 'Revision removed'),
+        ];
+        const nChanges = chips.length;
+
+        const revCard = (x) => {
+            const tone = x.status === 'added' ? 'green' : x.status === 'removed' ? 'red' : 'blue';
+            const tag = x.status === 'added' ? 'New revision' : x.status === 'removed' ? 'Revision removed' : `Revision ${x.i + 1} edited`;
+            const proposedHtml = x.status === 'edited'
+                ? versionWordDiff(x.prevRev.proposed || '', x.r.proposed || '')
+                : x.status === 'removed' ? `<span class="line-through text-slate-400">${esc(x.r.proposed || '')}</span>` : esc(x.r.proposed || '');
             return `
- <div class="${!changed ? 'opacity-40' : ''}">
- <div class="flex items-center gap-2 mb-2">
- <p class="text-sm font-black uppercase tracking-widest text-slate-400">${esc(f.label)}</p>
- ${changed ? `<span class="text-sm font-black uppercase tracking-widest text-blue-500 bg-blue-50 px-2 py-0.5 rounded-full">Changed</span>` : `<span class="text-sm text-slate-300 font-bold">Unchanged</span>`}
+ <div class="rounded-2xl border border-${tone}-200 overflow-hidden">
+ <div class="px-5 py-2 bg-${tone}-50 flex items-center gap-3 flex-wrap">
+ <span class="text-sm font-black uppercase tracking-widest text-${tone}-600">${tag}</span>
+ <span class="text-sm font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/70 text-slate-500">${kindLabel(x.r)}</span>
+                    ${x.r.section ? `<span class="text-sm text-slate-400 truncate">${esc(x.r.section)}</span>` : ''}
                 </div>
- <div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100 ">${diffHtml}</div>
+ <div class="p-5 space-y-3">
+                    <div>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">${x.r.type === 'addition' ? 'Insert after' : x.r.type === 'deletion' ? 'Passage removed from the Constitution' : 'Original passage'}</p>
+ <p class="text-sm text-slate-600 italic whitespace-pre-wrap">"${esc(passage(x.r))}"</p>
+                    </div>
+                    ${x.r.type === 'deletion' ? '' : `
+                    <div>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-1">Proposed text${x.status === 'edited' ? ' (changes marked)' : ''}</p>
+ <div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100">${proposedHtml}</div>
+                    </div>`}
+                </div>
             </div>`;
- }).join('<hr class="border-slate-100 my-2">');
+        };
+
+        const diffFields = !prev ? '' : nChanges === 0 ? `
+ <div class="rounded-2xl bg-slate-50 border border-slate-100 p-6 text-center">
+ <p class="text-sm font-black text-slate-700">No differences from V${v.version - 1}</p>
+ <p class="text-sm text-slate-400 mt-1">The title, every section and every revision are identical.</p>
+            </div>` : `
+ <div class="rounded-2xl bg-blue-50 border border-blue-100 p-5">
+ <p class="text-sm font-black text-slate-900">${nChanges} change${nChanges === 1 ? '' : 's'} since V${v.version - 1}</p>
+ <div class="flex flex-wrap gap-2 mt-3">${chips.map(c => `<span class="text-sm font-bold px-3 py-1 rounded-full bg-white text-blue-700 border border-blue-100">${esc(c)}</span>`).join('')}</div>
+            </div>
+            ${changedFields.map(f => `
+            <div>
+ <div class="flex items-center gap-2 mb-2">
+ <p class="text-sm font-black uppercase tracking-widest text-slate-500">${esc(f.label)}</p>
+ <span class="text-sm font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Changed</span>
+                </div>
+                ${f.plain
+                    ? `<div class="text-sm bg-slate-50 rounded-2xl p-4 border border-slate-100"><span class="line-through text-slate-400">${esc(f.old || '—')}</span> <span class="mx-2 text-slate-300">→</span> <span class="font-bold text-slate-900">${esc(f.cur || '—')}</span></div>`
+                    : `<div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100">${versionWordDiff(f.old || '', f.cur || '')}</div>`}
+            </div>`).join('')}
+            ${changedRevs.length || removedRevs.length ? `
+ <div class="space-y-4">
+ <p class="text-sm font-black uppercase tracking-widest text-slate-500">Constitution changes</p>
+                ${changedRevs.map(revCard).join('')}
+                ${removedRevs.map(revCard).join('')}
+            </div>` : ''}
+            ${unchangedFields.length || unchangedRevCount ? `
+ <p class="text-sm text-slate-400 pt-2 border-t border-slate-100">Unchanged: ${[
+                ...unchangedFields.map(f => esc(f.label)),
+                ...(unchangedRevCount ? [`${unchangedRevCount} revision${unchangedRevCount === 1 ? '' : 's'}`] : []),
+            ].join(', ')}</p>` : ''}`;
 
         const hasPrev = !!prev;
 
@@ -1231,20 +1303,20 @@ window.openVersionModal = async (number, version) => {
                 <!-- Tabs -->
  <div class="flex gap-1 px-8 pt-4 flex-shrink-0">
                     <button id="ver-tab-full" onclick="window._verTab('full')"
- class="px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all bg-blue-600 text-white">
+ class="px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all ${hasPrev ? 'text-slate-500 hover:bg-slate-100' : 'bg-blue-600 text-white'}">
                         Full View
                     </button>
                     ${hasPrev ? `
                     <button id="ver-tab-diff" onclick="window._verTab('diff')"
- class="px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all text-slate-500 hover:bg-slate-100 ">
+ class="px-5 py-2 rounded-2xl text-sm font-black uppercase tracking-widest transition-all bg-blue-600 text-white">
                         Changes vs V${v.version - 1}
                     </button>` : ''}
                 </div>
 
-                <!-- Content -->
+                <!-- Content: a version after the first opens on what changed -->
  <div class="overflow-y-auto p-8 space-y-6 flex-1">
- <div id="ver-panel-full" class="space-y-6">${fullContent}</div>
- <div id="ver-panel-diff" class="space-y-4 hidden">${diffFields}</div>
+ <div id="ver-panel-full" class="space-y-6 ${hasPrev ? 'hidden' : ''}">${fullContent}</div>
+ <div id="ver-panel-diff" class="space-y-5 ${hasPrev ? '' : 'hidden'}">${diffFields}</div>
                 </div>
             </div>
         </div>`;
