@@ -10,32 +10,35 @@ function md(text) {
     return window.safeMarkdown(text);
 }
 
-function renderStructuredBody(s, type) {
+function renderStructuredBody(s, type, counts = {}) {
  if (!s) return '<p class="text-slate-400">No content.</p>';
     const isCIS = type === 'CIS';
     const sections = [];
+    // Each section is addressable (jump bar, comment topics) and shows how many
+    // comments are about it.
+    const sec = (key, title, html) => `<section id="sec-${key}" class="scroll-mt-40"><h2>${title}${topicBadge(key, counts)}</h2>${html}</section>`;
 
-    if (s.abstract)    sections.push(`<h2>Summary</h2>${md(s.abstract)}`);
+    if (s.abstract)    sections.push(sec('abstract', 'Summary', md(s.abstract)));
     if (isCIS) {
-        if (s.motivation) sections.push(`<h2>Problem</h2>${md(s.motivation)}`);
-        if (s.analysis)   sections.push(`<h2>Context</h2>${md(s.analysis)}`);
-        if (s.impact)     sections.push(`<h2>Impact</h2>${md(s.impact)}`);
+        if (s.motivation) sections.push(sec('motivation', 'Problem', md(s.motivation)));
+        if (s.analysis)   sections.push(sec('analysis', 'Context', md(s.analysis)));
+        if (s.impact)     sections.push(sec('impact', 'Impact', md(s.impact)));
     } else {
-        if (s.motivation) sections.push(`<h2>Why is this change needed?</h2>${md(s.motivation)}`);
-        if (s.analysis)   sections.push(`<h2>Analysis &amp; Test</h2>${md(s.analysis)}`);
+        if (s.motivation) sections.push(sec('motivation', 'Why is this change needed?', md(s.motivation)));
+        if (s.analysis)   sections.push(sec('analysis', 'Analysis &amp; Test', md(s.analysis)));
     }
 
     if (s.revisions?.length) {
         const revHtml = s.revisions.map((r, i) => r.type === 'deletion' ? `
- <div class="rounded-2xl border border-red-100 overflow-hidden mb-4">
- ${r.section ? `<div class="px-5 py-2 bg-red-50 text-sm font-black text-red-400 uppercase tracking-widest">${escapeHtml(r.section)}</div>` : ''}
+ <div id="rev-${i + 1}" class="rounded-2xl border border-red-100 overflow-hidden mb-4 scroll-mt-40">
+ <div class="px-5 py-2 bg-red-50 text-sm font-black text-red-400 uppercase tracking-widest flex items-center gap-2"><span>Revision ${i + 1}</span>${r.section ? `<span class="font-bold normal-case tracking-normal text-slate-400">· ${escapeHtml(r.section)}</span>` : ''}${topicBadge(`revisions[${i}]`, counts)}</div>
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-red-500 mb-2">Removed</div>
  <div class="text-sm text-slate-500 font-mono leading-relaxed whitespace-pre-wrap line-through">${escapeHtml(r.original || '')}</div>
                     </div>
             </div>` : r.type === 'addition' ? `
- <div class="rounded-2xl border border-cyan-100 overflow-hidden mb-4">
- ${r.section ? `<div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest">${r.section}</div>` : ''}
+ <div id="rev-${i + 1}" class="rounded-2xl border border-cyan-100 overflow-hidden mb-4 scroll-mt-40">
+ <div class="px-5 py-2 bg-cyan-50 text-sm font-black text-cyan-500 uppercase tracking-widest flex items-center gap-2"><span>Revision ${i + 1}</span>${r.section ? `<span class="font-bold normal-case tracking-normal text-slate-400">· ${escapeHtml(r.section)}</span>` : ''}${topicBadge(`revisions[${i}]`, counts)}</div>
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-cyan-100 ">
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-cyan-500 mb-2">Insert After</div>
@@ -47,8 +50,8 @@ function renderStructuredBody(s, type) {
                     </div>
                 </div>
             </div>` : `
- <div class="rounded-2xl border border-slate-100 overflow-hidden mb-4">
- ${r.section ? `<div class="px-5 py-2 bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest">${r.section}</div>` : ''}
+ <div id="rev-${i + 1}" class="rounded-2xl border border-slate-100 overflow-hidden mb-4 scroll-mt-40">
+ <div class="px-5 py-2 bg-slate-50 text-sm font-black text-slate-400 uppercase tracking-widest flex items-center gap-2"><span>Revision ${i + 1}</span>${r.section ? `<span class="font-bold normal-case tracking-normal text-slate-400">· ${escapeHtml(r.section)}</span>` : ''}${topicBadge(`revisions[${i}]`, counts)}</div>
  <div class="grid grid-cols-1 sm:grid-cols-2 divide-y sm:divide-y-0 sm:divide-x divide-slate-100 ">
  <div class="p-5">
  <div class="text-sm font-black uppercase tracking-widest text-red-400 mb-2">Original</div>
@@ -60,12 +63,85 @@ function renderStructuredBody(s, type) {
                     </div>
                 </div>
             </div>`).join('');
-        sections.push(`<h2>Proposed Revisions</h2>${revHtml}`);
+        sections.push(`<section id="sec-revisions" class="scroll-mt-40"><h2>Proposed Revisions</h2>${revHtml}</section>`);
     }
 
-    if (s.exhibits)    sections.push(`<h2>Links &amp; Files</h2>${md(s.exhibits)}`);
+    if (s.exhibits)    sections.push(sec('exhibits', 'Links &amp; Files', md(s.exhibits)));
 
     return sections.join('\n');
+}
+
+// ── Discussion navigation helpers ────────────────────────────────────────────
+// A comment's `about` is a section key ("abstract", …) or "revisions[i]"; null
+// means the proposal in general. These map it to a label and to the id of the
+// element on the page it refers to.
+const SECTION_KEYS = ['abstract', 'motivation', 'analysis', 'impact', 'exhibits'];
+function sectionLabel(key, isCIS) {
+    return { abstract: 'Summary', motivation: isCIS ? 'Problem' : 'Why is this change needed?',
+             analysis: isCIS ? 'Context' : 'Analysis & Test', impact: 'Impact', exhibits: 'Links & Files' }[key] || key;
+}
+function aboutLabel(about, isCIS) {
+    if (!about) return 'General';
+    const m = /^revisions\[(\d+)\]$/.exec(about);
+    return m ? `Revision ${Number(m[1]) + 1}` : sectionLabel(about, isCIS);
+}
+function aboutTargetId(about) {
+    if (!about) return 'discussion';
+    const m = /^revisions\[(\d+)\]$/.exec(about);
+    return m ? `rev-${Number(m[1]) + 1}` : `sec-${about}`;
+}
+// Comments per topic, replies included, so a section badge reflects the whole conversation about it.
+function commentCountsByAbout(comments) {
+    const counts = {};
+    for (const c of comments || []) { const k = c.about || ''; counts[k] = (counts[k] || 0) + 1; }
+    return counts;
+}
+function topicBadge(about, counts) {
+    const n = counts[about] || 0;
+    if (!n) return '';
+    return `<button type="button" onclick="window.filterDiscussion('${about}')" title="Show the ${n} comment${n === 1 ? '' : 's'} about this"
+ class="not-prose inline-flex items-center gap-1 ml-3 align-middle px-2.5 py-1 rounded-full bg-blue-50 text-blue-700 text-sm font-bold hover:bg-blue-100 transition-colors">
+ <i data-lucide="message-square" class="w-3.5 h-3.5"></i> ${n}</button>`;
+}
+// The parts of a proposal a comment can be about, for the comment form's picker.
+function aboutOptions(s, type) {
+    const isCIS = type === 'CIS';
+    const opts = [{ value: '', label: 'The proposal in general' }];
+    for (const k of SECTION_KEYS) if (s?.[k]) opts.push({ value: k, label: sectionLabel(k, isCIS) });
+    (s?.revisions || []).forEach((r, i) => {
+        const passage = (r.type === 'addition' ? r.insert_after : r.original) || '';
+        opts.push({ value: `revisions[${i}]`, label: `Revision ${i + 1}: ${passage.slice(0, 50)}${passage.length > 50 ? '…' : ''}` });
+    });
+    return opts;
+}
+
+// Sticky row of jump chips so a long proposal and its discussion can be
+// navigated without scrolling blind. Jumps scroll rather than set the hash.
+function renderJumpBar(p, commentCount) {
+    const s = p.structured || {};
+    const isCIS = p.type === 'CIS';
+    const items = [];
+    for (const k of SECTION_KEYS) if (s[k]) items.push({ id: `sec-${k}`, label: sectionLabel(k, isCIS) });
+    if (s.revisions?.length) items.push({ id: 'sec-revisions', label: `Revisions (${s.revisions.length})` });
+    items.push({ id: 'discussion', label: `Discussion (${commentCount})`, accent: true });
+    if (!items.length) return '';
+    const chip = (it) => `<button type="button" onclick="window.scrollToId('${it.id}')"
+ class="px-3 py-1.5 rounded-lg text-sm font-bold whitespace-nowrap transition-colors ${it.accent ? 'bg-blue-600 text-white hover:bg-blue-700' : 'text-slate-600 hover:bg-slate-100'}">${escapeHtml(it.label)}</button>`;
+    return `
+ <nav id="jump-bar" class="sticky top-24 z-30 -mx-4 sm:mx-0 px-4 sm:px-3 py-2 bg-white/90 backdrop-blur border-y sm:border border-slate-200 sm:rounded-2xl shadow-sm flex items-center gap-1 overflow-x-auto">
+ <span class="text-sm font-black uppercase tracking-widest text-slate-400 mr-2 flex-shrink-0 hidden sm:inline">Jump to</span>
+        ${items.map(chip).join('')}
+ <button type="button" onclick="window.scrollTo({top: 0, behavior: 'smooth'})" title="Back to top"
+ class="ml-auto flex-shrink-0 p-1.5 rounded-lg text-slate-400 hover:bg-slate-100"><i data-lucide="arrow-up" class="w-4 h-4"></i></button>
+    </nav>`;
+}
+
+// Fold a long comment body so a thread of essays stays scannable; the reader
+// opens the ones they want.
+const LONG_COMMENT_CHARS = 1200;
+const LONG_COMMENT_LINES = 14;
+function isLongComment(body) {
+    return (body || '').length > LONG_COMMENT_CHARS || (body || '').split('\n').length > LONG_COMMENT_LINES;
 }
 
 function escapeHtml(str) {
@@ -84,8 +160,20 @@ function countDescendants(id, childrenOf) {
 }
 
 function renderCommentNode(c, ctx, depth) {
-    const { byId, childrenOf, state, isEditor, isAdmin } = ctx;
+    const { byId, childrenOf, state, isEditor, isAdmin, proposal } = ctx;
     const cName = c.author_display_name || shortAddress(c.author_stake_address);
+    const isCIS = proposal?.type === 'CIS';
+    // Who is speaking: the author, a co-author, or an editor.
+    const role = proposal && c.author_stake_address === proposal.author_stake_address ? 'Author'
+        : (proposal?.co_authors || []).some(ca => ca.stake_address === c.author_stake_address) ? 'Co-author'
+        : (state.editors || []).some(e => e.stake_address === c.author_stake_address) ? 'Editor' : null;
+    const roleBadge = role ? `<span class="text-sm font-black px-2 py-0.5 rounded-full uppercase tracking-wider ${role === 'Editor' ? 'bg-purple-100 text-purple-700' : 'bg-blue-600 text-white'}">${role}</span>` : '';
+    const parentAbout = c.parent_id != null ? byId.get(c.parent_id)?.about : undefined;
+    // Show the topic on root comments and on replies that change topic.
+    const topicChip = c.about && (depth === 0 || c.about !== parentAbout) ? `<button type="button" onclick="window.scrollToId('${aboutTargetId(c.about)}')" title="Go to what this comment is about"
+ class="text-sm font-bold px-2.5 py-0.5 rounded-full bg-amber-50 text-amber-800 border border-amber-200 hover:bg-amber-100 transition-colors">About: ${escapeHtml(aboutLabel(c.about, isCIS))}</button>` : '';
+    const folded = isLongComment(c.body) && !(state.expandedComments instanceof Set && state.expandedComments.has(c.id));
+    const words = (c.body || '').trim().split(/\s+/).length;
     const cAddr = shortAddress(c.author_stake_address);
     const mod = c.moderation_status || 'visible';
     const modBadge = mod === 'under_review'
@@ -95,6 +183,7 @@ function renderCommentNode(c, ctx, depth) {
         : '';
     const cardBorder = mod === 'removed' ? 'border-red-200' : mod === 'under_review' ? 'border-amber-200' : 'border-slate-200';
     const canFlag = (isEditor || isAdmin) && mod === 'visible';
+    const canSetTopic = (isEditor || isAdmin) && mod === 'visible';   // editors file any comment
     const canReply = !!state.user && mod === 'visible';
     const canEdit = !!state.user && state.user.stake_address === c.author_stake_address && mod === 'visible';
     const editing = state.editingComment === c.id;
@@ -128,7 +217,7 @@ function renderCommentNode(c, ctx, depth) {
     const nameSize = isRoot ? 'text-base' : 'text-sm';
 
     return `
- <div class="${nodeWrap}">
+ <div id="comment-${c.id}" class="${nodeWrap} scroll-mt-40">
  <div class="flex gap-4 sm:gap-8 group ${mod !== 'visible' ? 'opacity-80' : ''}">
  <div class="${avatarWrap} flex items-center justify-center flex-shrink-0">
  <i data-lucide="user" class="${avatarIcon}"></i>
@@ -139,10 +228,18 @@ function renderCommentNode(c, ctx, depth) {
  <span class="${nameSize} font-black text-slate-900 ">${escapeHtml(cName)}</span>
  <span class="text-sm text-slate-400 font-mono">(${cAddr})</span>
                                             </div>
+                                            ${roleBadge}
+                                            ${topicChip}
                                             ${parentName ? `<span class="text-sm font-bold text-blue-600 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-3 h-3"></i> Replying to ${escapeHtml(parentName)}</span>` : ''}
  <span class="text-sm font-bold text-slate-400 uppercase tracking-tighter">${new Date(c.created_at).toLocaleString()}</span>
                                             ${modBadge}
  <div class="ml-auto flex items-center gap-1">
+                                                ${canSetTopic && !editing ? `
+                                                <select title="Set what this comment is about" onchange="window.applyCommentTopic(${c.id}, this.value)"
+ class="text-sm font-bold rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-500 hover:border-blue-400 outline-none max-w-[13rem] truncate">
+                                                    ${aboutOptions(proposal?.structured, proposal?.type).map(o => `<option value="${o.value}" ${(c.about || '') === o.value ? 'selected' : ''}>${escapeHtml(o.value ? 'Topic: ' + o.label : 'Topic: general')}</option>`).join('')}
+                                                </select>
+                                                ` : ''}
                                                 ${canReply ? `
                                                 <button onclick="window.replyToComment(${c.id})" title="Reply to this comment"
  class="text-slate-400 hover:text-blue-600 transition-all p-1.5 rounded-lg hover:bg-blue-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide">
@@ -165,6 +262,12 @@ function renderCommentNode(c, ctx, depth) {
                                         </div>
                                         ${editing ? `
  <form onsubmit="event.preventDefault(); window.saveCommentEdit(${c.id}, this)" class="space-y-3">
+ <div class="flex flex-wrap items-center gap-3">
+ <label class="text-sm font-black uppercase tracking-widest text-slate-400">About</label>
+ <select name="about" class="text-sm font-bold rounded-xl border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-blue-500 max-w-full">
+                                                    ${aboutOptions(proposal?.structured, proposal?.type).map(o => `<option value="${o.value}" ${(c.about || '') === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
+                                                </select>
+                                            </div>
                                             <textarea id="edit-input-${c.id}" name="body" required maxlength="20000"
  class="w-full bg-white/80 p-5 rounded-2xl min-h-[200px] font-medium outline-none border-2 border-slate-100 focus:border-blue-600 transition-all text-slate-900 shadow-sm resize-none">${escapeHtml(c.body)}</textarea>
  <div class="flex justify-end gap-3">
@@ -177,9 +280,16 @@ function renderCommentNode(c, ctx, depth) {
                                             </div>
                                         </form>
                                         ` : `
- <div class="${cardBase} border ${cardBorder} text-sm leading-relaxed prose max-w-none">
+ <div class="${cardBase} border ${cardBorder} text-sm leading-relaxed prose max-w-none ${folded ? 'relative max-h-72 overflow-hidden' : ''}">
                                             ${window.safeMarkdown(c.body)}
-                                        </div>`}
+                                            ${folded ? `<div class="absolute inset-x-0 bottom-0 h-24 bg-gradient-to-t ${isRoot ? 'from-white' : 'from-[#eef2f8]'} to-transparent pointer-events-none"></div>` : ''}
+                                        </div>
+                                        ${isLongComment(c.body) ? `
+                                        <button type="button" onclick="window.toggleCommentExpand(${c.id})"
+ class="inline-flex items-center gap-1.5 text-sm font-black uppercase tracking-wide text-blue-600 hover:text-blue-800 transition-all">
+ <i data-lucide="${folded ? 'chevrons-down' : 'chevrons-up'}" class="w-4 h-4"></i>
+                                            ${folded ? `Show full comment (${words.toLocaleString()} words)` : 'Show less'}
+                                        </button>` : ''}`}
                                         ${replying ? `
  <form onsubmit="event.preventDefault(); window.postComment(this)" data-parent-id="${c.id}" class="space-y-3 pt-1">
                                             <textarea id="reply-input-${c.id}" name="comment" required placeholder="Reply to ${escapeHtml(cName)}…" maxlength="20000"
@@ -232,8 +342,145 @@ function renderCommentThread(state, isEditor, isAdmin) {
             roots.push(c);
         }
     }
-    const ctx = { byId, childrenOf, state, isEditor, isAdmin };
-    return roots.map(c => renderCommentNode(c, ctx, 0)).join('');
+    // Filter by topic: a thread shows if any comment in it is about the topic.
+    const filter = state.commentFilter || 'all';
+    const threadHas = (id, pred) => {
+        const c = byId.get(id);
+        return pred(c) || (childrenOf.get(id) || []).some(k => threadHas(k.id, pred));
+    };
+    const matches = filter === 'all' ? () => true
+        : filter === 'general' ? (c) => !c.about
+        : (c) => c.about === filter;
+    let shown = roots.filter(r => threadHas(r.id, matches));
+    // Sort: oldest first (default, the conversation's order), newest first, or busiest thread first.
+    const sort = state.commentSort || 'oldest';
+    const size = (r) => countDescendants(r.id, childrenOf);
+    if (sort === 'newest') shown = shown.slice().reverse();
+    else if (sort === 'replies') shown = shown.slice().sort((a, b) => size(b) - size(a));
+    if (!shown.length) return `
+ <div class="p-10 text-center border-2 border-dashed border-slate-100 rounded-[3rem]">
+ <p class="text-slate-400 font-bold text-sm">No comments about this part yet.</p>
+ <button type="button" onclick="window.setCommentFilter('all')" class="mt-3 text-sm font-black uppercase tracking-wide text-blue-600 hover:text-blue-800">Show all comments</button>
+                                </div>`;
+    const ctx = { byId, childrenOf, state, isEditor, isAdmin, proposal: state.currentProposal };
+    return shown.map(c => renderCommentNode(c, ctx, 0)).join('');
+}
+
+// Header of the discussion: who took part, controls to sort and filter, and an
+// index of the threads so a reader can see the shape of the conversation
+// before reading any of it.
+// Editors: untagged comments can be classified; each suggestion is reviewed
+// (topic, confidence, evidence) and accepted one by one or all at once.
+function renderTopicReview(state, p) {
+    const comments = state.comments || [];
+    const untagged = comments.filter(c => !c.about).length;
+    const canReview = state.user?.is_editor || state.user?.is_admin;
+    if (!canReview || !untagged) return '';
+    const ts = state.topicSuggestions;
+    const isCIS = p.type === 'CIS';
+    if (!ts) return `
+ <div class="flex items-center justify-between gap-4 flex-wrap rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4">
+ <p class="text-sm text-amber-900"><span class="font-black">${untagged} comment${untagged === 1 ? '' : 's'}</span> ${untagged === 1 ? 'has' : 'have'} no topic yet. The portal can suggest what each one is about, for you to accept.</p>
+            <button type="button" onclick="window.loadTopicSuggestions()" class="text-sm font-black uppercase tracking-wide text-amber-800 hover:text-amber-950 whitespace-nowrap">Suggest topics</button>
+        </div>`;
+    if (ts.loading) return `<div class="rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4 text-sm text-amber-900">Reading ${untagged} comment${untagged === 1 ? '' : 's'}…</div>`;
+    const byId = new Map(comments.map(c => [c.id, c]));
+    const items = ts.items.filter(x => byId.has(x.comment_id));
+    const noSignal = ts.untagged - items.length;
+    return `
+ <div class="rounded-2xl bg-amber-50 border border-amber-200 p-5 space-y-4">
+ <div class="flex items-center justify-between gap-4 flex-wrap">
+ <p class="text-sm text-amber-900"><span class="font-black">${items.length} suggestion${items.length === 1 ? '' : 's'}</span>${noSignal > 0 ? ` · ${noSignal} comment${noSignal === 1 ? '' : 's'} stay${noSignal === 1 ? 's' : ''} general (nothing distinctive to go on)` : ''}</p>
+ <div class="flex items-center gap-3">
+                ${items.length ? `<button type="button" onclick="window.acceptAllTopicSuggestions()" class="px-4 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-sm font-black uppercase tracking-wide">Accept all</button>` : ''}
+                <button type="button" onclick="window.dismissTopicSuggestions()" class="text-sm font-black uppercase tracking-wide text-amber-800 hover:text-amber-950">Close</button>
+            </div>
+        </div>
+        ${items.length ? `<ul class="divide-y divide-amber-200/70">${items.map(x => {
+            const c = byId.get(x.comment_id);
+            const name = c.author_display_name || shortAddress(c.author_stake_address);
+            const snippet = (c.body || '').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+            return `<li class="py-3 flex items-start gap-3 flex-wrap sm:flex-nowrap">
+ <div class="min-w-0 flex-1">
+ <p class="text-sm"><span class="font-bold text-slate-900">${escapeHtml(name)}</span> <button type="button" onclick="window.scrollToId('comment-${c.id}')" class="text-slate-400 hover:text-blue-600">· view</button></p>
+ <p class="text-sm text-slate-600 truncate">${escapeHtml(snippet)}${(c.body || '').length > 120 ? '…' : ''}</p>
+ <p class="text-sm text-slate-400 mt-0.5">${escapeHtml(x.evidence)}</p>
+                </div>
+ <div class="flex items-center gap-2 flex-shrink-0">
+ <span class="text-sm font-bold px-2.5 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">${escapeHtml(aboutLabel(x.about, isCIS))}</span>
+ <span class="text-sm ${x.confidence === 'high' ? 'text-green-700' : 'text-slate-400'}">${x.confidence}</span>
+                    <button type="button" onclick="window.applyCommentTopic(${c.id}, '${x.about}')" class="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-sm font-black uppercase tracking-wide text-amber-900">Accept</button>
+                </div>
+            </li>`;
+        }).join('')}</ul>` : `<p class="text-sm text-amber-900">Nothing distinctive enough to suggest. Authors can set a topic when editing their comment.</p>`}
+    </div>`;
+}
+
+function renderDiscussionHeader(state, p) {
+    const comments = state.comments || [];
+    const n = comments.length;
+    const isCIS = p.type === 'CIS';
+    const people = new Set(comments.map(c => c.author_stake_address)).size;
+    const last = n ? new Date(Math.max(...comments.map(c => new Date(c.created_at).getTime()))) : null;
+    const counts = commentCountsByAbout(comments);
+    const topics = Object.keys(counts).filter(k => k).sort();
+    const filter = state.commentFilter || 'all';
+    const sort = state.commentSort || 'oldest';
+    // The index follows the active filter: a thread is listed if any comment in it matches.
+    const kidsOf = (id) => comments.filter(c => c.parent_id === id);
+    const threadMatches = (c) => filter === 'all' ? true
+        : (filter === 'general' ? !c.about : c.about === filter) || kidsOf(c.id).some(threadMatches);
+    const roots = comments.filter(c => c.parent_id == null && threadMatches(c));
+    const replies = (id) => kidsOf(id).length;
+    const sel = (v, cur) => v === cur ? 'selected' : '';
+    const anyCollapsed = state.collapsedComments instanceof Set && state.collapsedComments.size > 0;
+    return `
+ <div class="flex items-center justify-between px-4 flex-wrap gap-3">
+ <h2 class="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Discussion</h2>
+ <span class="text-sm font-black text-blue-600 uppercase tracking-widest">${n} ${n === 1 ? 'Comment' : 'Comments'}${people ? ` · ${people} ${people === 1 ? 'participant' : 'participants'}` : ''}${last ? ` · last ${last.toLocaleDateString()}` : ''}</span>
+        </div>
+        ${renderTopicReview(state, p)}
+        ${n ? `
+ <div class="bg-white/80 rounded-[2rem] border border-slate-100 shadow-sm p-5 sm:p-6 space-y-5">
+ <div class="flex flex-wrap items-center gap-3">
+ <label class="text-sm font-black uppercase tracking-widest text-slate-400">Show</label>
+ <select onchange="window.setCommentFilter(this.value)" class="text-sm font-bold rounded-xl border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-blue-500">
+ <option value="all" ${sel('all', filter)}>All comments (${n})</option>
+ ${counts[''] ? `<option value="general" ${sel('general', filter)}>General (${counts['']})</option>` : ''}
+                    ${topics.map(t => `<option value="${t}" ${sel(t, filter)}>About ${escapeHtml(aboutLabel(t, isCIS))} (${counts[t]})</option>`).join('')}
+                </select>
+ <label class="text-sm font-black uppercase tracking-widest text-slate-400 ml-2">Order</label>
+ <select onchange="window.setCommentSort(this.value)" class="text-sm font-bold rounded-xl border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-blue-500">
+ <option value="oldest" ${sel('oldest', sort)}>Oldest first</option>
+ <option value="newest" ${sel('newest', sort)}>Newest first</option>
+ <option value="replies" ${sel('replies', sort)}>Most replies</option>
+                </select>
+                <button type="button" onclick="window.setAllThreads(${anyCollapsed ? 'false' : 'true'})"
+ class="ml-auto text-sm font-black uppercase tracking-wide text-blue-600 hover:text-blue-800">${anyCollapsed ? 'Expand all threads' : 'Collapse all threads'}</button>
+            </div>
+            ${roots.length > 1 ? `
+            <div>
+ <p class="text-sm font-black uppercase tracking-widest text-slate-400 mb-2">Threads${filter !== 'all' ? ` about ${escapeHtml(aboutLabel(filter === 'general' ? null : filter, isCIS))}` : ''}</p>
+ <ol class="divide-y divide-slate-100">
+                ${roots.map((c, i) => {
+                    const name = c.author_display_name || shortAddress(c.author_stake_address);
+                    const snippet = (c.body || '').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 110);
+                    const r = replies(c.id);
+                    return `<li>
+ <button type="button" onclick="window.scrollToId('comment-${c.id}')" class="w-full text-left flex items-start gap-3 py-2 hover:bg-slate-50 rounded-lg px-2 -mx-2 transition-colors">
+ <span class="text-sm font-black text-slate-300 w-5 flex-shrink-0 pt-0.5">${i + 1}</span>
+ <span class="min-w-0 flex-1">
+ <span class="text-sm font-bold text-slate-900">${escapeHtml(name)}</span>
+ ${c.about ? `<span class="text-sm text-amber-700 ml-2">· ${escapeHtml(aboutLabel(c.about, isCIS))}</span>` : ''}
+ <span class="text-sm text-slate-400 ml-2">${new Date(c.created_at).toLocaleDateString()}</span>
+ <span class="block text-sm text-slate-500 truncate">${escapeHtml(snippet)}${(c.body || '').length > 110 ? '…' : ''}</span>
+                        </span>
+ ${r ? `<span class="text-sm font-bold text-slate-400 flex-shrink-0 flex items-center gap-1 pt-0.5"><i data-lucide="corner-down-right" class="w-3.5 h-3.5"></i>${r}</span>` : ''}
+                    </button></li>`;
+                }).join('')}
+                </ol>
+            </div>` : ''}
+        </div>` : ''}`;
 }
 
 const SUGGESTION_LABELS = {
@@ -470,12 +717,14 @@ export function renderDetail(state) {
             <!-- Editor tools (status tags, signal, withdraw override) -->
             ${isEditor ? renderEditorControls(p, state) : ''}
 
- <div class="mt-16">
-                <!-- Main Body -->
+ <div class="mt-10">
+                <!-- Main Body. The jump bar is a child of this tall column so its
+                     sticky positioning lasts for the whole proposal and discussion. -->
  <div class="space-y-16">
+                    ${renderJumpBar(p, (state.comments || []).length)}
                     <!-- Proposal Body -->
  <article class="bg-white/80 p-10 sm:p-20 rounded-[4rem] border border-slate-100 shadow-sm prose max-w-none text-left leading-relaxed">
-                        ${p.structured ? renderStructuredBody(p.structured, p.type) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
+                        ${p.structured ? renderStructuredBody(p.structured, p.type, commentCountsByAbout(state.comments)) : window.safeMarkdown(stripFrontmatter(p.body) || '*No content.*')}
                     </article>
 
                     ${(p.structured?.revisions?.length && p.structured.revisions.some(revisionHasEffect)) ? `
@@ -501,11 +750,8 @@ export function renderDetail(state) {
                     ${renderSuggestions(state, p, isAuthor, isEditor)}
 
                     <!-- Comments -->
- <section class="space-y-12 pt-16 border-t border-slate-100 ">
- <div class="flex items-center justify-between px-4">
- <h2 class="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Discussion</h2>
- <span class="text-sm font-black text-blue-600 uppercase tracking-widest">${(state.comments||[]).length} ${(state.comments||[]).length === 1 ? 'Comment' : 'Comments'}</span>
-                        </div>
+ <section id="discussion" class="space-y-12 pt-16 border-t border-slate-100 scroll-mt-40">
+                        ${renderDiscussionHeader(state, p)}
 
  <div class="space-y-8">
                             ${renderCommentThread(state, isEditor, isAdmin)}
@@ -521,8 +767,14 @@ export function renderDetail(state) {
                                 </div>
                             </div>
                             ` : `
- <div class="pt-8 pl-0 sm:pl-20">
+ <div id="comment-form" class="pt-8 pl-0 sm:pl-20 scroll-mt-40">
  <form onsubmit="event.preventDefault(); window.postComment(this)" class="space-y-6">
+ <div class="flex flex-wrap items-center gap-3 px-4">
+ <label class="text-sm font-black uppercase tracking-widest text-slate-400">This comment is about</label>
+ <select name="about" class="text-sm font-bold rounded-xl border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-blue-500 max-w-full">
+                                            ${aboutOptions(p.structured, p.type).map(o => `<option value="${o.value}">${escapeHtml(o.label)}</option>`).join('')}
+                                        </select>
+                                    </div>
                                     <textarea name="comment" required placeholder="Share your thoughts…" maxlength="20000"
                                         oninput="window._cc(this, 'cc-comment')"
  class="w-full bg-white/80 p-10 rounded-[3rem] min-h-[200px] font-medium text-lg outline-none border-2 border-slate-100 focus:border-blue-600 transition-all text-slate-900 shadow-sm resize-none"></textarea>

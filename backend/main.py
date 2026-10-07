@@ -72,6 +72,7 @@ with engine.connect() as _conn:
         "ALTER TABLE comments ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'visible'",
         # Threaded replies: NULL parent_id = top-level comment (all pre-existing ones).
         "ALTER TABLE comments ADD COLUMN parent_id INTEGER REFERENCES comments(id)",
+        "ALTER TABLE comments ADD COLUMN about TEXT",
         # Drop the superseded per-comment flag columns (replaced by the
         # moderation_status + moderation_cases workflow). Their leftover NOT NULL
         # constraint would otherwise break new comment inserts on existing DBs.
@@ -561,6 +562,7 @@ def comment_to_dict(c: Comment) -> dict:
         "created_at": to_iso(c.created_at),
         "updated_at": to_iso(c.updated_at),
         "moderation_status": c.moderation_status,
+        "about": c.about,
     }
 
 
@@ -1409,10 +1411,23 @@ def list_comments(number: int, authorization: Optional[str] = Header(None), db: 
     return [comment_to_dict(c) for c in comments]
 
 
+_COMMENT_ABOUT_RE = re.compile(r"^(?:abstract|motivation|analysis|impact|exhibits|revisions\[\d+\])$")
+
+
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=MAX_LONG_TEXT)
     # Optional: id of the comment being replied to. Ignored by the edit endpoint.
     parent_id: Optional[int] = None
+    # Optional: the part of the proposal the comment is about (a section key or
+    # "revisions[i]"). A reply inherits its parent's. Ignored by the edit endpoint.
+    about: Optional[str] = Field(default=None, max_length=40)
+
+    @field_validator("about")
+    @classmethod
+    def _v_about(cls, v):
+        if v is not None and not _COMMENT_ABOUT_RE.match(v):
+            raise ValueError("about must be a section key or revisions[i]")
+        return v
 
 
 @app.post("/proposals/{number}/comments", status_code=201, tags=["comments"], summary="Post a comment",
@@ -1431,14 +1446,25 @@ def create_comment(request: Request, number: int, req: CommentCreate, user: dict
     # A reply must point at an existing comment on THIS proposal. We store the
     # real parent id at any depth; the frontend caps how deeply it visually indents.
     parent_id = req.parent_id
+    about = req.about
     if parent_id is not None:
         parent = db.query(Comment).filter(Comment.id == parent_id).first()
         if not parent or parent.proposal_number != number:
             raise HTTPException(status_code=400, detail="Reply target not found on this proposal")
+        if about is None:
+            about = parent.about          # a reply stays on its thread's topic
+    if about and about.startswith("revisions["):
+        try:
+            n_revs = len((json.loads(p.body) if p.body else {}).get("revisions") or [])
+        except (ValueError, TypeError):
+            n_revs = 0
+        if int(about[10:-1]) >= n_revs:
+            raise HTTPException(status_code=400, detail="That revision does not exist on this proposal")
 
     c = Comment(
         proposal_number=number,
         parent_id=parent_id,
+        about=about,
         body=req.body,
         author_stake_address=user["sub"],
         author_display_name=user.get("display_name"),
@@ -1460,8 +1486,185 @@ def update_comment(comment_id: int, req: CommentCreate, user: dict = Depends(req
     if c.author_stake_address != user["sub"]:
         raise HTTPException(status_code=403, detail="Only the author can edit their comment")
     c.body = req.body
+    if req.about is not None:
+        c.about = req.about or None
     c.updated_at = datetime.now(timezone.utc)
     record_audit(db, c.proposal_number, "comment_edited", user, {"comment_id": comment_id})
+    db.commit()
+    db.refresh(c)
+    return comment_to_dict(c)
+
+
+# ── Comment topics for comments written before topics existed ─────────────────
+#
+# A deterministic classifier proposes what an untagged comment is about, from
+# the proposal's own text: distinctive terms shared with one section or
+# revision (parameter names, guardrail codes), explicit references ("revision
+# 3", "the summary"), or a quoted passage. It only proposes when one candidate
+# clearly wins; editors review and accept, nothing is applied automatically.
+
+_TOKEN_RE = re.compile(r"[A-Za-z][A-Za-z0-9_\-]{2,}|\d+(?:\.\d+)+")
+_STOP = frozenset("""the and for that this with have from are was were will would should could their there
+    which about into than then them they been being also more most some such only other these those when
+    where what while whose your you our not but can may might must one two three four five six seven eight
+    nine ten each any all per its it's has had does did doing done here very just like make made over under
+    between within without because before after since during both same first second third last next new
+    change changes changed proposal proposed propose amendment constitution section article cardano ada
+    text part parts version draft comment comments think thanks thank agree agreed point good well still
+    however therefore maybe perhaps really quite much many need needs needed want wants wanted""".split())
+_SECTION_WORDS = {
+    "abstract": ["summary", "abstract"],
+    "motivation": ["motivation", "why is this change needed", "rationale", "problem statement", "problem section"],
+    "analysis": ["analysis", "analysis & test", "analysis and test", "test section", "testing", "benchmark", "benchmarking", "context section"],
+    "impact": ["impact"],
+    "exhibits": ["links & files", "links and files", "exhibit", "exhibits", "attachment", "attachments"],
+}
+_REV_REF_RE = re.compile(r"\b(?:revision|change|rev\.?)\s*#?\s*(\d{1,2})\b", re.I)
+
+
+def _terms(text):
+    out = set()
+    for t in _TOKEN_RE.findall(text or ""):
+        low = t.lower()
+        if low in _STOP:
+            continue
+        # Distinctive if code-like (digits / hyphen / camelCase identifier) or a
+        # long word. Ordinary words ("guardrail", "fully") are not evidence.
+        code_like = any(ch.isdigit() for ch in low) or "-" in low or (t != low and t != t.upper() and t != t.capitalize())
+        if code_like or len(low) >= 9:
+            out.add(low)
+    return out
+
+
+def classify_comment_about(structured: dict, body: str):
+    """Return (about, confidence, evidence) for a comment body against a
+    proposal's structured content, or (None, 0, "") when nothing stands out.
+    Confidence is 'high' or 'medium'; the review UI shows the evidence."""
+    s = structured or {}
+    body = body or ""
+    low = body.lower()
+    revisions = s.get("revisions") or []
+    candidates = {}      # about -> text
+    for k in ("abstract", "motivation", "analysis", "impact", "exhibits"):
+        if s.get(k):
+            candidates[k] = s[k]
+    for i, r in enumerate(revisions):
+        candidates[f"revisions[{i}]"] = " ".join(filter(None, [r.get("original"), r.get("insert_after"), r.get("proposed"), r.get("section")]))
+    if not candidates:
+        return None, 0, ""
+
+    # 1. Explicit reference to a revision number.
+    m = _REV_REF_RE.search(body)
+    if m and 1 <= int(m.group(1)) <= len(revisions):
+        return f"revisions[{int(m.group(1)) - 1}]", "high", f'mentions "{m.group(0)}"'
+
+    # 2. A quoted passage of the proposal (a run of 40+ characters found verbatim).
+    norm = lambda t: re.sub(r"\s+", " ", (t or "").lower())
+    nbody = norm(body)
+    for about, text in candidates.items():
+        ntext = norm(text)
+        # Look at the comment's own sentences/quotes: any 40-char window of the comment present in the text.
+        for q in re.findall(r'["“]([^"”]{40,})["”]', body):
+            if norm(q) in ntext:
+                return about, "high", f'quotes "{q[:60]}…"'
+        words = nbody.split(" ")
+        for start in range(0, max(0, len(words) - 7)):
+            window = " ".join(words[start:start + 8])
+            if len(window) >= 40 and window in ntext:
+                return about, "high", f'quotes "{window[:60]}…"'
+
+    # 3. A section named in the comment ("the summary", "analysis section").
+    named = [k for k, words in _SECTION_WORDS.items() if k in candidates and any(w in low for w in words)]
+
+    # 4. Distinctive terms shared with exactly one candidate.
+    body_terms = _terms(body)
+    cand_terms = {about: _terms(text) for about, text in candidates.items()}
+    # Terms that appear in several candidates are not distinctive.
+    freq = {}
+    for terms in cand_terms.values():
+        for t in terms:
+            freq[t] = freq.get(t, 0) + 1
+    scores = {}
+    hits = {}
+    for about, terms in cand_terms.items():
+        shared = [t for t in body_terms & terms if freq[t] == 1]
+        if shared:
+            # Code-like terms (digits, hyphens, camelCase) weigh double.
+            scores[about] = sum(2 if (any(ch.isdigit() for ch in t) or "-" in t or len(t) >= 12) else 1 for t in shared)
+            hits[about] = sorted(shared, key=len, reverse=True)[:4]
+    if scores:
+        best = max(scores, key=scores.get)
+        rest = sorted((v for k, v in scores.items() if k != best), reverse=True)
+        second = rest[0] if rest else 0
+        if scores[best] >= 4 and scores[best] >= 2 * second:
+            return best, "high", "shares " + ", ".join(hits[best])
+        if scores[best] >= 3 and scores[best] > second and (not named or named == [best]):
+            return best, "medium", "shares " + ", ".join(hits[best])
+    if len(named) == 1:
+        return named[0], "medium", f"names the {named[0]} section"
+    return None, 0, ""
+
+
+@app.get("/proposals/{number}/comments/topic-suggestions", tags=["comments"],
+         summary="Suggest topics for untagged comments",
+         description="For each visible comment without a topic, what the classifier thinks it is about, "
+                     "with confidence and evidence. Nothing is changed. **Requires editor or admin role.**")
+def comment_topic_suggestions(number: int, user: dict = Depends(require_editor_or_admin), db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    try:
+        structured = json.loads(p.body) if p.body else {}
+    except (ValueError, TypeError):
+        structured = {}
+    comments = db.query(Comment).filter(Comment.proposal_number == number, Comment.moderation_status == "visible").order_by(Comment.created_at.asc()).all()
+    by_id = {c.id: c for c in comments}
+    out = []
+    for c in comments:
+        if c.about:
+            continue
+        about, conf, evidence = classify_comment_about(structured, c.body)
+        if not about and c.parent_id in by_id:
+            parent = by_id[c.parent_id]
+            # A reply with no signal of its own follows its thread.
+            inherited = parent.about or next((o["about"] for o in out if o["comment_id"] == parent.id), None)
+            if inherited:
+                about, conf, evidence = inherited, "medium", "reply in a thread about this"
+        if about:
+            out.append({"comment_id": c.id, "about": about, "confidence": conf, "evidence": evidence})
+    return {"suggestions": out, "untagged": sum(1 for c in comments if not c.about)}
+
+
+class CommentTopicSet(BaseModel):
+    about: Optional[str] = Field(default=None, max_length=40)
+
+    @field_validator("about")
+    @classmethod
+    def _v_about(cls, v):
+        if v is not None and v != "" and not _COMMENT_ABOUT_RE.match(v):
+            raise ValueError("about must be a section key or revisions[i]")
+        return v or None
+
+
+@app.patch("/comments/{comment_id}/topic", tags=["comments"], summary="Set what a comment is about",
+           description="The comment's author, or an editor or admin, sets or clears the comment's topic. "
+                       "**Requires authentication.**")
+def set_comment_topic(comment_id: int, req: CommentTopicSet, user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    c = db.query(Comment).filter(Comment.id == comment_id).first()
+    if not c:
+        raise HTTPException(status_code=404, detail="Comment not found")
+    if c.author_stake_address != user["sub"] and not is_editor(user["sub"], db) and not is_admin(user["sub"], db):
+        raise HTTPException(status_code=403, detail="Only the author, an editor or an admin can set a comment's topic")
+    if req.about and req.about.startswith("revisions["):
+        p = db.query(Proposal).filter(Proposal.number == c.proposal_number).first()
+        try:
+            n_revs = len((json.loads(p.body) if p and p.body else {}).get("revisions") or [])
+        except (ValueError, TypeError):
+            n_revs = 0
+        if int(req.about[10:-1]) >= n_revs:
+            raise HTTPException(status_code=400, detail="That revision does not exist on this proposal")
+    c.about = req.about
+    record_audit(db, c.proposal_number, "comment_topic_set", user, {"comment_id": comment_id, "about": req.about})
     db.commit()
     db.refresh(c)
     return comment_to_dict(c)

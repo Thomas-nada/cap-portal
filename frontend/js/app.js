@@ -1,7 +1,7 @@
 import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          createProposal, updateProposal, addLabel, removeLabel,
          withdrawProposal, cancelWithdrawal,
-         createComment, updateComment,
+         createComment, updateComment, fetchTopicSuggestions, setCommentTopic,
          flagProposal, flagComment, fetchModerationCases, moderationRemove, moderationReject,
          fetchNotifications, fetchUnreadCount, markNotificationRead, markAllNotificationsRead,
          fetchConstitutionVersions, fetchConstitutionContent, deriveRevisionsFromUpload,
@@ -780,6 +780,10 @@ window.openProposal = async (number, addToHistory = true) => {
     state.replyingTo = null;               // no stale reply box across proposals
     state.editingComment = null;           // no stale edit box across proposals
     state.collapsedComments = new Set();   // threads start expanded per proposal
+    state.expandedComments = new Set();    // long comments start folded per proposal
+    state.topicSuggestions = null;
+    state.commentSort = 'oldest';
+    state.commentFilter = 'all';
     updateUI();
     try {
         const [proposal, comments, audit, suggestions, versions, suggestedEdits] = await Promise.all([
@@ -933,6 +937,67 @@ window.wizardCreateAnother = () => {
 };
 
 // Open/close the inline reply box under a specific comment.
+// ── Discussion navigation (proposal detail) ───────────────────────────────────
+// The page re-renders from state, so jumps use scrollIntoView rather than
+// anchors: a "#sec-…" href would change the hash and trigger the router.
+window.scrollToId = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+window.setCommentSort = (sort) => { state.commentSort = sort; updateUI(); };
+window.setCommentFilter = (filter) => { state.commentFilter = filter || 'all'; updateUI(); };
+// From a section's "N comments" badge: filter the discussion to it and go there.
+window.filterDiscussion = (about) => {
+    state.commentFilter = about || 'all';
+    updateUI();
+    requestAnimationFrame(() => window.scrollToId('discussion'));
+};
+window.toggleCommentExpand = (commentId) => {
+    if (!(state.expandedComments instanceof Set)) state.expandedComments = new Set();
+    if (state.expandedComments.has(commentId)) state.expandedComments.delete(commentId);
+    else state.expandedComments.add(commentId);
+    updateUI();
+};
+// Editors: classify untagged comments, review, accept.
+window.loadTopicSuggestions = async () => {
+    const number = state.currentProposal?.number;
+    if (!number) return;
+    state.topicSuggestions = { loading: true, items: [], untagged: 0 };
+    updateUI();
+    try {
+        const res = await fetchTopicSuggestions(number);
+        state.topicSuggestions = { loading: false, items: res.suggestions || [], untagged: res.untagged || 0 };
+    } catch (e) {
+        state.topicSuggestions = null;
+        state.error = e.message;
+    }
+    updateUI();
+};
+window.dismissTopicSuggestions = () => { state.topicSuggestions = null; updateUI(); };
+window.applyCommentTopic = async (commentId, about) => {
+    try {
+        const updated = await setCommentTopic(commentId, about);
+        state.comments = (state.comments || []).map(c => c.id === commentId ? updated : c);
+        if (state.topicSuggestions) {
+            state.topicSuggestions.items = state.topicSuggestions.items.filter(x => x.comment_id !== commentId);
+            state.topicSuggestions.untagged = Math.max(0, state.topicSuggestions.untagged - 1);
+        }
+    } catch (e) {
+        state.error = e.message;
+    }
+    updateUI();
+};
+window.acceptAllTopicSuggestions = async () => {
+    const items = (state.topicSuggestions?.items || []).slice();
+    for (const x of items) await window.applyCommentTopic(x.comment_id, x.about);
+};
+window.toggleThreadCollapseAll = window.setAllThreads;
+
+window.setAllThreads = (collapsed) => {
+    const roots = (state.comments || []).filter(c => c.parent_id == null).map(c => c.id);
+    state.collapsedComments = new Set(collapsed ? roots : []);
+    updateUI();
+};
+
 window.replyToComment = (commentId) => {
     if (!state.user) { showWalletModal(); return; }
     state.replyingTo = commentId;
@@ -970,10 +1035,11 @@ window.saveCommentEdit = async (commentId, formOrText) => {
         body = formOrText || '';
     }
     if (!body.trim()) return;
+    const aboutSel = formOrText instanceof HTMLElement ? formOrText.querySelector('select[name=about]') : null;
     state.loading = { ...state.loading, [`editComment-${commentId}`]: true };
     updateUI();
     try {
-        const updated = await updateComment(commentId, body);
+        const updated = await updateComment(commentId, body, aboutSel ? aboutSel.value : undefined);
         state.comments = (state.comments || []).map(c => c.id === commentId ? updated : c);
         state.editingComment = null;
     } catch (e) {
@@ -995,12 +1061,13 @@ window.toggleThread = (commentId) => {
 
 window.postComment = async (formOrNumber, bodyArg, parentArg) => {
     if (!state.user) { showWalletModal(); return; }
-    let number, body, parentId = null;
+    let number, body, parentId = null, about = null;
     if (formOrNumber instanceof HTMLElement) {
         const fd = new FormData(formOrNumber);
         body = fd.get('body') || formOrNumber.querySelector('textarea')?.value || '';
         const rawParent = fd.get('parent_id') || formOrNumber.dataset.parentId || '';
         parentId = rawParent ? Number(rawParent) : null;
+        about = fd.get('about') || null;
         number = state.currentProposal?.number;
         formOrNumber.reset();
     } else {
@@ -1013,7 +1080,7 @@ window.postComment = async (formOrNumber, bodyArg, parentArg) => {
     state.loading = { ...state.loading, [loadKey]: true };
     updateUI();
     try {
-        const comment = await createComment(number, body, parentId);
+        const comment = await createComment(number, body, parentId, about);
         state.comments = [...state.comments, comment];
         if (parentId) state.replyingTo = null;
     } catch (e) {
