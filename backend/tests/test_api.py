@@ -2095,3 +2095,58 @@ def test_comment_about_rejects_unknown_targets(client, db):
     assert bad.status_code == 400
     missing = client.post("/proposals/1/comments", json={"body": "x", "about": "revisions[7]"}, headers=auth(AUTHOR_ADDR, "Alice"))
     assert missing.status_code == 400 and "revision" in missing.json()["detail"].lower()
+
+
+# ── Classifying untagged comments ─────────────────────────────────────────────
+
+CAP12_LIKE = {
+    "abstract": "The Dijkstra hard fork introduces new updatable protocol parameters for reference-script protection, Ouroboros Leios, Ouroboros Peras and pool economics.",
+    "motivation": "The Dijkstra hard fork makes new protocol parameters updatable. Under the current Constitution none of them can be changed because PARAM-01 forbids it.",
+    "analysis": "Values were chosen from benchmarking on the Leios testnet; see the simulation results.",
+    "revisions": [
+        {"type": "addition", "insert_after": "interchangeably.", "proposed": "Under Ouroboros Leios, a Block is also referred to as a Ranking Block (RB).", "section": "Appendix I"},
+        {"type": "addition", "insert_after": "governance action deposit (govDeposit)", "proposed": "- *maximum Endorser Block size* (*maxEndorserBlockReferencesSize*)", "section": "Appendix I"},
+        {"type": "addition", "insert_after": "MBHS-05 (x - \"should\") maxBlockHeaderSize", "proposed": "#### Maximum Endorser Block Size\n\nMEBS-01 (y) maxEndorserBlockReferencesSize must not be negative", "section": "Appendix I"},
+        {"type": "addition", "insert_after": "PPI-04 (x - \"should\") poolPledgeInfluence", "proposed": "#### Maximum Pledge Leverage (maxPledgeLeverage)\n\nMPL-01 (y) maxPledgeLeverage must not be negative", "section": "Appendix I"},
+    ],
+}
+
+
+def test_classify_comment_about():
+    f = main.classify_comment_about
+    assert f(CAP12_LIKE, "Revision 3 should also state a unit for the size.")[0] == "revisions[2]"
+    assert f(CAP12_LIKE, "The MPL-01 guardrail on maxPledgeLeverage seems too loose.")[0] == "revisions[3]"
+    assert f(CAP12_LIKE, "Where does the benchmarking on the Leios testnet come from? The simulation results are not linked.")[0] == "analysis"
+    assert f(CAP12_LIKE, 'You write "a Block is also referred to as a Ranking Block (RB)" but RB is never defined elsewhere.')[0] == "revisions[0]"
+    assert f(CAP12_LIKE, "I think the summary could be shorter.")[0] == "abstract"
+    assert f(CAP12_LIKE, "Great work, fully support this.")[0] is None
+    assert f(CAP12_LIKE, "What is the timeline for the hard fork?")[0] is None   # 'hard fork' is in several sections
+
+
+def test_topic_suggestions_and_review(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    body = proposal_body(); body["structured"] = {"type": "CAP", **CAP12_LIKE}
+    client.post("/proposals", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
+    c1 = client.post("/proposals/1/comments", json={"body": "The MPL-01 guardrail on maxPledgeLeverage seems too loose."}, headers=auth(AUTHOR_ADDR, "Alice")).json()
+    c2 = client.post("/proposals/1/comments", json={"body": "Agreed.", "parent_id": c1["id"]}, headers=auth(EDITOR_ADDR)).json()
+    c3 = client.post("/proposals/1/comments", json={"body": "Fully support this."}, headers=auth(EDITOR_ADDR)).json()
+    assert client.get("/proposals/1/comments/topic-suggestions", headers=auth(AUTHOR_ADDR, "Alice")).status_code == 403  # not an editor
+    r = client.get("/proposals/1/comments/topic-suggestions", headers=auth(EDITOR_ADDR))
+    assert r.status_code == 200
+    sug = {x["comment_id"]: x for x in r.json()["suggestions"]}
+    assert r.json()["untagged"] == 3
+    assert sug[c1["id"]]["about"] == "revisions[3]" and sug[c1["id"]]["confidence"] == "high"
+    assert sug[c2["id"]]["about"] == "revisions[3]" and "thread" in sug[c2["id"]]["evidence"]
+    assert c3["id"] not in sug
+    # Accepting: an editor sets the topic; the author can set their own; others cannot.
+    ok = client.patch(f"/comments/{c1['id']}/topic", json={"about": "revisions[3]"}, headers=auth(EDITOR_ADDR))
+    assert ok.status_code == 200 and ok.json()["about"] == "revisions[3]"
+    seed_user(db, "stake1other00000000000000000000000000000000000000000000000", "Eve")
+    assert client.patch(f"/comments/{c3['id']}/topic", json={"about": "abstract"}, headers=auth("stake1other00000000000000000000000000000000000000000000000", "Eve")).status_code == 403
+    assert client.patch(f"/comments/{c3['id']}/topic", json={"about": "abstract"}, headers=auth(EDITOR_ADDR)).status_code == 200
+    assert client.patch(f"/comments/{c3['id']}/topic", json={"about": ""}, headers=auth(EDITOR_ADDR)).json()["about"] is None
+    assert client.patch(f"/comments/{c3['id']}/topic", json={"about": "revisions[9]"}, headers=auth(EDITOR_ADDR)).status_code == 400
+    # Once tagged, the suggestion list shrinks.
+    r = client.get("/proposals/1/comments/topic-suggestions", headers=auth(EDITOR_ADDR))
+    assert r.json()["untagged"] == 2 and all(x["comment_id"] != c1["id"] for x in r.json()["suggestions"])

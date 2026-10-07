@@ -255,6 +255,12 @@ function renderCommentNode(c, ctx, depth) {
                                         </div>
                                         ${editing ? `
  <form onsubmit="event.preventDefault(); window.saveCommentEdit(${c.id}, this)" class="space-y-3">
+ <div class="flex flex-wrap items-center gap-3">
+ <label class="text-sm font-black uppercase tracking-widest text-slate-400">About</label>
+ <select name="about" class="text-sm font-bold rounded-xl border-2 border-slate-200 bg-white px-3 py-2 outline-none focus:border-blue-500 max-w-full">
+                                                    ${aboutOptions(proposal?.structured, proposal?.type).map(o => `<option value="${o.value}" ${(c.about || '') === o.value ? 'selected' : ''}>${escapeHtml(o.label)}</option>`).join('')}
+                                                </select>
+                                            </div>
                                             <textarea id="edit-input-${c.id}" name="body" required maxlength="20000"
  class="w-full bg-white/80 p-5 rounded-2xl min-h-[200px] font-medium outline-none border-2 border-slate-100 focus:border-blue-600 transition-all text-slate-900 shadow-sm resize-none">${escapeHtml(c.body)}</textarea>
  <div class="flex justify-end gap-3">
@@ -356,6 +362,53 @@ function renderCommentThread(state, isEditor, isAdmin) {
 // Header of the discussion: who took part, controls to sort and filter, and an
 // index of the threads so a reader can see the shape of the conversation
 // before reading any of it.
+// Editors: untagged comments can be classified; each suggestion is reviewed
+// (topic, confidence, evidence) and accepted one by one or all at once.
+function renderTopicReview(state, p) {
+    const comments = state.comments || [];
+    const untagged = comments.filter(c => !c.about).length;
+    const canReview = state.user?.is_editor || state.user?.is_admin;
+    if (!canReview || !untagged) return '';
+    const ts = state.topicSuggestions;
+    const isCIS = p.type === 'CIS';
+    if (!ts) return `
+ <div class="flex items-center justify-between gap-4 flex-wrap rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4">
+ <p class="text-sm text-amber-900"><span class="font-black">${untagged} comment${untagged === 1 ? '' : 's'}</span> ${untagged === 1 ? 'has' : 'have'} no topic yet. The portal can suggest what each one is about, for you to accept.</p>
+            <button type="button" onclick="window.loadTopicSuggestions()" class="text-sm font-black uppercase tracking-wide text-amber-800 hover:text-amber-950 whitespace-nowrap">Suggest topics</button>
+        </div>`;
+    if (ts.loading) return `<div class="rounded-2xl bg-amber-50 border border-amber-200 px-5 py-4 text-sm text-amber-900">Reading ${untagged} comment${untagged === 1 ? '' : 's'}…</div>`;
+    const byId = new Map(comments.map(c => [c.id, c]));
+    const items = ts.items.filter(x => byId.has(x.comment_id));
+    const noSignal = ts.untagged - items.length;
+    return `
+ <div class="rounded-2xl bg-amber-50 border border-amber-200 p-5 space-y-4">
+ <div class="flex items-center justify-between gap-4 flex-wrap">
+ <p class="text-sm text-amber-900"><span class="font-black">${items.length} suggestion${items.length === 1 ? '' : 's'}</span>${noSignal > 0 ? ` · ${noSignal} comment${noSignal === 1 ? '' : 's'} stay${noSignal === 1 ? 's' : ''} general (nothing distinctive to go on)` : ''}</p>
+ <div class="flex items-center gap-3">
+                ${items.length ? `<button type="button" onclick="window.acceptAllTopicSuggestions()" class="px-4 py-2 rounded-xl bg-amber-700 hover:bg-amber-800 text-white text-sm font-black uppercase tracking-wide">Accept all</button>` : ''}
+                <button type="button" onclick="window.dismissTopicSuggestions()" class="text-sm font-black uppercase tracking-wide text-amber-800 hover:text-amber-950">Close</button>
+            </div>
+        </div>
+        ${items.length ? `<ul class="divide-y divide-amber-200/70">${items.map(x => {
+            const c = byId.get(x.comment_id);
+            const name = c.author_display_name || shortAddress(c.author_stake_address);
+            const snippet = (c.body || '').replace(/[#*_>`]/g, '').replace(/\s+/g, ' ').trim().slice(0, 120);
+            return `<li class="py-3 flex items-start gap-3 flex-wrap sm:flex-nowrap">
+ <div class="min-w-0 flex-1">
+ <p class="text-sm"><span class="font-bold text-slate-900">${escapeHtml(name)}</span> <button type="button" onclick="window.scrollToId('comment-${c.id}')" class="text-slate-400 hover:text-blue-600">· view</button></p>
+ <p class="text-sm text-slate-600 truncate">${escapeHtml(snippet)}${(c.body || '').length > 120 ? '…' : ''}</p>
+ <p class="text-sm text-slate-400 mt-0.5">${escapeHtml(x.evidence)}</p>
+                </div>
+ <div class="flex items-center gap-2 flex-shrink-0">
+ <span class="text-sm font-bold px-2.5 py-0.5 rounded-full bg-white text-amber-800 border border-amber-200">${escapeHtml(aboutLabel(x.about, isCIS))}</span>
+ <span class="text-sm ${x.confidence === 'high' ? 'text-green-700' : 'text-slate-400'}">${x.confidence}</span>
+                    <button type="button" onclick="window.applyCommentTopic(${c.id}, '${x.about}')" class="px-3 py-1.5 rounded-lg bg-white border border-amber-300 hover:bg-amber-100 text-sm font-black uppercase tracking-wide text-amber-900">Accept</button>
+                </div>
+            </li>`;
+        }).join('')}</ul>` : `<p class="text-sm text-amber-900">Nothing distinctive enough to suggest. Authors can set a topic when editing their comment.</p>`}
+    </div>`;
+}
+
 function renderDiscussionHeader(state, p) {
     const comments = state.comments || [];
     const n = comments.length;
@@ -379,6 +432,7 @@ function renderDiscussionHeader(state, p) {
  <h2 class="text-sm font-black uppercase tracking-[0.4em] text-slate-400">Discussion</h2>
  <span class="text-sm font-black text-blue-600 uppercase tracking-widest">${n} ${n === 1 ? 'Comment' : 'Comments'}${people ? ` · ${people} ${people === 1 ? 'participant' : 'participants'}` : ''}${last ? ` · last ${last.toLocaleDateString()}` : ''}</span>
         </div>
+        ${renderTopicReview(state, p)}
         ${n ? `
  <div class="bg-white/80 rounded-[2rem] border border-slate-100 shadow-sm p-5 sm:p-6 space-y-5">
  <div class="flex flex-wrap items-center gap-3">

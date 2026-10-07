@@ -152,8 +152,20 @@ export async function createComment(number, body, parentId = null, about = null)
     return req('POST', `/proposals/${number}/comments`, payload, true);
 }
 
-export async function updateComment(id, body) {
-    return req('PATCH', `/comments/${id}`, { body }, true);
+// Editors: what the classifier thinks each untagged comment is about.
+export async function fetchTopicSuggestions(number) {
+    return req('GET', `/proposals/${number}/comments/topic-suggestions`, null, true);
+}
+
+// Author, editor or admin: set (or clear, with null) what a comment is about.
+export async function setCommentTopic(id, about) {
+    return req('PATCH', `/comments/${id}/topic`, { about: about || null }, true);
+}
+
+export async function updateComment(id, body, about) {
+    const payload = { body };
+    if (about !== undefined) payload.about = about || '';   // '' clears the topic
+    return req('PATCH', `/comments/${id}`, payload, true);
 }
 
 // ── Drafts (private, per-author) ────────────────────────────────────────────────
