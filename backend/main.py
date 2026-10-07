@@ -1512,14 +1512,20 @@ _STOP = frozenset("""the and for that this with have from are was were will woul
     change changes changed proposal proposed propose amendment constitution section article cardano ada
     text part parts version draft comment comments think thanks thank agree agreed point good well still
     however therefore maybe perhaps really quite much many need needs needed want wants wanted""".split())
-_SECTION_WORDS = {
-    "abstract": ["summary", "abstract"],
-    "motivation": ["motivation", "why is this change needed", "rationale", "problem statement", "problem section"],
-    "analysis": ["analysis", "analysis & test", "analysis and test", "test section", "testing", "benchmark", "benchmarking", "context section"],
-    "impact": ["impact"],
-    "exhibits": ["links & files", "links and files", "exhibit", "exhibits", "attachment", "attachments"],
+# A section counts as named only when referred to as a section ("the summary",
+# "analysis section", "in the impact"), not when the bare word appears in prose
+# ("an analysis of how much stake ...").
+_SECTION_REFS = {
+    "abstract": r"(?:the|your|this|its)\s+(?:summary|abstract)\b|(?:summary|abstract)\s+section",
+    "motivation": r"(?:the|your|this)\s+(?:motivation|rationale)\b|(?:motivation|rationale|why)\s+section|why is this change needed",
+    "analysis": r"(?:the|your|this)\s+analysis(?:\s*(?:&|and)\s*test)?\s+(?:section|part)\b|analysis\s*(?:&|and)\s*test\b|(?:test|testing|benchmark\w*)\s+section",
+    "impact": r"(?:the|your|this)\s+impact\s+(?:section|part|statement)\b|impact\s+section",
+    "exhibits": r"links\s*(?:&|and)\s*files|(?:the|your|this)\s+(?:exhibits?|attachments?)\b",
 }
+_SECTION_REF_RES = {k: re.compile(v, re.I) for k, v in _SECTION_REFS.items()}
 _REV_REF_RE = re.compile(r"\b(?:revision|change|rev\.?)\s*#?\s*(\d{1,2})\b", re.I)
+# Guardrail codes come in families: "MPL-06" belongs with "MPL-01".."MPL-05".
+_CODE_FAMILY_RE = re.compile(r"^([a-z]{2,6})-\d+[a-z]?$")
 
 
 def _terms(text):
@@ -1573,8 +1579,8 @@ def classify_comment_about(structured: dict, body: str):
             if len(window) >= 40 and window in ntext:
                 return about, "high", f'quotes "{window[:60]}…"'
 
-    # 3. A section named in the comment ("the summary", "analysis section").
-    named = [k for k, words in _SECTION_WORDS.items() if k in candidates and any(w in low for w in words)]
+    # 3. A section referred to as a section ("the summary", "analysis section").
+    named = [k for k, rx in _SECTION_REF_RES.items() if k in candidates and rx.search(body)]
 
     # 4. Distinctive terms shared with exactly one candidate.
     body_terms = _terms(body)
@@ -1584,14 +1590,25 @@ def classify_comment_about(structured: dict, body: str):
     for terms in cand_terms.values():
         for t in terms:
             freq[t] = freq.get(t, 0) + 1
+    # Guardrail-code families per candidate ("mpl" for MPL-01..05), distinctive
+    # when only one candidate uses the family.
+    fam_of = lambda terms: {m.group(1) for t in terms for m in [_CODE_FAMILY_RE.match(t)] if m}
+    cand_fams = {about: fam_of(terms) for about, terms in cand_terms.items()}
+    fam_freq = {}
+    for fams in cand_fams.values():
+        for f in fams:
+            fam_freq[f] = fam_freq.get(f, 0) + 1
+    body_fams = fam_of(body_terms)
     scores = {}
     hits = {}
     for about, terms in cand_terms.items():
         shared = [t for t in body_terms & terms if freq[t] == 1]
-        if shared:
+        fams = [f for f in body_fams & cand_fams[about] if fam_freq[f] == 1]
+        if shared or fams:
             # Code-like terms (digits, hyphens, camelCase) weigh double.
-            scores[about] = sum(2 if (any(ch.isdigit() for ch in t) or "-" in t or len(t) >= 12) else 1 for t in shared)
-            hits[about] = sorted(shared, key=len, reverse=True)[:4]
+            scores[about] = sum(2 if (any(ch.isdigit() for ch in t) or "-" in t or len(t) >= 12) else 1 for t in shared) \
+                            + 2 * len(fams)
+            hits[about] = sorted(shared, key=len, reverse=True)[:4] + [f.upper() + "-… codes" for f in fams]
     if scores:
         best = max(scores, key=scores.get)
         rest = sorted((v for k, v in scores.items() if k != best), reverse=True)

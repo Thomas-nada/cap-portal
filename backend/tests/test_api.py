@@ -2121,6 +2121,12 @@ def test_classify_comment_about():
     assert f(CAP12_LIKE, "I think the summary could be shorter.")[0] == "abstract"
     assert f(CAP12_LIKE, "Great work, fully support this.")[0] is None
     assert f(CAP12_LIKE, "What is the timeline for the hard fork?")[0] is None   # 'hard fork' is in several sections
+    # The bare word "analysis" in prose does not name the Analysis section...
+    assert f(CAP12_LIKE, "Publish an analysis of how much stake would lose rewards.")[0] is None
+    # ...but a guardrail code from a family the proposal defines (MPL-01..) points at that revision,
+    # even when the exact code is new and the parameter name occurs in several revisions.
+    about, conf, ev = f(CAP12_LIKE, 'One option: "MPL-06 (x - should) A Parameter Update that lowers maxPledgeLeverage should be published 90 days before, with an analysis of delegated stake."')
+    assert about == "revisions[3]", (about, ev)
 
 
 def test_topic_suggestions_and_review(client, db):
