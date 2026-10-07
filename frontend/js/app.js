@@ -780,6 +780,9 @@ window.openProposal = async (number, addToHistory = true) => {
     state.replyingTo = null;               // no stale reply box across proposals
     state.editingComment = null;           // no stale edit box across proposals
     state.collapsedComments = new Set();   // threads start expanded per proposal
+    state.expandedComments = new Set();    // long comments start folded per proposal
+    state.commentSort = 'oldest';
+    state.commentFilter = 'all';
     updateUI();
     try {
         const [proposal, comments, audit, suggestions, versions, suggestedEdits] = await Promise.all([
@@ -933,6 +936,32 @@ window.wizardCreateAnother = () => {
 };
 
 // Open/close the inline reply box under a specific comment.
+// ── Discussion navigation (proposal detail) ───────────────────────────────────
+// The page re-renders from state, so jumps use scrollIntoView rather than
+// anchors: a "#sec-…" href would change the hash and trigger the router.
+window.scrollToId = (id) => {
+    document.getElementById(id)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+};
+window.setCommentSort = (sort) => { state.commentSort = sort; updateUI(); };
+window.setCommentFilter = (filter) => { state.commentFilter = filter || 'all'; updateUI(); };
+// From a section's "N comments" badge: filter the discussion to it and go there.
+window.filterDiscussion = (about) => {
+    state.commentFilter = about || 'all';
+    updateUI();
+    requestAnimationFrame(() => window.scrollToId('discussion'));
+};
+window.toggleCommentExpand = (commentId) => {
+    if (!(state.expandedComments instanceof Set)) state.expandedComments = new Set();
+    if (state.expandedComments.has(commentId)) state.expandedComments.delete(commentId);
+    else state.expandedComments.add(commentId);
+    updateUI();
+};
+window.setAllThreads = (collapsed) => {
+    const roots = (state.comments || []).filter(c => c.parent_id == null).map(c => c.id);
+    state.collapsedComments = new Set(collapsed ? roots : []);
+    updateUI();
+};
+
 window.replyToComment = (commentId) => {
     if (!state.user) { showWalletModal(); return; }
     state.replyingTo = commentId;
@@ -995,12 +1024,13 @@ window.toggleThread = (commentId) => {
 
 window.postComment = async (formOrNumber, bodyArg, parentArg) => {
     if (!state.user) { showWalletModal(); return; }
-    let number, body, parentId = null;
+    let number, body, parentId = null, about = null;
     if (formOrNumber instanceof HTMLElement) {
         const fd = new FormData(formOrNumber);
         body = fd.get('body') || formOrNumber.querySelector('textarea')?.value || '';
         const rawParent = fd.get('parent_id') || formOrNumber.dataset.parentId || '';
         parentId = rawParent ? Number(rawParent) : null;
+        about = fd.get('about') || null;
         number = state.currentProposal?.number;
         formOrNumber.reset();
     } else {
@@ -1013,7 +1043,7 @@ window.postComment = async (formOrNumber, bodyArg, parentArg) => {
     state.loading = { ...state.loading, [loadKey]: true };
     updateUI();
     try {
-        const comment = await createComment(number, body, parentId);
+        const comment = await createComment(number, body, parentId, about);
         state.comments = [...state.comments, comment];
         if (parentId) state.replyingTo = null;
     } catch (e) {

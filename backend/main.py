@@ -72,6 +72,7 @@ with engine.connect() as _conn:
         "ALTER TABLE comments ADD COLUMN moderation_status TEXT NOT NULL DEFAULT 'visible'",
         # Threaded replies: NULL parent_id = top-level comment (all pre-existing ones).
         "ALTER TABLE comments ADD COLUMN parent_id INTEGER REFERENCES comments(id)",
+        "ALTER TABLE comments ADD COLUMN about TEXT",
         # Drop the superseded per-comment flag columns (replaced by the
         # moderation_status + moderation_cases workflow). Their leftover NOT NULL
         # constraint would otherwise break new comment inserts on existing DBs.
@@ -561,6 +562,7 @@ def comment_to_dict(c: Comment) -> dict:
         "created_at": to_iso(c.created_at),
         "updated_at": to_iso(c.updated_at),
         "moderation_status": c.moderation_status,
+        "about": c.about,
     }
 
 
@@ -1409,10 +1411,23 @@ def list_comments(number: int, authorization: Optional[str] = Header(None), db: 
     return [comment_to_dict(c) for c in comments]
 
 
+_COMMENT_ABOUT_RE = re.compile(r"^(?:abstract|motivation|analysis|impact|exhibits|revisions\[\d+\])$")
+
+
 class CommentCreate(BaseModel):
     body: str = Field(min_length=1, max_length=MAX_LONG_TEXT)
     # Optional: id of the comment being replied to. Ignored by the edit endpoint.
     parent_id: Optional[int] = None
+    # Optional: the part of the proposal the comment is about (a section key or
+    # "revisions[i]"). A reply inherits its parent's. Ignored by the edit endpoint.
+    about: Optional[str] = Field(default=None, max_length=40)
+
+    @field_validator("about")
+    @classmethod
+    def _v_about(cls, v):
+        if v is not None and not _COMMENT_ABOUT_RE.match(v):
+            raise ValueError("about must be a section key or revisions[i]")
+        return v
 
 
 @app.post("/proposals/{number}/comments", status_code=201, tags=["comments"], summary="Post a comment",
@@ -1431,14 +1446,25 @@ def create_comment(request: Request, number: int, req: CommentCreate, user: dict
     # A reply must point at an existing comment on THIS proposal. We store the
     # real parent id at any depth; the frontend caps how deeply it visually indents.
     parent_id = req.parent_id
+    about = req.about
     if parent_id is not None:
         parent = db.query(Comment).filter(Comment.id == parent_id).first()
         if not parent or parent.proposal_number != number:
             raise HTTPException(status_code=400, detail="Reply target not found on this proposal")
+        if about is None:
+            about = parent.about          # a reply stays on its thread's topic
+    if about and about.startswith("revisions["):
+        try:
+            n_revs = len((json.loads(p.body) if p.body else {}).get("revisions") or [])
+        except (ValueError, TypeError):
+            n_revs = 0
+        if int(about[10:-1]) >= n_revs:
+            raise HTTPException(status_code=400, detail="That revision does not exist on this proposal")
 
     c = Comment(
         proposal_number=number,
         parent_id=parent_id,
+        about=about,
         body=req.body,
         author_stake_address=user["sub"],
         author_display_name=user.get("display_name"),

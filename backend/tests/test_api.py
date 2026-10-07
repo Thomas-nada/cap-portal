@@ -2064,3 +2064,34 @@ def test_edit_records_descriptive_version_summary(client, db):
     # Saving the same content again creates no version.
     r = client.patch("/proposals/1", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 200 and len(client.get("/proposals/1/versions").json()) == 2
+
+
+# ── Comments can say what part of the proposal they are about ─────────────────
+
+def test_comment_about_section_and_revision(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_user(db, EDITOR_ADDR, "Bob")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    r = client.post("/proposals/1/comments", json={"body": "On the summary", "about": "abstract"}, headers=auth(EDITOR_ADDR, "Bob"))
+    assert r.status_code == 201 and r.json()["about"] == "abstract"
+    r2 = client.post("/proposals/1/comments", json={"body": "On revision 2", "about": "revisions[1]"}, headers=auth(EDITOR_ADDR, "Bob"))
+    assert r2.status_code == 201 and r2.json()["about"] == "revisions[1]"
+    # A reply inherits its parent's topic unless it names one.
+    r3 = client.post("/proposals/1/comments", json={"body": "reply", "parent_id": r2.json()["id"]}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r3.json()["about"] == "revisions[1]"
+    r4 = client.post("/proposals/1/comments", json={"body": "general reply", "parent_id": r.json()["id"], "about": "motivation"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r4.json()["about"] == "motivation"
+    # Plain comments have no topic.
+    r5 = client.post("/proposals/1/comments", json={"body": "hi"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r5.json()["about"] is None
+    listed = client.get("/proposals/1/comments").json()
+    assert [c["about"] for c in listed] == ["abstract", "revisions[1]", "revisions[1]", "motivation", None]
+
+
+def test_comment_about_rejects_unknown_targets(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    bad = client.post("/proposals/1/comments", json={"body": "x", "about": "title; drop"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert bad.status_code == 400
+    missing = client.post("/proposals/1/comments", json={"body": "x", "about": "revisions[7]"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert missing.status_code == 400 and "revision" in missing.json()["detail"].lower()

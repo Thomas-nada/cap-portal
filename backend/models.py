@@ -62,6 +62,9 @@ class Comment(Base):
     updated_at = Column(DateTime(timezone=True), default=now, onupdate=now)
     # Moderation lifecycle: visible | under_review | removed (see Proposal).
     moderation_status = Column(String, nullable=False, default="visible")
+    # What the comment is about: a section key ("abstract", "motivation", ...)
+    # or a revision ("revisions[2]"). NULL = the proposal in general.
+    about = Column(String, nullable=True)
 
     proposal = relationship("Proposal", back_populates="comments")
 

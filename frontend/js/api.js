@@ -145,9 +145,10 @@ export async function fetchComments(number) {
     return req('GET', `/proposals/${number}/comments`);
 }
 
-export async function createComment(number, body, parentId = null) {
+export async function createComment(number, body, parentId = null, about = null) {
     const payload = { body };
     if (parentId != null) payload.parent_id = parentId;
+    if (about) payload.about = about;
     return req('POST', `/proposals/${number}/comments`, payload, true);
 }
 
