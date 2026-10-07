@@ -183,6 +183,7 @@ function renderCommentNode(c, ctx, depth) {
         : '';
     const cardBorder = mod === 'removed' ? 'border-red-200' : mod === 'under_review' ? 'border-amber-200' : 'border-slate-200';
     const canFlag = (isEditor || isAdmin) && mod === 'visible';
+    const canSetTopic = (isEditor || isAdmin) && mod === 'visible';   // editors file any comment
     const canReply = !!state.user && mod === 'visible';
     const canEdit = !!state.user && state.user.stake_address === c.author_stake_address && mod === 'visible';
     const editing = state.editingComment === c.id;
@@ -233,6 +234,12 @@ function renderCommentNode(c, ctx, depth) {
  <span class="text-sm font-bold text-slate-400 uppercase tracking-tighter">${new Date(c.created_at).toLocaleString()}</span>
                                             ${modBadge}
  <div class="ml-auto flex items-center gap-1">
+                                                ${canSetTopic && !editing ? `
+                                                <select title="Set what this comment is about" onchange="window.applyCommentTopic(${c.id}, this.value)"
+ class="text-sm font-bold rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-500 hover:border-blue-400 outline-none max-w-[13rem] truncate">
+                                                    ${aboutOptions(proposal?.structured, proposal?.type).map(o => `<option value="${o.value}" ${(c.about || '') === o.value ? 'selected' : ''}>${escapeHtml(o.value ? 'Topic: ' + o.label : 'Topic: general')}</option>`).join('')}
+                                                </select>
+                                                ` : ''}
                                                 ${canReply ? `
                                                 <button onclick="window.replyToComment(${c.id})" title="Reply to this comment"
  class="text-slate-400 hover:text-blue-600 transition-all p-1.5 rounded-lg hover:bg-blue-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide">
