@@ -596,6 +596,45 @@ def audit_to_dict(e: AuditEvent) -> dict:
     }
 
 
+_SECTION_LABELS = {"abstract": "Summary", "motivation": "Why", "analysis": "Analysis",
+                   "impact": "Impact", "exhibits": "Links & Files", "category": "Category",
+                   "co_authors": "Co-authors"}
+
+
+def _revision_key(rev):
+    """What a revision is anchored to; pairs the same revision across versions."""
+    kind = rev.get("type") or "replace"
+    passage = rev.get("insert_after") if kind == "addition" else rev.get("original")
+    return (kind, (passage or "").strip())
+
+
+def describe_structured_changes(old: dict, new: dict) -> list:
+    """Human-readable list of what differs between two proposal bodies, e.g.
+    ["Summary", "Revision 2", "Revision added"]. Used for version summaries."""
+    old, new = old or {}, new or {}
+    parts = [label for key, label in _SECTION_LABELS.items() if (old.get(key) or "") != (new.get(key) or "")]
+    old_revs, new_revs = old.get("revisions") or [], new.get("revisions") or []
+    # Pair revisions by anchor; identical anchors pair up in order.
+    pool = {}
+    for i, r in enumerate(old_revs):
+        pool.setdefault(_revision_key(r), []).append(r)
+    added = 0
+    for i, r in enumerate(new_revs):
+        match = pool.get(_revision_key(r))
+        if match:
+            prev = match.pop(0)
+            if (prev.get("proposed") or "").strip() != (r.get("proposed") or "").strip():
+                parts.append(f"Revision {i + 1}")
+        else:
+            added += 1
+    removed = sum(len(v) for v in pool.values())
+    if added:
+        parts.append(f"{added} revision{'s' if added != 1 else ''} added")
+    if removed:
+        parts.append(f"{removed} revision{'s' if removed != 1 else ''} removed")
+    return parts
+
+
 def create_version(db: Session, proposal: Proposal, actor: dict, summary: str):
     last = db.query(ProposalVersion).filter(
         ProposalVersion.proposal_number == proposal.number
@@ -1018,16 +1057,21 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
     parts = []
     if req.title is not None and req.title != p.title:
         changes["title"] = {"from": p.title, "to": req.title}
-        parts.append("Title updated")
+        parts.append("Title")
         p.title = req.title
     if req.structured is not None:
         try:
-            content_changed = json.loads(p.body) != req.structured
+            old_body = json.loads(p.body)
+            content_changed = old_body != req.structured
         except (ValueError, TypeError):
-            content_changed = True
+            old_body, content_changed = {}, True
         if content_changed:
             changes["body_updated"] = True
-            parts.append("Content updated")
+            # Name what changed so the version history reads "Changed: Summary,
+            # Revision 2" rather than a bare "Content updated".
+            described = describe_structured_changes(old_body, req.structured) or ["Content"]
+            changes["fields"] = described
+            parts.extend(described)
             p.body = json.dumps(req.structured)
 
     # Nothing supplied to change — don't touch updated_at, don't log an edit,
@@ -1037,7 +1081,7 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
 
     p.updated_at = datetime.now(timezone.utc)
     record_audit(db, number, "proposal_edited", user, changes)
-    create_version(db, p, user, ", ".join(parts))
+    create_version(db, p, user, "Changed: " + ", ".join(parts))
     db.commit()
     db.refresh(p)
     return proposal_to_dict(p)

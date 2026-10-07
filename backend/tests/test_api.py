@@ -1478,8 +1478,7 @@ def test_content_only_edit_not_flagged_as_title_change(client, db):
                      headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 200
     latest = client.get("/proposals/1/versions").json()[0]
-    assert "Content updated" in latest["change_summary"]
-    assert "Title updated" not in latest["change_summary"]
+    assert latest["change_summary"].startswith("Changed: ") and "Title" not in latest["change_summary"]
 
 
 def test_title_only_edit_not_flagged_as_content_change(client, db):
@@ -1490,8 +1489,7 @@ def test_title_only_edit_not_flagged_as_content_change(client, db):
                      headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 200
     latest = client.get("/proposals/1/versions").json()[0]
-    assert "Title updated" in latest["change_summary"]
-    assert "Content updated" not in latest["change_summary"]
+    assert latest["change_summary"] == "Changed: Title"
 
 
 def test_noop_edit_creates_no_new_version(client, db):
@@ -2032,3 +2030,37 @@ def test_startup_regeneration_covers_deletion_only_proposals(client, db):
         _m._regenerate_all_drafts()
     draft = client.get("/constitution/cap-1-proposed.md")
     assert draft.status_code == 200 and target not in draft.json()["content"]
+
+
+# ── Version summaries name what changed ───────────────────────────────────────
+
+def test_describe_structured_changes():
+    old = {"abstract": "a", "motivation": "m", "category": "Technical",
+           "revisions": [{"original": "P1", "proposed": "x", "section": "S"},
+                         {"type": "addition", "insert_after": "P2", "proposed": "y", "section": "S"},
+                         {"original": "P3", "proposed": "z", "section": "S"}]}
+    new = {"abstract": "a!", "motivation": "m", "category": "Technical",
+           "revisions": [{"original": "P1", "proposed": "x", "section": "S"},
+                         {"type": "addition", "insert_after": "P2", "proposed": "y changed", "section": "S"},
+                         {"type": "deletion", "original": "P9", "proposed": "", "section": "S"}]}
+    assert main.describe_structured_changes(old, new) == ["Summary", "Revision 2", "1 revision added", "1 revision removed"]
+    assert main.describe_structured_changes(old, old) == []
+    assert main.describe_structured_changes({}, {"abstract": "a"}) == ["Summary"]
+
+
+def test_edit_records_descriptive_version_summary(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    revs = [{"original": "OLD original text", "proposed": "first", "section": "Art I"}]
+    client.post("/proposals", json=proposal_body(revisions=revs), headers=auth(AUTHOR_ADDR, "Alice"))
+    body = proposal_body(revisions=[{"original": "OLD original text", "proposed": "second", "section": "Art I"}])
+    body["structured"]["abstract"] = "Test abstract, revised"
+    body["title"] = "New title"
+    r = client.patch("/proposals/1", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200, r.text
+    versions = client.get("/proposals/1/versions").json()
+    latest = max(versions, key=lambda v: v["version"])
+    assert latest["version"] == 2
+    assert latest["change_summary"] == "Changed: Title, Summary, Revision 1"
+    # Saving the same content again creates no version.
+    r = client.patch("/proposals/1", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200 and len(client.get("/proposals/1/versions").json()) == 2
