@@ -2088,6 +2088,21 @@ def test_comment_about_section_and_revision(client, db):
     assert [c["about"] for c in listed] == ["abstract", "revisions[1]", "revisions[1]", "motivation", None]
 
 
+def test_edit_comment_with_general_topic_keeps_it_general(client, db):
+    # The edit form sends about="" for "The proposal in general"; that must not 400.
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    c = client.post("/proposals/1/comments", json={"body": "first", "about": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert c.status_code == 201 and c.json()["about"] is None
+    e = client.patch(f"/comments/{c.json()['id']}", json={"body": "edited", "about": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert e.status_code == 200 and e.json()["body"] == "edited" and e.json()["about"] is None
+    # Setting a topic on edit, then clearing it again.
+    e2 = client.patch(f"/comments/{c.json()['id']}", json={"body": "edited", "about": "revisions[0]"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert e2.json()["about"] == "revisions[0]"
+    e3 = client.patch(f"/comments/{c.json()['id']}", json={"body": "edited", "about": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert e3.json()["about"] is None
+
+
 def test_comment_about_rejects_unknown_targets(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
@@ -2121,6 +2136,12 @@ def test_classify_comment_about():
     assert f(CAP12_LIKE, "I think the summary could be shorter.")[0] == "abstract"
     assert f(CAP12_LIKE, "Great work, fully support this.")[0] is None
     assert f(CAP12_LIKE, "What is the timeline for the hard fork?")[0] is None   # 'hard fork' is in several sections
+    # The bare word "analysis" in prose does not name the Analysis section...
+    assert f(CAP12_LIKE, "Publish an analysis of how much stake would lose rewards.")[0] is None
+    # ...but a guardrail code from a family the proposal defines (MPL-01..) points at that revision,
+    # even when the exact code is new and the parameter name occurs in several revisions.
+    about, conf, ev = f(CAP12_LIKE, 'One option: "MPL-06 (x - should) A Parameter Update that lowers maxPledgeLeverage should be published 90 days before, with an analysis of delegated stake."')
+    assert about == "revisions[3]", (about, ev)
 
 
 def test_topic_suggestions_and_review(client, db):
