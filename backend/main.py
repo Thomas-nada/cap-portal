@@ -1425,7 +1425,8 @@ class CommentCreate(BaseModel):
     @field_validator("about")
     @classmethod
     def _v_about(cls, v):
-        if v is not None and not _COMMENT_ABOUT_RE.match(v):
+        # "" is how the form says "the proposal in general"; treat it as unset.
+        if v is not None and v != "" and not _COMMENT_ABOUT_RE.match(v):
             raise ValueError("about must be a section key or revisions[i]")
         return v
 
@@ -1446,7 +1447,7 @@ def create_comment(request: Request, number: int, req: CommentCreate, user: dict
     # A reply must point at an existing comment on THIS proposal. We store the
     # real parent id at any depth; the frontend caps how deeply it visually indents.
     parent_id = req.parent_id
-    about = req.about
+    about = req.about or None       # "" means "the proposal in general"
     if parent_id is not None:
         parent = db.query(Comment).filter(Comment.id == parent_id).first()
         if not parent or parent.proposal_number != number:

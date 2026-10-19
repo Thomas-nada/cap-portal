@@ -2088,6 +2088,21 @@ def test_comment_about_section_and_revision(client, db):
     assert [c["about"] for c in listed] == ["abstract", "revisions[1]", "revisions[1]", "motivation", None]
 
 
+def test_edit_comment_with_general_topic_keeps_it_general(client, db):
+    # The edit form sends about="" for "The proposal in general"; that must not 400.
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    c = client.post("/proposals/1/comments", json={"body": "first", "about": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert c.status_code == 201 and c.json()["about"] is None
+    e = client.patch(f"/comments/{c.json()['id']}", json={"body": "edited", "about": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert e.status_code == 200 and e.json()["body"] == "edited" and e.json()["about"] is None
+    # Setting a topic on edit, then clearing it again.
+    e2 = client.patch(f"/comments/{c.json()['id']}", json={"body": "edited", "about": "revisions[0]"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert e2.json()["about"] == "revisions[0]"
+    e3 = client.patch(f"/comments/{c.json()['id']}", json={"body": "edited", "about": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert e3.json()["about"] is None
+
+
 def test_comment_about_rejects_unknown_targets(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
