@@ -107,7 +107,8 @@ class ProposalVersion(Base):
     version = Column(Integer, nullable=False)
     title = Column(String, nullable=False)
     body = Column(Text, nullable=False)          # full JSON snapshot
-    change_summary = Column(String, nullable=True)
+    change_summary = Column(String, nullable=True)   # generated: "Changed: Summary, Revision 2"
+    change_note = Column(Text, nullable=True)        # written by the author: what changed and why
     created_at = Column(DateTime(timezone=True), default=now)
     created_by = Column(String, nullable=False)
     created_by_name = Column(String, nullable=True)

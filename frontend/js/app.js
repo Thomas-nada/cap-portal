@@ -863,7 +863,8 @@ window.submitWizard = async () => {
             return;
         }
         if (editNumber) {
-            const updated = await updateProposal(editNumber, { title, structured });
+            const changeNote = (w.changeNote || '').trim();
+            const updated = await updateProposal(editNumber, changeNote ? { title, structured, change_note: changeNote } : { title, structured });
             // Keep the category label in step with the edited category.
             const oldCat = state.wizardEditCategory;
             const newCat = w.category || '';
@@ -1175,6 +1176,9 @@ function versionWordDiff(oldStr, newStr) {
     const tok = s => s.match(/\S+|\s+/g) || [];
     const O = tok(oldStr), N = tok(newStr);
     const m = O.length, n = N.length;
+    // The LCS table is m×n ints. Past a few million cells it would freeze the
+    // tab, so show the two texts as one removal and one insertion instead.
+    if (m * n > 4_000_000) return `<mark class="diff-del">${esc(oldStr)}</mark>\n<mark class="diff-ins">${esc(newStr)}</mark>`;
     const dp = Array.from({length: m+1}, () => new Int32Array(n+1));
     for (let i = m-1; i >= 0; i--)
         for (let j = n-1; j >= 0; j--)
@@ -1188,6 +1192,71 @@ function versionWordDiff(oldStr, newStr) {
     }
     return html;
 }
+
+// Diff for long texts: lines are matched first, the word diff runs only inside
+// the changed stretches, and long unchanged stretches fold into a "··· N
+// unchanged lines" button (a few lines of context stay on each side). This is
+// what keeps a small edit inside a 26,000-character revision readable.
+function versionHunkDiff(oldStr, newStr, ctx = 2) {
+    const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    const O = String(oldStr).split('\n'), N = String(newStr).split('\n');
+    const m = O.length, n = N.length;
+    if (m * n > 4_000_000) return `<mark class="diff-del">${esc(oldStr)}</mark>\n<mark class="diff-ins">${esc(newStr)}</mark>`;
+    const dp = Array.from({length: m+1}, () => new Int32Array(n+1));
+    for (let i = m-1; i >= 0; i--)
+        for (let j = n-1; j >= 0; j--)
+            dp[i][j] = O[i] === N[j] ? dp[i+1][j+1]+1 : Math.max(dp[i+1][j], dp[i][j+1]);
+    const ops = [];
+    let i = 0, j = 0;
+    while (i < m || j < n) {
+        if (i < m && j < n && O[i] === N[j]) { ops.push({ t: 'eq', s: O[i++] }); j++; }
+        else if (j < n && (i >= m || dp[i][j+1] >= dp[i+1][j])) ops.push({ t: 'ins', s: N[j++] });
+        else ops.push({ t: 'del', s: O[i++] });
+    }
+    // Group into unchanged runs and changed blocks (adjacent removals + insertions).
+    const blocks = [];
+    for (const op of ops) {
+        const kind = op.t === 'eq' ? 'eq' : 'chg';
+        const last = blocks[blocks.length - 1];
+        if (last && last.kind === kind) last.ops.push(op); else blocks.push({ kind, ops: [op] });
+    }
+    const out = [];
+    blocks.forEach((b, bi) => {
+        if (b.kind === 'chg') {
+            const del = b.ops.filter(o => o.t === 'del').map(o => o.s).join('\n');
+            const ins = b.ops.filter(o => o.t === 'ins').map(o => o.s).join('\n');
+            out.push(del && ins ? versionWordDiff(del, ins)
+                : del ? `<mark class="diff-del">${esc(del)}</mark>` : `<mark class="diff-ins">${esc(ins)}</mark>`);
+            return;
+        }
+        const lines = b.ops.map(o => o.s);
+        const head = bi === 0 ? 0 : ctx, tail = bi === blocks.length - 1 ? 0 : ctx;
+        if (lines.length <= head + tail + 3) { out.push(esc(lines.join('\n'))); return; }
+        const hidden = lines.slice(head, lines.length - tail);
+        const parts = [];
+        if (head) parts.push(esc(lines.slice(0, head).join('\n')));
+        parts.push(`<span class="vh-fold"><button type="button" onclick="window._vhExpand(this.parentElement)" title="Show these lines"
+ class="not-prose inline-flex items-center gap-1 my-1 px-3 py-0.5 rounded-full bg-slate-100 hover:bg-slate-200 text-slate-500 text-xs font-bold transition-colors">··· ${hidden.length} unchanged lines</button><span class="hidden">${esc(hidden.join('\n'))}</span></span>`);
+        if (tail) parts.push(esc(lines.slice(lines.length - tail).join('\n')));
+        out.push(parts.join('\n'));
+    });
+    return out.join('\n');
+}
+// Long texts get the folding diff; short ones the plain word diff.
+function versionTextDiff(oldStr, newStr) {
+    const long = (oldStr.length + newStr.length) > 1500 || (oldStr.split('\n').length + newStr.split('\n').length) > 16;
+    return long ? versionHunkDiff(oldStr, newStr) : versionWordDiff(oldStr, newStr);
+}
+window._vhExpand = (fold) => {
+    if (!fold) return;
+    fold.lastElementChild?.classList.remove('hidden');
+    fold.querySelector('button')?.remove();
+};
+window._vhExpandAll = (btn) => {
+    const scope = btn.closest('[data-vh-card]') || document;
+    scope.querySelectorAll('.vh-fold').forEach(window._vhExpand);
+    btn.remove();
+};
 
 window.openVersionModal = async (number, version) => {
     const existing = document.getElementById('version-modal-backdrop');
@@ -1287,14 +1356,16 @@ window.openVersionModal = async (number, version) => {
             const tone = x.status === 'added' ? 'green' : x.status === 'removed' ? 'red' : 'blue';
             const tag = x.status === 'added' ? 'New revision' : x.status === 'removed' ? 'Revision removed' : `Revision ${x.i + 1} edited`;
             const proposedHtml = x.status === 'edited'
-                ? versionWordDiff(x.prevRev.proposed || '', x.r.proposed || '')
+                ? versionTextDiff(x.prevRev.proposed || '', x.r.proposed || '')
                 : x.status === 'removed' ? `<span class="line-through text-slate-400">${esc(x.r.proposed || '')}</span>` : esc(x.r.proposed || '');
+            const folded = proposedHtml.includes('vh-fold');
             return `
- <div class="rounded-2xl border border-${tone}-200 overflow-hidden">
+ <div class="rounded-2xl border border-${tone}-200 overflow-hidden" data-vh-card>
  <div class="px-5 py-2 bg-${tone}-50 flex items-center gap-3 flex-wrap">
  <span class="text-sm font-black uppercase tracking-widest text-${tone}-600">${tag}</span>
  <span class="text-sm font-black uppercase tracking-wider px-2 py-0.5 rounded-full bg-white/70 text-slate-500">${kindLabel(x.r)}</span>
                     ${x.r.section ? `<span class="text-sm text-slate-400 truncate">${esc(x.r.section)}</span>` : ''}
+                    ${folded ? `<button type="button" onclick="window._vhExpandAll(this)" class="ml-auto text-xs font-bold text-blue-600 hover:underline">Show full text</button>` : ''}
                 </div>
  <div class="p-5 space-y-3">
                     <div>
@@ -1310,24 +1381,32 @@ window.openVersionModal = async (number, version) => {
             </div>`;
         };
 
+        // The author's own account of the version, above the generated diff.
+        const authorNote = v.change_note ? `
+ <div class="rounded-2xl bg-amber-50 border border-amber-200 p-5">
+ <p class="text-sm font-black uppercase tracking-widest text-amber-700 mb-2">What changed and why <span class="font-normal normal-case text-amber-700/70">· ${esc(v.created_by_name || v.created_by)}</span></p>
+ <div class="prose prose-sm max-w-none text-slate-800">${renderMd(v.change_note)}</div>
+            </div>` : '';
         const diffFields = !prev ? '' : nChanges === 0 ? `
  <div class="rounded-2xl bg-slate-50 border border-slate-100 p-6 text-center">
  <p class="text-sm font-black text-slate-700">No differences from V${v.version - 1}</p>
  <p class="text-sm text-slate-400 mt-1">The title, every section and every revision are identical.</p>
             </div>` : `
+            ${authorNote}
  <div class="rounded-2xl bg-blue-50 border border-blue-100 p-5">
  <p class="text-sm font-black text-slate-900">${nChanges} change${nChanges === 1 ? '' : 's'} since V${v.version - 1}</p>
  <div class="flex flex-wrap gap-2 mt-3">${chips.map(c => `<span class="text-sm font-bold px-3 py-1 rounded-full bg-white text-blue-700 border border-blue-100">${esc(c)}</span>`).join('')}</div>
             </div>
             ${changedFields.map(f => `
-            <div>
+            <div data-vh-card>
  <div class="flex items-center gap-2 mb-2">
  <p class="text-sm font-black uppercase tracking-widest text-slate-500">${esc(f.label)}</p>
  <span class="text-sm font-black uppercase tracking-widest text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Changed</span>
+                    ${!f.plain && versionTextDiff(f.old || '', f.cur || '').includes('vh-fold') ? `<button type="button" onclick="window._vhExpandAll(this)" class="ml-auto text-xs font-bold text-blue-600 hover:underline">Show full text</button>` : ''}
                 </div>
                 ${f.plain
                     ? `<div class="text-sm bg-slate-50 rounded-2xl p-4 border border-slate-100"><span class="line-through text-slate-400">${esc(f.old || '—')}</span> <span class="mx-2 text-slate-300">→</span> <span class="font-bold text-slate-900">${esc(f.cur || '—')}</span></div>`
-                    : `<div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100">${versionWordDiff(f.old || '', f.cur || '')}</div>`}
+                    : `<div class="text-sm leading-relaxed whitespace-pre-wrap bg-slate-50 rounded-2xl p-4 border border-slate-100">${versionTextDiff(f.old || '', f.cur || '')}</div>`}
             </div>`).join('')}
             ${changedRevs.length || removedRevs.length ? `
  <div class="space-y-4">

@@ -606,6 +606,44 @@ def test_version_increments_on_update(client, db):
     assert len(r.json()) == 2
 
 
+def test_change_note_is_stored_with_the_version(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    body = proposal_body(revisions=REVS)["structured"]
+    body["abstract"] = "A clearer summary"
+    r = client.patch("/proposals/1",
+                     json={"structured": body, "change_note": "  Reworded the summary after Kevin's review.\n\n- clearer scope  "},
+                     headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    versions = client.get("/proposals/1/versions").json()
+    assert versions[0]["version"] == 2
+    assert versions[0]["change_summary"] == "Changed: Summary"
+    assert versions[0]["change_note"] == "Reworded the summary after Kevin's review.\n\n- clearer scope"
+    assert versions[1]["change_note"] is None
+    assert client.get("/proposals/1/versions/2").json()["change_note"].startswith("Reworded")
+    # The note is in the audit trail too.
+    audit = client.get("/proposals/1/audit").json()
+    edited = [e for e in audit if e["event_type"] == "proposal_edited"][0]
+    assert edited["data"]["note"].startswith("Reworded")
+
+
+def test_change_note_alone_creates_no_version(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
+    same = proposal_body(revisions=REVS)["structured"]
+    r = client.patch("/proposals/1", json={"structured": same, "change_note": "nothing really"}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200
+    assert len(client.get("/proposals/1/versions").json()) == 1
+    # A blank note is the same as none.
+    body = dict(same, abstract="changed")
+    client.patch("/proposals/1", json={"structured": body, "change_note": "   "}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert client.get("/proposals/1/versions").json()[0]["change_note"] is None
+    # Too long is rejected.
+    body2 = dict(same, abstract="changed again")
+    r = client.patch("/proposals/1", json={"structured": body2, "change_note": "x" * 4_001}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code in (400, 422)
+
+
 def test_hash_chain_integrity(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))

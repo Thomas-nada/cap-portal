@@ -575,12 +575,31 @@ function renderStep4(wizard) {
     </div>`;
 }
 
+// When editing a live proposal, the author can say what changed and why. It is
+// stored on the version this save creates and shown at the top of its "Changes"
+// panel, so readers get the reasoning, not just the diff.
+function renderChangeNote(wizard) {
+    const editing = (typeof window !== 'undefined' && window.state && window.state.wizardEditNumber) || null;
+    if (!editing) return '';
+    return `
+ <div class="mb-8 p-6 bg-amber-50 rounded-2xl border border-amber-200">
+ <label class="text-sm font-black text-amber-700 uppercase tracking-widest mb-1 block">What changed and why <span class="font-normal normal-case opacity-70">(optional, recommended)</span></label>
+ <p class="text-sm text-amber-700/80 mb-3">Written for the people following this proposal. It appears with this version in the history, above the automatic list of changes. Markdown works.</p>
+            <textarea oninput="state.wizardData.changeNote = this.value; window._cc(this, 'cc-changenote')" maxlength="4000"
+                placeholder="e.g. Removed the lock period after Seun's review; moved the MPC-03 wording into Revision 6; fixed the LQST numbering."
+ class="w-full p-5 rounded-2xl border-2 border-amber-200 bg-white/80 text-slate-900 focus:border-amber-500 outline-none transition-all min-h-28"
+            >${escapeHtml(wizard.changeNote || '')}</textarea>
+            ${charCounter('cc-changenote', wizard.changeNote, 4000)}
+        </div>`;
+}
+
 function renderStep5(wizard) {
     const stepNum = wizard.type === 'CIS' ? '3' : '5';
     return `
  <div class="bg-white/80 rounded-[3rem] border border-slate-100 shadow-sm p-6 sm:p-12">
  <h2 class="text-2xl font-black tracking-tight text-slate-900 mb-4">Step ${stepNum}: Review</h2>
  <p class="text-slate-500 mb-8">This is exactly how your proposal will look once published. Review it, then submit below.</p>
+        ${renderChangeNote(wizard)}
         ${window.wizardPreviewHtml ? window.wizardPreviewHtml() : ''}
     </div>`;
 }

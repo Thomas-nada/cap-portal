@@ -53,6 +53,7 @@ with engine.connect() as _conn:
     for _stmt in [
         "ALTER TABLE proposal_versions ADD COLUMN previous_hash TEXT",
         "ALTER TABLE proposal_versions ADD COLUMN content_hash TEXT",
+        "ALTER TABLE proposal_versions ADD COLUMN change_note TEXT",
         "ALTER TABLE bug_reports ADD COLUMN screenshot TEXT",
         "ALTER TABLE bug_reports ADD COLUMN environment TEXT",
         """CREATE TABLE IF NOT EXISTS guides (
@@ -282,6 +283,7 @@ from fastapi.responses import JSONResponse as _JSONResponse
 # Roomy enough for long deliberations; tight enough to stop a single request
 # bloating the database.
 MAX_TITLE = 200
+MAX_CHANGE_NOTE = 4_000        # author's "what changed and why" on a saved version
 MAX_LONG_TEXT = 20_000        # per proposal section / comment (~3,000 words)
 MAX_REVISION_TEXT = 100_000   # per constitution revision (original / insert-after /
                               # proposed text) — whole articles can be rewritten
@@ -637,7 +639,7 @@ def describe_structured_changes(old: dict, new: dict) -> list:
     return parts
 
 
-def create_version(db: Session, proposal: Proposal, actor: dict, summary: str):
+def create_version(db: Session, proposal: Proposal, actor: dict, summary: str, note: Optional[str] = None):
     last = db.query(ProposalVersion).filter(
         ProposalVersion.proposal_number == proposal.number
     ).order_by(ProposalVersion.version.desc()).first()
@@ -650,6 +652,7 @@ def create_version(db: Session, proposal: Proposal, actor: dict, summary: str):
         title=proposal.title,
         body=proposal.body,
         change_summary=summary,
+        change_note=note or None,
         created_by=actor["sub"],
         created_by_name=actor.get("display_name"),
         previous_hash=previous_hash,
@@ -1025,6 +1028,10 @@ def create_proposal(request: Request, req: ProposalCreate, user: dict = Depends(
 class ProposalUpdate(BaseModel):
     title: Optional[str] = Field(default=None, max_length=MAX_TITLE)
     structured: Optional[dict] = None
+    # Optional author's note for the version this save creates: what changed and
+    # why, in their own words. Stored next to the generated summary. Ignored when
+    # the save changes nothing (no version is created then).
+    change_note: Optional[str] = Field(default=None, max_length=MAX_CHANGE_NOTE)
 
     @field_validator("structured")
     @classmethod
@@ -1081,9 +1088,12 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
     if not parts:
         return proposal_to_dict(p)
 
+    note = (req.change_note or "").strip() or None
+    if note:
+        changes["note"] = note
     p.updated_at = datetime.now(timezone.utc)
     record_audit(db, number, "proposal_edited", user, changes)
-    create_version(db, p, user, "Changed: " + ", ".join(parts))
+    create_version(db, p, user, "Changed: " + ", ".join(parts), note)
     db.commit()
     db.refresh(p)
     return proposal_to_dict(p)
@@ -2728,6 +2738,7 @@ def version_to_dict(v: ProposalVersion) -> dict:
         "title": v.title,
         "structured": structured,
         "change_summary": v.change_summary,
+        "change_note": v.change_note,
         "created_at": to_iso(v.created_at),
         "created_by": v.created_by,
         "created_by_name": v.created_by_name,
