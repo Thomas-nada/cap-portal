@@ -9,7 +9,7 @@ import { fetchAllProposals, fetchProposal, fetchComments, fetchAudit,
          fetchAdmins, addAdmin, removeAdmin, claimFirstAdmin, resetProposals,
          fetchSuggestions, createSuggestion, approveSuggestion, rejectSuggestion,
          fetchSuggestedEdits, createSuggestedEdit, approveSuggestedEdit, rejectSuggestedEdit,
-         fetchVersions, fetchVersion,
+         fetchVersions, fetchVersion, setVersionNote,
          getMe, revokeToken, setDisplayName, updateProfile, acceptAlphaAgreement,
          generateDraftConstitution,
          submitBugReport, fetchBugReports, updateBugStatus,
@@ -1381,18 +1381,54 @@ window.openVersionModal = async (number, version) => {
             </div>`;
         };
 
-        // The author's own account of the version, above the generated diff.
+        // The author's own account of the version, above the generated diff. The
+        // author, a co-author or an admin can add one after the fact (or fix it).
+        const me = state.user?.stake_address;
+        const cur = state.currentProposal?.number === number ? state.currentProposal : null;
+        const canNote = !!me && !!cur && (me === cur.author_stake_address
+            || (cur.co_authors || []).some(c => (c.stake_address || c) === me)
+            || state.user?.is_admin === true);
+        const noteBtn = canNote ? `<button type="button" onclick="window._verNoteEdit(${number}, ${version})" class="ml-auto text-xs font-bold text-amber-700 hover:underline">${v.change_note ? 'Edit note' : 'Add a note'}</button>` : '';
         const authorNote = v.change_note ? `
- <div class="rounded-2xl bg-amber-50 border border-amber-200 p-5">
- <p class="text-sm font-black uppercase tracking-widest text-amber-700 mb-2">What changed and why <span class="font-normal normal-case text-amber-700/70">· ${esc(v.created_by_name || v.created_by)}</span></p>
+ <div id="ver-note" class="rounded-2xl bg-amber-50 border border-amber-200 p-5">
+ <div class="flex items-center gap-2 mb-2"><p class="text-sm font-black uppercase tracking-widest text-amber-700">What changed and why <span class="font-normal normal-case text-amber-700/70">· ${esc(v.created_by_name || v.created_by)}</span></p>${noteBtn}</div>
  <div class="prose prose-sm max-w-none text-slate-800">${renderMd(v.change_note)}</div>
+            </div>` : canNote && version > 1 ? `
+ <div id="ver-note" class="rounded-2xl border border-dashed border-amber-200 px-5 py-3 flex items-center gap-2">
+ <p class="text-sm text-slate-500">No note from the author on this version.</p>${noteBtn}
             </div>` : '';
+        // The same block edited in place: a textarea with Save / Cancel.
+        const noteEditor = `
+ <div id="ver-note" class="rounded-2xl bg-amber-50 border border-amber-200 p-5">
+ <p class="text-sm font-black uppercase tracking-widest text-amber-700 mb-2">What changed and why</p>
+ <textarea id="ver-note-input" maxlength="4000" placeholder="e.g. Removed the lock period after Seun's review; moved the MPC-03 wording into Revision 6."
+ class="w-full p-4 rounded-2xl border-2 border-amber-200 bg-white/80 text-slate-900 text-sm focus:border-amber-500 outline-none transition-all min-h-28">${esc(v.change_note || '')}</textarea>
+ <div class="flex items-center gap-3 mt-3">
+ <button type="button" onclick="window._verNoteSave(${number}, ${version})" class="px-5 py-2 rounded-xl bg-amber-600 hover:bg-amber-700 text-white text-sm font-black transition-colors">Save note</button>
+ <button type="button" onclick="window.openVersionModal(${number}, ${version})" class="text-sm font-bold text-slate-500 hover:underline">Cancel</button>
+ <span class="ml-auto text-xs text-slate-400">Markdown works. Only the note changes; the version itself stays as it was.</span>
+                </div>
+            </div>`;
+        window._verNoteEdit = () => {
+            const el = document.getElementById('ver-note');
+            if (!el) return;
+            el.outerHTML = noteEditor;
+            document.getElementById('ver-note-input')?.focus();
+        };
+        window._verNoteSave = async (n, ver) => {
+            const text = document.getElementById('ver-note-input')?.value ?? '';
+            try {
+                await setVersionNote(n, ver, text.trim());
+                state.proposalVersions = await fetchVersions(n);   // history list shows the note
+                updateUI();
+                await window.openVersionModal(n, ver);
+            } catch (e) { alert(e.message); }
+        };
         const diffFields = !prev ? '' : nChanges === 0 ? `
  <div class="rounded-2xl bg-slate-50 border border-slate-100 p-6 text-center">
  <p class="text-sm font-black text-slate-700">No differences from V${v.version - 1}</p>
  <p class="text-sm text-slate-400 mt-1">The title, every section and every revision are identical.</p>
             </div>` : `
-            ${authorNote}
  <div class="rounded-2xl bg-blue-50 border border-blue-100 p-5">
  <p class="text-sm font-black text-slate-900">${nChanges} change${nChanges === 1 ? '' : 's'} since V${v.version - 1}</p>
  <div class="flex flex-wrap gap-2 mt-3">${chips.map(c => `<span class="text-sm font-bold px-3 py-1 rounded-full bg-white text-blue-700 border border-blue-100">${esc(c)}</span>`).join('')}</div>
@@ -1461,6 +1497,7 @@ window.openVersionModal = async (number, version) => {
 
                 <!-- Content: a version after the first opens on what changed -->
  <div class="overflow-y-auto p-8 space-y-6 flex-1">
+                    ${authorNote}
  <div id="ver-panel-full" class="space-y-6 ${hasPrev ? 'hidden' : ''}">${fullContent}</div>
  <div id="ver-panel-diff" class="space-y-5 ${hasPrev ? '' : 'hidden'}">${diffFields}</div>
                 </div>

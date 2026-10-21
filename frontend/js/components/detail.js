@@ -1224,6 +1224,13 @@ function getAuditDetails(ev, state) {
             };
         }
 
+        case 'version_note_set':
+            return {
+                icon: 'sticky-note', color: 'text-amber-600',
+                message: data.note ? `Note added to V${data.version}` : `Note removed from V${data.version}`,
+                detail: data.note || '',
+            };
+
         case 'label_added': {
             const lbl = data.label || '';
             const desc = LABEL_DESCRIPTIONS[lbl] || '';

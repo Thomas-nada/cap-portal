@@ -263,6 +263,10 @@ export async function fetchVersion(number, version) {
     return req('GET', `/proposals/${number}/versions/${version}`);
 }
 
+export async function setVersionNote(number, version, note) {
+    return req('PATCH', `/proposals/${number}/versions/${version}/note`, { change_note: note || '' }, true);
+}
+
 // ── Suggestions ───────────────────────────────────────────────────────────────
 
 export async function fetchSuggestions(number) {

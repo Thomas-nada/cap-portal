@@ -627,6 +627,37 @@ def test_change_note_is_stored_with_the_version(client, db):
     assert edited["data"]["note"].startswith("Reworded")
 
 
+def test_version_note_can_be_set_afterwards(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_user(db, EDITOR_ADDR, "Bob")
+    coauthor = "stake1coauthor0000000000000000000000000000000000000000000"
+    body = proposal_body(revisions=REVS)
+    body["structured"]["co_authors"] = [coauthor]
+    client.post("/proposals", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
+    edited = dict(body["structured"], abstract="changed without a note")
+    client.patch("/proposals/1", json={"structured": edited}, headers=auth(AUTHOR_ADDR, "Alice"))
+    before = client.get("/proposals/1/versions/2").json()
+    assert before["change_note"] is None
+    # A stranger (even an editor) cannot; the author, a co-author and an admin can.
+    assert client.patch("/proposals/1/versions/2/note", json={"change_note": "x"}, headers=auth(EDITOR_ADDR, "Bob")).status_code == 403
+    r = client.patch("/proposals/1/versions/2/note", json={"change_note": "  Forgot the box: reworded the summary.  "}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.status_code == 200 and r.json()["change_note"] == "Forgot the box: reworded the summary."
+    r = client.patch("/proposals/1/versions/2/note", json={"change_note": "Co-author's wording."}, headers=auth(coauthor, "Cara"))
+    assert r.status_code == 200 and r.json()["change_note"] == "Co-author's wording."
+    seed_admin(db)
+    r = client.patch("/proposals/1/versions/2/note", json={"change_note": "Admin wording."}, headers=auth(ADMIN_ADDR, "Admin"))
+    assert r.status_code == 200
+    # Content and hash chain untouched; the note shows in the list; clearing works.
+    after = client.get("/proposals/1/versions/2").json()
+    assert after["content_hash"] == before["content_hash"] and after["structured"] == before["structured"]
+    assert client.get("/proposals/1/versions").json()[0]["change_note"] == "Admin wording."
+    r = client.patch("/proposals/1/versions/2/note", json={"change_note": ""}, headers=auth(AUTHOR_ADDR, "Alice"))
+    assert r.json()["change_note"] is None
+    assert client.patch("/proposals/1/versions/9/note", json={"change_note": "x"}, headers=auth(AUTHOR_ADDR, "Alice")).status_code == 404
+    audit = client.get("/proposals/1/audit").json()
+    assert [e for e in audit if e["event_type"] == "version_note_set"][0]["data"]["version"] == 2
+
+
 def test_change_note_alone_creates_no_version(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(revisions=REVS), headers=auth(AUTHOR_ADDR, "Alice"))
