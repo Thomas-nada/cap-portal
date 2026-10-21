@@ -2767,6 +2767,41 @@ def get_version(number: int, version_num: int, db: Session = Depends(get_db)):
     return version_to_dict(v)
 
 
+class VersionNoteSet(BaseModel):
+    change_note: Optional[str] = Field(default=None, max_length=MAX_CHANGE_NOTE)
+
+
+@app.patch("/proposals/{number}/versions/{version_num}/note", tags=["versions"],
+           summary="Set the author's note on a version",
+           description="Adds, replaces or clears the \"what changed and why\" note on an existing version, "
+                       "for an author who skipped the box when saving. The proposal's author, a co-author "
+                       "or an admin may do this. The version's content and hash are untouched. "
+                       "**Requires authentication.**")
+def set_version_note(number: int, version_num: int, req: VersionNoteSet,
+                     user: dict = Depends(require_user), db: Session = Depends(get_db)):
+    p = db.query(Proposal).filter(Proposal.number == number).first()
+    if not p:
+        raise HTTPException(status_code=404, detail="Proposal not found")
+    v = db.query(ProposalVersion).filter(
+        ProposalVersion.proposal_number == number,
+        ProposalVersion.version == version_num,
+    ).first()
+    if not v:
+        raise HTTPException(status_code=404, detail="Version not found")
+    try:
+        co_authors = {a for a in ((json.loads(p.body) or {}).get("co_authors") or []) if isinstance(a, str)}
+    except (ValueError, TypeError):
+        co_authors = set()
+    if user["sub"] != p.author_stake_address and user["sub"] not in co_authors and not is_admin(user["sub"], db):
+        raise HTTPException(status_code=403, detail="Only the proposal's author, a co-author or an admin can set a version note")
+    note = (req.change_note or "").strip() or None
+    v.change_note = note
+    record_audit(db, number, "version_note_set", user, {"version": version_num, "note": note})
+    db.commit()
+    db.refresh(v)
+    return version_to_dict(v)
+
+
 # ── CIP-100 governance metadata (public, read-only) ─────────────────────────────
 # Exposes each proposal, its full version history and its entire comment thread as
 # a CIP-100-compatible JSON-LD document, so DReps, explorers and other governance
