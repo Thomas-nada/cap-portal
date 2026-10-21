@@ -841,6 +841,7 @@ function renderVersionList(state, p) {
                 </span>
  <div class="min-w-0 flex-1">
  <p class="text-sm font-bold text-slate-900 truncate">${escapeHtml(v.change_summary || 'Update')}</p>
+ ${v.change_note ? `<p class="text-sm text-slate-600 mt-1 line-clamp-2 whitespace-pre-line" title="${escapeHtml(v.change_note)}">${escapeHtml(v.change_note)}</p>` : ''}
  <p class="text-sm text-slate-400 mt-0.5">${when} · ${escapeHtml(v.created_by_name || shortAddress(v.created_by))}</p>
  ${v.content_hash ? `<p class="text-sm text-slate-300 font-mono mt-1 truncate" title="${v.content_hash}">${v.content_hash.slice(0, 16)}…</p>` : ''}
                 </div>
