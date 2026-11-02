@@ -29,3 +29,18 @@ jobs:
             exit 1
           fi
           echo "OK: no /dev/ routes"
+
+      - name: Web root must not contain build/tooling files
+        # frontend/ is published as-is by the static host, so anything in it is
+        # publicly downloadable (e.g. /package.json — CWE-552). Build tooling
+        # belongs in frontend-build/.
+        run: |
+          found=$(find frontend -type f \( \
+            -name 'package.json' -o -name 'package-lock.json' -o -name 'yarn.lock' -o -name 'pnpm-lock.yaml' \
+            -o -name '*.config.js' -o -name '*.config.cjs' -o -name '*.config.mjs' -o -name '*.config.ts' \
+            -o -name '*.py' -o -name '.env*' -o -name '*.bak' -o -name '*.map' \) -print)
+          if [ -n "$found" ]; then
+            for f in $found; do echo "::error file=$f::$f would be publicly served from the static-site root — move it to frontend-build/"; done
+            exit 1
+          fi
+          echo "OK: no tooling files in frontend/"

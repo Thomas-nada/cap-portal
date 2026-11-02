@@ -1,0 +1,14 @@
+{
+  "name": "cap-portal-frontend",
+  "version": "1.0.0",
+  "private": true,
+  "description": "CAP Portal frontend build tooling. Kept outside frontend/ (the published web root) so it is never served. Generates ../frontend/styles.tailwind.css.",
+  "scripts": {
+    "build:css": "tailwindcss -c ./tailwind.config.cjs -i ./input.css -o ../frontend/styles.tailwind.css --minify",
+    "watch:css": "tailwindcss -c ./tailwind.config.cjs -i ./input.css -o ../frontend/styles.tailwind.css --watch"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.15",
+    "tailwindcss": "^3.4.17"
+  }
+}

@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Simple dev server for the frontend. Run from the frontend/ directory."""
+"""Simple dev server for the frontend. Serves ../frontend/ (the static-site root).
+
+Lives outside frontend/ so it is not published with the site."""
 import http.server, socketserver, os, re, sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
-os.chdir(os.path.dirname(os.path.abspath(__file__)))
+os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend"))
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def log_message(self, format, *args):
