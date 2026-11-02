@@ -59,7 +59,10 @@ development only (WC-06). Credentials are disabled.
 
 `.github/workflows/production-guard.yml` fails CI if a build would ship
 `DEV_MODE = true` (dev login / testnet bypass) or expose a `/dev/` route
-(WC-04). `render.yaml` is kept as `render.yaml.example` so the repo is not
+(WC-04). It also fails if build or tooling files (`package.json`, lockfiles,
+`*.config.*`, `*.py`, `.env*`, source maps) appear under `frontend/`: that
+directory is the static-site publish root, so everything in it is publicly
+downloadable. Build tooling lives in `frontend-build/`. `render.yaml` is kept as `render.yaml.example` so the repo is not
 treated as an auto-provisioning Render Blueprint.
 
 ## Out of scope / not present

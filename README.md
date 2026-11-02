@@ -119,9 +119,17 @@ cd backend
 pip install -r requirements.txt
 py -3 -m uvicorn main:app --reload --port 8000
 
-# Frontend
-cd frontend
+# Frontend (the dev server serves ../frontend)
+cd frontend-build
 py -3 dev-server.py 8765
+```
+
+`frontend/` is the published web root: everything in it is publicly downloadable, so keep only files the browser needs there. Build tooling (`package.json`, the Tailwind config, the dev server) lives in `frontend-build/`. After changing Tailwind classes, regenerate the stylesheet:
+
+```bash
+cd frontend-build
+npm ci
+npm run build:css   # writes ../frontend/styles.tailwind.css
 ```
 
 Set `API_BASE` in `frontend/js/config.js` — it defaults to `http://localhost:8000` when served from localhost. The portal is then available at http://localhost:8765.

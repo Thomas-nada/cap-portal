@@ -1,8 +1,12 @@
 /** Tailwind config for the static production build. Mirrors the theme that was
  *  previously inlined for the CDN build. Run `npm run build:css` after changing
- *  classes so styles.tailwind.css stays in sync. */
+ *  classes so ../frontend/styles.tailwind.css stays in sync.
+ *
+ *  This tooling lives outside frontend/ on purpose: frontend/ is the published
+ *  static-site root, so anything in it is publicly downloadable. */
 module.exports = {
-  content: ['./index.html', './js/**/*.js'],
+  // relative: resolve paths from this file, not the shell's cwd.
+  content: { relative: true, files: ['../frontend/index.html', '../frontend/js/**/*.js'] },
   // Some classes are assembled at runtime (e.g. `bg-${cfg.color}-600` in the
   // lifecycle/signal controls), so the scanner can't see them — safelist the
   // palette + shades those use, across the relevant utilities and hover.
