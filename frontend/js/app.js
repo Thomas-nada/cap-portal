@@ -154,10 +154,10 @@ export function updateUI(rerender = false) {
     // Dismissible red alpha banner — sits above the header, gone for the session once closed.
     const alphaBanner = state.alphaBannerDismissed ? '' : `
         <div class="relative bg-red-600 text-white text-sm font-semibold px-10 py-2 text-center">
-            This is an alpha version currently in testing.
+            <span class="hidden sm:inline">This is an alpha version currently in testing.</span><span class="sm:hidden">Alpha version in testing.</span>
             <button onclick="window.showAlphaInfo()" class="underline underline-offset-2 font-bold ml-1 hover:text-white/80">Read more</button>
-            <button onclick="window.dismissAlphaBanner()" title="Dismiss for this session"
-                class="absolute right-2 top-1/2 -translate-y-1/2 w-6 h-6 flex items-center justify-center rounded-md hover:bg-white/20 transition-colors">
+            <button onclick="window.dismissAlphaBanner()" title="Dismiss for this session" aria-label="Dismiss"
+                class="absolute right-1 top-1/2 -translate-y-1/2 w-9 h-9 flex items-center justify-center rounded-md hover:bg-white/20 transition-colors">
                 <i data-lucide="x" class="w-4 h-4"></i>
             </button>
         </div>`;
@@ -168,7 +168,7 @@ export function updateUI(rerender = false) {
     // page, not the viewport.
     const overlays = state.view === 'detail' ? renderDetailOverlays(state) : '';
     const errorToast = state.error ? `
-        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
+        <div class="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 flex items-start gap-3 w-[calc(100%-2rem)] sm:w-auto max-w-lg px-5 py-4 rounded-2xl bg-red-600 text-white shadow-2xl">
  <i data-lucide="alert-triangle" class="w-5 h-5 flex-shrink-0 mt-0.5"></i>
  <p class="text-sm font-semibold leading-snug">${escapeHtmlGlobal(state.error)}</p>
             <button onclick="window.dismissError()" class="flex-shrink-0 hover:bg-white/20 rounded-lg p-1 -m-1 transition-colors">
@@ -189,8 +189,8 @@ export function updateUI(rerender = false) {
             <div class="bg-white/90 border-b border-slate-200 backdrop-blur">
                 <div class="max-w-5xl mx-auto px-4 sm:px-6 py-2.5 flex items-center justify-between">
                     <div onclick="window.wizardExit()" class="flex items-center gap-3 cursor-pointer">
-                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-[68px] h-[68px] object-contain">
-                        <div class="text-left leading-[1.3] font-normal text-sm text-slate-800 whitespace-nowrap">
+                        <img src="CAP.png" alt="Constitutional Amendment Portal" class="w-11 h-11 sm:w-[68px] sm:h-[68px] object-contain">
+                        <div class="hidden sm:block text-left leading-[1.3] font-normal text-sm text-slate-800 whitespace-nowrap">
                             <div>Constitutional<br>Amendment<br>Portal</div>
                         </div>
                     </div>
@@ -198,20 +198,20 @@ export function updateUI(rerender = false) {
                 </div>
             </div>
         </div>
- <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-8">${content}</main>
+ <main class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">${content}</main>
         ` + notif + errorToast;
         finishRender(root);
         return;
     }
 
     root.innerHTML = `<div class="sticky top-0 z-50">${alphaBanner}${nav}</div>` + `
- <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+ <main class="flex-1 w-full max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6 sm:py-8">
             ${content}
         </main>
         <footer class="bg-[#0228aa] border-t border-white/10">
             <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-10 flex flex-col sm:flex-row items-start sm:items-end justify-between gap-8">
                 <div class="flex flex-col gap-0">
-                    <img src="intersect-logo.png" alt="Intersect" class="w-48 h-auto -ml-5">
+                    <img src="intersect-logo.png" alt="Intersect" class="w-48 h-auto -ml-4 sm:-ml-5">
                     <p class="text-sm text-white/50 -mt-3">&copy; ${new Date().getFullYear()} Intersect. All Rights Reserved.</p>
                 </div>
                 <nav class="flex flex-col gap-1">
@@ -240,7 +240,7 @@ export function updateUI(rerender = false) {
         </footer>
         ${state.user ? `
         <button onclick="window.openBugReportModal()" title="Report a bug"
- class="fixed bottom-6 right-6 z-40 w-14 h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
+ class="fixed bottom-4 right-4 sm:bottom-6 sm:right-6 z-40 w-12 h-12 sm:w-14 sm:h-14 bg-red-500 hover:bg-red-600 active:scale-95 text-white rounded-full shadow-xl flex items-center justify-center transition-all">
  <i data-lucide="bug" class="w-6 h-6"></i>
         </button>` : ''}
         ${overlays}
@@ -734,6 +734,22 @@ window.downloadConstitution = () => {
     a.href = URL.createObjectURL(new Blob([cur.content], { type: 'text/plain' }));
     a.download = `${cur.name}.txt`;
     a.click();
+};
+
+// Phones/tablets: the constitution's version / compare / jump-to tools sit in a
+// collapsible panel above the text.
+window.toggleConstitutionTools = () => {
+    state.constitutionToolsOpen = !state.constitutionToolsOpen;
+    updateUI();
+};
+// Jump-to link. With the panel open (small screens) close it first, then scroll:
+// collapsing it afterwards would shift the page under the reader.
+window.jumpToConstitutionSection = (id) => {
+    if (!state.constitutionToolsOpen) return true;   // desktop: plain anchor jump
+    state.constitutionToolsOpen = false;
+    updateUI();
+    requestAnimationFrame(() => document.getElementById(id)?.scrollIntoView({ block: 'start' }));
+    return false;
 };
 
 window.enableDiffMode = async () => {

@@ -15,7 +15,7 @@ export function renderNav(state) {
 
     const bell = isLoggedIn ? `
         <button onclick="window.toggleNotifications()" title="Notifications"
- class="relative w-10 h-10 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-white">
+ class="relative w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10 transition-colors text-white">
  <i data-lucide="bell" class="w-5 h-5"></i>
             <span data-unread-badge
  class="absolute -top-0.5 -right-0.5 min-w-[18px] h-[18px] px-1 rounded-full bg-brand-secondary text-white text-sm font-black items-center justify-center ${state.unreadCount > 0 ? 'flex' : 'hidden'}">${state.unreadCount > 9 ? '9+' : state.unreadCount}</span>
@@ -33,21 +33,21 @@ export function renderNav(state) {
  ${state.user.is_admin ? `<p class="text-sm font-semibold text-brand-tertiary uppercase tracking-widest">Admin</p>` : state.user.is_editor ? `<p class="text-sm font-semibold text-brand-secondary-container uppercase tracking-widest">Editor</p>` : ''}
             </button>
             <button onclick="window.logoutWallet()"
- class="flex items-center gap-2 px-3 sm:px-4 py-2 hover:bg-white/10 rounded-full transition-all group text-sm font-semibold text-white border-2 border-white/30">
+ title="Logout" class="flex items-center gap-2 px-3 sm:px-4 h-11 sm:h-auto sm:py-2 hover:bg-white/10 rounded-full transition-all group text-sm font-semibold text-white border-2 border-white/30">
  <i data-lucide="log-out" class="w-4 h-4"></i>
  <span class="hidden md:inline">Logout</span>
             </button>
         </div>
     ` : `
-        <button onclick="window.loginWithWallet()"
- class="flex items-center gap-2 px-5 sm:px-8 h-11 sm:h-12 bg-white hover:bg-brand-primary-container active:scale-[0.98] text-brand-primary rounded-full text-sm font-semibold transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)]">
+        <button onclick="window.loginWithWallet()" title="Connect Wallet"
+ class="flex items-center gap-2 px-4 sm:px-8 h-11 sm:h-12 bg-white hover:bg-brand-primary-container active:scale-[0.98] text-brand-primary rounded-full text-sm font-semibold transition-all shadow-[0_3px_8px_rgba(0,0,0,0.15)]">
  <i data-lucide="wallet" class="w-4 h-4"></i>
- <span class="hidden md:inline">Connect Wallet</span>
+ <span class="sm:hidden">Connect</span><span class="hidden sm:inline">Connect Wallet</span>
         </button>
     `;
 
     const mobilePanel = mobileOpen ? `
- <div class="lg:hidden bg-[#021d80] border-t border-white/10 px-4 py-3 space-y-1">
+ <div class="lg:hidden bg-[#021d80] border-t border-white/10 px-4 py-3 space-y-1 max-h-[calc(100dvh-7rem)] overflow-y-auto">
             ${menu.map(item => `
             <button onclick="window.setView('${item.id}')"
  class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-sm font-semibold transition-all
@@ -57,11 +57,16 @@ export function renderNav(state) {
             </button>
             `).join('')}
             ${isLoggedIn ? `
- <div class="pt-3 mt-2 border-t border-white/10 px-4 py-2">
- <p class="text-sm font-semibold text-white/80 uppercase tracking-widest leading-none">
-                    ${state.user.display_name || shortAddress(state.user.stake_address)}
-                </p>
- <p class="text-sm text-white/50 font-mono leading-none mt-0.5">(${shortAddress(state.user.stake_address)})</p>
+ <div class="pt-3 mt-2 border-t border-white/10">
+            <button onclick="window.toggleMobileNav(); window.openProfile()"
+ class="w-full flex items-center gap-3 px-4 py-3 rounded-2xl text-left text-white/75 hover:bg-white/10 transition-all">
+ <i data-lucide="user" class="w-4 h-4 flex-shrink-0"></i>
+ <span class="min-w-0">
+ <span class="block text-sm font-semibold text-white/90 truncate">${state.user.display_name || shortAddress(state.user.stake_address)}</span>
+ <span class="block text-sm text-white/50 font-mono">(${shortAddress(state.user.stake_address)})${state.user.is_admin ? ' · Admin' : state.user.is_editor ? ' · Editor' : ''}</span>
+                </span>
+ <span class="ml-auto text-sm font-semibold text-white/60">Profile</span>
+            </button>
             </div>
             ` : ''}
         </div>
@@ -69,10 +74,10 @@ export function renderNav(state) {
 
     return `
  <nav class="bg-[#0228aa] shadow-md">
- <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-[92px] flex justify-between items-center">
+ <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 h-16 sm:h-[92px] flex justify-between items-center">
  <div class="flex items-center gap-3 cursor-pointer flex-shrink-0" onclick="window.setView('dashboard')">
- <div class="w-[68px] h-[68px] flex items-center justify-center flex-shrink-0">
- <img src="CAP-white.png" alt="CAP Logo" class="w-[68px] h-[68px] object-contain">
+ <div class="w-12 h-12 sm:w-[68px] sm:h-[68px] flex items-center justify-center flex-shrink-0">
+ <img src="CAP-white.png" alt="CAP Logo" class="w-12 h-12 sm:w-[68px] sm:h-[68px] object-contain">
                 </div>
                 <!-- Stacked wordmark is narrow, so it fits at every width -->
  <div class="hidden sm:block text-left whitespace-nowrap leading-[1.3]">
@@ -96,8 +101,8 @@ export function renderNav(state) {
  <div class="flex items-center gap-2 pr-1 sm:pr-2">
                 ${bell}
                 ${sessionControls}
-                <button onclick="window.toggleMobileNav()"
- class="lg:hidden w-10 h-10 flex items-center justify-center rounded-2xl text-white hover:bg-white/10 transition-colors">
+                <button onclick="window.toggleMobileNav()" aria-label="Menu" aria-expanded="${mobileOpen}"
+ class="lg:hidden w-11 h-11 flex items-center justify-center rounded-2xl text-white hover:bg-white/10 transition-colors">
  <i data-lucide="${mobileOpen ? 'x' : 'menu'}" class="w-5 h-5"></i>
                 </button>
             </div>

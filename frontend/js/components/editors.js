@@ -18,7 +18,7 @@ function personCard({ person, user, isAdmin, onRemove, accentFrom, accentTo, ico
         </div>
         ${isAdmin && !isSelf ? `
         <button onclick="${onRemove}('${escapeHtml(person.stake_address)}')"
- class="opacity-0 group-hover:opacity-100 flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-400 hover:text-red-600 transition-all">
+ class="lg:opacity-0 lg:group-hover:opacity-100 flex-shrink-0 w-9 h-9 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-400 hover:text-red-600 transition-all">
  <i data-lucide="user-minus" class="w-4 h-4"></i>
  </button>` : '<div class="w-9"></div>'}
     </div>`;
