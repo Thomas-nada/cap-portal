@@ -108,20 +108,33 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             super().copyfile(source, outputfile)
 
-def _lan_ip():
-    # The address other devices on the network use to reach this machine. No
-    # packet is sent; connecting a UDP socket just picks the outgoing interface.
+def _lan_ips():
+    # Addresses other devices on the network can use to reach this machine.
+    # A machine can have several (Wi-Fi, Ethernet, a VPN), and the "default"
+    # one is often the VPN's, which a phone can't reach — so list them all.
+    ips = []
     try:
+        ips += socket.gethostbyname_ex(socket.gethostname())[2]
+    except OSError:
+        pass
+    try:
+        # No packet is sent; connecting a UDP socket just picks an interface.
         with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
             sock.connect(("10.255.255.255", 1))
-            return sock.getsockname()[0]
+            ips.append(sock.getsockname()[0])
     except OSError:
-        return None
+        pass
+    # Drop loopback and self-assigned (169.254.x.x) addresses.
+    return sorted({ip for ip in ips if not ip.startswith(("127.", "169.254."))})
 
 print(f"Frontend dev server running at http://localhost:{PORT}")
-_ip = _lan_ip()
-if _ip:
-    print(f"On a phone on the same Wi-Fi:      http://{_ip}:{PORT}")
+_ips = _lan_ips()
+if _ips:
+    print("On a phone on the same network, open one of (type http:// explicitly):")
+    for _ip in _ips:
+        print(f"    http://{_ip}:{PORT}")
+    if len(_ips) > 1:
+        print("  Use your Wi-Fi/Ethernet address (usually 192.168.x.x), not a VPN's.")
 print("Press Ctrl+C to stop.")
 # ThreadingHTTPServer: serve concurrent requests so the browser can load the
 # many ES module imports in parallel (single-threaded serving drops requests).
