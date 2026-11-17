@@ -295,6 +295,12 @@ MAX_SCREENSHOTS = 5           # per bug report
 MAX_NAME = 100
 MAX_CO_AUTHORS = 20           # co-authors per proposal
 MAX_DRAFTS_PER_AUTHOR = 25    # saved wizard drafts per wallet
+# New proposals per rolling 24 hours. A proposal number is permanent, so these
+# bound how many a single party can use up. The portal-wide cap exists because a
+# script can mint a fresh wallet (and switch address) for every submission, which
+# no per-wallet or per-address limit can stop. Editors and admins are exempt.
+MAX_PROPOSALS_PER_WALLET_PER_DAY = 2
+MAX_PROPOSALS_PER_DAY = 5
 MAX_DRAFT_TOTAL = 2_000_000   # whole draft blob (wizard state is larger than the
                               # final structured body: it also holds selections, etc.)
 MAX_CONSTITUTION_UPLOAD = 1_000_000  # an edited copy of the constitution uploaded to
@@ -564,6 +570,28 @@ def _require_alpha_agreement(user: dict, db: Session):
     if not has_accepted_alpha(user["sub"], db):
         raise HTTPException(status_code=403,
                             detail="Accept the User Agreement before submitting a proposal")
+
+
+def _require_submission_quota(user: dict, db: Session):
+    """Refuse a new proposal once the rolling 24-hour caps are reached.
+
+    Counted from the proposals table, not from memory, so the caps hold across
+    restarts and deploys and cannot be dodged by changing address. Withdrawn and
+    moderator-removed proposals still count: they used a number too."""
+    if is_editor(user["sub"], db) or is_admin(user["sub"], db):
+        return
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    recent = db.query(Proposal).filter(Proposal.created_at >= since)
+    if recent.filter(Proposal.author_stake_address == user["sub"]).count() >= MAX_PROPOSALS_PER_WALLET_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You have submitted {MAX_PROPOSALS_PER_WALLET_PER_DAY} proposals in the last 24 hours. "
+                   "Please try again tomorrow, or contact an editor.")
+    if recent.count() >= MAX_PROPOSALS_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail="The portal has reached its limit for new proposals today. "
+                   "Please try again tomorrow, or contact an editor.")
 
 
 # ── Serialisers ───────────────────────────────────────────────────────────────
@@ -1052,6 +1080,7 @@ def create_proposal(request: Request, req: ProposalCreate, user: dict = Depends(
     # Checked before a number is allocated: a refused submission must not use one up.
     _require_alpha_agreement(user, db)
     _require_complete_proposal(req.type, req.title, req.structured)
+    _require_submission_quota(user, db)
 
     # The proposal number is max+1 computed here, so two concurrent submissions
     # can pick the same number and collide on the unique constraint. Retry on
