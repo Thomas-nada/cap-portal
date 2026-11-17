@@ -2,9 +2,11 @@
 """Simple dev server for the frontend. Serves ../frontend/ (the static-site root).
 
 Lives outside frontend/ so it is not published with the site."""
-import http.server, socketserver, os, re, sys
+import http.server, http.client, socket, socketserver, os, re, sys
 
 PORT = int(sys.argv[1]) if len(sys.argv) > 1 else 8765
+# Local backend that /api/* is forwarded to (see _proxy below).
+API_HOST, API_PORT = "127.0.0.1", 8000
 os.chdir(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "frontend"))
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -18,6 +20,47 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         # Advertise range support so <video> knows it can seek.
         self.send_header("Accept-Ranges", "bytes")
         super().end_headers()
+
+    # /api/* is forwarded to the local backend. This is what lets a phone on the
+    # same Wi-Fi test the portal at http://<this-PC's-IP>:8765 — the page and the
+    # API share one origin, so nothing needs to change in the CSP, in CORS, or in
+    # how the backend is started (it can stay bound to 127.0.0.1).
+    def _proxy(self):
+        length = int(self.headers.get("Content-Length") or 0)
+        body = self.rfile.read(length) if length else None
+        headers = {k: v for k, v in self.headers.items()
+                   if k.lower() not in ("host", "origin", "connection", "accept-encoding")}
+        try:
+            conn = http.client.HTTPConnection(API_HOST, API_PORT, timeout=60)
+            conn.request(self.command, self.path[len("/api"):] or "/", body=body, headers=headers)
+            resp = conn.getresponse()
+            data = resp.read()
+        except OSError:
+            self.send_error(502, f"Backend not reachable on {API_HOST}:{API_PORT}")
+            return
+        self.send_response(resp.status)
+        for k, v in resp.getheaders():
+            if k.lower() not in ("transfer-encoding", "connection", "content-length", "server", "date"):
+                self.send_header(k, v)
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        if self.command != "HEAD":
+            self.wfile.write(data)
+        conn.close()
+
+    def _is_api(self):
+        return self.path == "/api" or self.path.startswith("/api/")
+
+    def do_GET(self):
+        return self._proxy() if self._is_api() else super().do_GET()
+
+    def do_HEAD(self):
+        return self._proxy() if self._is_api() else super().do_HEAD()
+
+    def _api_only(self):
+        return self._proxy() if self._is_api() else self.send_error(405)
+
+    do_POST = do_PUT = do_PATCH = do_DELETE = do_OPTIONS = _api_only
 
     # http.server has no Range support, so <video> can't seek (the browser's
     # scrub bar relies on byte-range requests to jump to an arbitrary point).
@@ -65,7 +108,20 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         else:
             super().copyfile(source, outputfile)
 
+def _lan_ip():
+    # The address other devices on the network use to reach this machine. No
+    # packet is sent; connecting a UDP socket just picks the outgoing interface.
+    try:
+        with socket.socket(socket.AF_INET, socket.SOCK_DGRAM) as sock:
+            sock.connect(("10.255.255.255", 1))
+            return sock.getsockname()[0]
+    except OSError:
+        return None
+
 print(f"Frontend dev server running at http://localhost:{PORT}")
+_ip = _lan_ip()
+if _ip:
+    print(f"On a phone on the same Wi-Fi:      http://{_ip}:{PORT}")
 print("Press Ctrl+C to stop.")
 # ThreadingHTTPServer: serve concurrent requests so the browser can load the
 # many ES module imports in parallel (single-threaded serving drops requests).

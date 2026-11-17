@@ -15,6 +15,7 @@ echo Portal running at:
 echo   Frontend: http://localhost:8765
 echo   Backend:  http://localhost:8000
 echo   API docs: http://localhost:8000/docs
+echo   Phone on the same Wi-Fi: use the address shown in the CAP Frontend window
 echo.
 echo Dev mode is ON - click "Dev Login" in the wallet modal to test without a real wallet.
 pause
