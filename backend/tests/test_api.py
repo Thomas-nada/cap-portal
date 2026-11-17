@@ -93,13 +93,31 @@ def proposal_body(title="Test Proposal", **kwargs):
         "title": title,
         "type": "CAP",
         "structured": {
+            "category": "Procedural",
             "abstract": "Test abstract",
             "motivation": "Test motivation",
             "analysis": "Test analysis",
             "impact": "Test impact",
+            "revisions": [{"original": "Old text", "proposed": "New text", "section": "Article I"}],
             **kwargs,
         },
     }
+
+
+# The real agreement gate, kept so the tests that exercise it can restore it.
+_REAL_ALPHA_GATE = main._require_alpha_agreement
+
+
+@pytest.fixture(autouse=True)
+def _alpha_accepted(monkeypatch):
+    """Most tests are not about the User Agreement: treat every wallet as having
+    accepted it. Tests of the gate itself take the `alpha_gate` fixture."""
+    monkeypatch.setattr(main, "_require_alpha_agreement", lambda user, db: None)
+
+
+@pytest.fixture()
+def alpha_gate(monkeypatch):
+    monkeypatch.setattr(main, "_require_alpha_agreement", _REAL_ALPHA_GATE)
 
 
 def test_launch_guides_hide_unreviewed_content(client, db):
@@ -238,6 +256,101 @@ def test_create_proposal_requires_auth(client):
     assert r.status_code == 401
 
 
+# ── Required content is enforced on the server, not only in the wizard ────────
+
+def _post(client, body):
+    return client.post("/proposals", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
+
+
+def test_empty_proposal_is_rejected_and_uses_no_number(client, db):
+    """A direct API call with no content must not publish or consume a number."""
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    r = _post(client, {"title": "QA-SEC-TEST (safe to delete)", "type": "CAP", "structured": {}})
+    assert r.status_code == 400
+    assert isinstance(r.json()["detail"], str)
+    assert client.get("/proposals").json() == []
+    # The next real submission still gets number 1.
+    assert _post(client, proposal_body()).json()["number"] == 1
+
+
+@pytest.mark.parametrize("override", [
+    {"category": ""}, {"category": "Nonsense"},
+    {"abstract": "   "}, {"motivation": ""}, {"analysis": ""},
+    {"revisions": []}, {"revisions": "x"}, {"revisions": ["x"]},
+    {"revisions": [{"original": "Old", "proposed": " "}]},
+    {"revisions": [{"proposed": "New"}]},
+    {"type": "CIS"},
+])
+def test_incomplete_cap_is_rejected(client, db, override):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    assert _post(client, proposal_body(**override)).status_code == 400
+    assert client.get("/proposals").json() == []
+
+
+def test_blank_title_and_unknown_type_are_rejected(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    assert _post(client, proposal_body(title="   ")).status_code == 400
+    body = proposal_body()
+    body["type"] = "ADMIN"
+    assert _post(client, body).status_code == 400
+    assert client.get("/proposals").json() == []
+
+
+def test_addition_revision_is_accepted(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    revs = [{"type": "addition", "insert_after": "Anchor text", "proposed": "Added text"}]
+    assert _post(client, proposal_body(revisions=revs)).status_code == 201
+
+
+def test_deletion_revision_needs_no_proposed_text(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    revs = [{"type": "deletion", "original": "Passage to remove", "proposed": ""}]
+    assert _post(client, proposal_body(revisions=revs)).status_code == 201
+
+
+def test_cis_needs_no_revisions_or_analysis(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    body = {"title": "An issue", "type": "CIS",
+            "structured": {"type": "CIS", "category": "Procedural",
+                           "abstract": "Summary", "motivation": "Problem", "revisions": []}}
+    assert _post(client, body).status_code == 201
+    body["structured"]["motivation"] = ""
+    assert _post(client, body).status_code == 400
+
+
+def test_author_cannot_empty_a_published_proposal(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    _post(client, proposal_body())
+    h = auth(AUTHOR_ADDR, "Alice")
+    assert client.patch("/proposals/1", json={"structured": {}}, headers=h).status_code == 400
+    assert client.patch("/proposals/1", json={"title": "  "}, headers=h).status_code == 400
+    # Switching to CIS to drop the revisions requirement is refused too.
+    cis = {**proposal_body()["structured"], "type": "CIS", "revisions": []}
+    assert client.patch("/proposals/1", json={"structured": cis}, headers=h).status_code == 400
+    got = client.get("/proposals/1").json()
+    assert got["title"] == "Test Proposal" and got["structured"]["abstract"] == "Test abstract"
+    assert len(client.get("/proposals/1/versions").json()) == 1
+
+
+def test_suggested_edit_must_be_complete(client, db):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    seed_editor(db)
+    _post(client, proposal_body())
+    r = client.post("/proposals/1/suggested-edits", json={"title": "T", "structured": {}},
+                    headers=auth(EDITOR_ADDR))
+    assert r.status_code == 400
+
+
+def test_submitting_requires_the_user_agreement(client, db, alpha_gate):
+    seed_user(db, AUTHOR_ADDR, "Alice")
+    h = auth(AUTHOR_ADDR, "Alice")
+    r = client.post("/proposals", json=proposal_body(), headers=h)
+    assert r.status_code == 403
+    assert client.get("/proposals").json() == []
+    assert client.post("/alpha-agreement/accept", headers=h).status_code == 201
+    assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 201
+
+
 def test_get_proposal(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body("My CAP"), headers=auth(AUTHOR_ADDR, "Alice"))
@@ -264,7 +377,7 @@ def test_update_proposal_by_author(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
     r = client.patch("/proposals/1",
-                     json={"title": "Updated Title", "structured": {"abstract": "new"}},
+                     json={"title": "Updated Title", "structured": proposal_body(abstract="new")["structured"]},
                      headers=auth(AUTHOR_ADDR, "Alice"))
     assert r.status_code == 200
     assert r.json()["title"] == "Updated Title"
@@ -600,7 +713,7 @@ def test_version_increments_on_update(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
     client.patch("/proposals/1",
-                 json={"title": "Updated", "structured": {"abstract": "new"}},
+                 json={"title": "Updated", "structured": proposal_body(abstract="new")["structured"]},
                  headers=auth(AUTHOR_ADDR, "Alice"))
     r = client.get("/proposals/1/versions")
     assert len(r.json()) == 2
@@ -679,7 +792,7 @@ def test_hash_chain_integrity(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body(), headers=auth(AUTHOR_ADDR, "Alice"))
     client.patch("/proposals/1",
-                 json={"title": "V2", "structured": {"abstract": "v2"}},
+                 json={"title": "V2", "structured": proposal_body(abstract="v2")["structured"]},
                  headers=auth(AUTHOR_ADDR, "Alice"))
     versions = client.get("/proposals/1/versions").json()
     v1 = next(v for v in versions if v["version"] == 1)
@@ -2216,7 +2329,7 @@ def test_classify_comment_about():
 def test_topic_suggestions_and_review(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     seed_editor(db)
-    body = proposal_body(); body["structured"] = {"type": "CAP", **CAP12_LIKE}
+    body = proposal_body(); body["structured"] = {"type": "CAP", "category": "Technical", **CAP12_LIKE}
     client.post("/proposals", json=body, headers=auth(AUTHOR_ADDR, "Alice"))
     c1 = client.post("/proposals/1/comments", json={"body": "The MPL-01 guardrail on maxPledgeLeverage seems too loose."}, headers=auth(AUTHOR_ADDR, "Alice")).json()
     c2 = client.post("/proposals/1/comments", json={"body": "Agreed.", "parent_id": c1["id"]}, headers=auth(EDITOR_ADDR)).json()
