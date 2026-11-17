@@ -16,6 +16,7 @@ export function initConstitutionSelection() {
     window.selectionHandlerInitialized = true;
     window.stagedSelections = window.stagedSelections || [];
     const inWizard = () => window.state?.view === 'wizard';
+    const isTouch = () => !!window.matchMedia?.('(pointer: coarse)').matches;
 
     function renderSelectionBar() {
         const col = document.getElementById('constitution-col');
@@ -58,6 +59,19 @@ export function initConstitutionSelection() {
             : `<span style="color:#64748b;font-size:14px;font-weight:900;letter-spacing:.1em;text-transform:uppercase;padding:0 2px">CAP</span>
                ${btnReplace}${btnAddAfter}${btnDelete}
                <button onclick="window.commitSelection('CIS','replace')" style="background:#7c3aed;color:#fff;border:none;border-radius:10px;padding:5px 13px;font-size:14px;font-weight:800;cursor:pointer;letter-spacing:.05em;white-space:nowrap">+ CIS</button>`;
+        // Touch: dock the actions to the bottom of the screen. The OS shows its
+        // own Copy/Share bubble right at the selection, and the full row of
+        // actions is wider than a phone, so it wraps here instead.
+        if (isTouch()) {
+            popup.style.flexDirection = inWizard() ? 'column' : 'row';
+            popup.style.flexWrap = 'wrap'; popup.style.justifyContent = 'center';
+            popup.style.top = 'auto'; popup.style.left = '8px'; popup.style.right = '8px';
+            popup.style.bottom = `calc(${inWizard() ? 84 : 12}px + env(safe-area-inset-bottom, 0px))`;
+            popup.style.padding = '10px'; popup.style.display = 'flex';
+            popup.querySelectorAll('button').forEach(b => { b.style.padding = '10px 14px'; });
+            return;
+        }
+        popup.style.flexWrap = 'nowrap'; popup.style.right = 'auto'; popup.style.bottom = 'auto';
         popup.style.top = '-9999px'; popup.style.left = '-9999px'; popup.style.display = 'flex';
         requestAnimationFrame(() => {
             const h = popup.offsetHeight, pw = popup.offsetWidth;
@@ -114,8 +128,7 @@ export function initConstitutionSelection() {
         window.getSelection()?.removeAllRanges(); hidePopup(); renderSelectionBar();
     };
 
-    document.addEventListener('mouseup', (e) => {
-        if (document.getElementById('selection-popup')?.contains(e.target)) return;
+    function handleSelection() {
         try {
             const selection = window.getSelection();
             const text = selection.toString().trim();
@@ -153,6 +166,29 @@ export function initConstitutionSelection() {
                 showSelectionPopup(selection.getRangeAt(0).getBoundingClientRect());
             } else { hidePopup(); }
         } catch (err) { console.warn('Selection handler error:', err); }
+    }
+
+    document.addEventListener('mouseup', (e) => {
+        if (document.getElementById('selection-popup')?.contains(e.target)) return;
+        handleSelection();
+    });
+
+    // Touch: a long-press selection (and dragging its handles) fires no mouseup,
+    // so follow selectionchange instead, once the selection has settled. Tapping
+    // one of our popup buttons collapses the native selection first — ignore
+    // that change so the popup is still there when the tap lands.
+    let selTimer = null, popupTouchedAt = 0;
+    document.addEventListener('touchstart', (e) => {
+        if (document.getElementById('selection-popup')?.contains(e.target)) popupTouchedAt = Date.now();
+    }, { passive: true });
+    document.addEventListener('selectionchange', () => {
+        if (!isTouch()) return;
+        if (!document.getElementById('constitution-content')) return;
+        clearTimeout(selTimer);
+        selTimer = setTimeout(() => {
+            if (Date.now() - popupTouchedAt < 800) return;
+            handleSelection();
+        }, 350);
     });
 
     document.addEventListener('keydown', e => { if (e.key === 'Escape') window.clearConstitutionSelection?.(); });
@@ -195,29 +231,36 @@ export function renderConstitution(state) {
 
     return `
  <div class="max-w-7xl mx-auto pb-20 fade-in text-left relative">
- <header class="mb-12">
+ <header class="mb-6 sm:mb-12">
  <div class="flex items-center gap-4 mb-4">
- <div class="w-12 h-12 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
+ <div class="w-12 h-12 flex-shrink-0 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
  <i data-lucide="book-open" class="w-6 h-6"></i>
                 </div>
                 <div>
  <h1 class="text-3xl sm:text-4xl font-black italic tracking-tighter text-on-surface uppercase leading-none">Constitution</h1>
- <p class="text-on-surface-variant text-xl font-medium mt-2">Foundational governance document</p>
+ <p class="text-on-surface-variant text-base sm:text-xl font-medium mt-2">Foundational governance document</p>
                 </div>
             </div>
             ${!isDiffMode ? `
  <div class="mt-6 flex items-start gap-3 px-5 py-4 bg-blue-50 border border-blue-100 rounded-2xl">
  <i data-lucide="mouse-pointer-2" class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"></i>
- <p class="text-sm text-blue-700 font-medium leading-relaxed">
+ <p class="text-sm text-blue-700 font-medium leading-relaxed min-w-0">
  <span class="font-black">Proposing a change?</span>
- Highlight any section of the text. Click <span class="font-black">+ CAP</span> to flag as a Constitutional Amendment Proposal, or <span class="font-black">+ CIS</span> as a Constitutional Issue Statement.
+ Highlight any section of the text<span class="lg:hidden"> (on a phone, press and hold a word, then drag the handles)</span>. Choose <span class="font-black">Replace</span>, <span class="font-black">Add After</span> or <span class="font-black">Delete</span> to flag as a Constitutional Amendment Proposal, or <span class="font-black">+ CIS</span> as a Constitutional Issue Statement.
                 </p>
             </div>
             ` : ''}
         </header>
 
- <div class="grid grid-cols-1 lg:grid-cols-4 gap-8">
- <aside class="lg:col-span-1 space-y-6 lg:sticky lg:top-8 h-fit">
+ <div class="grid grid-cols-1 lg:grid-cols-4 gap-4 lg:gap-8">
+ <aside class="lg:col-span-1 lg:sticky lg:top-8 h-fit min-w-0">
+                <!-- Phones/tablets: tools are tucked behind one button so the text starts on the first screen -->
+                <button onclick="window.toggleConstitutionTools()" aria-expanded="${!!state.constitutionToolsOpen}"
+ class="lg:hidden w-full flex items-center justify-between gap-3 px-5 py-3.5 rounded-2xl bg-white/80 border border-slate-100 shadow-sm text-sm font-bold text-slate-700">
+ <span class="flex items-center gap-2 min-w-0"><i data-lucide="list" class="w-4 h-4 flex-shrink-0 text-slate-400"></i><span class="truncate">${isDiffMode ? 'Comparing: ' + escapeHtml(state.constitutionCompareVersion || '') : 'Sections, versions &amp; compare'}</span></span>
+ <i data-lucide="${state.constitutionToolsOpen ? 'chevron-up' : 'chevron-down'}" class="w-4 h-4 flex-shrink-0 text-slate-400"></i>
+                </button>
+ <div class="${state.constitutionToolsOpen ? 'mt-4' : 'hidden'} lg:block lg:mt-0 space-y-4 lg:space-y-6">
                 <!-- Version Selector -->
  <div class="bg-white/80 p-6 rounded-[2rem] border border-slate-100 shadow-sm">
  <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Version</h3>
@@ -267,7 +310,7 @@ export function renderConstitution(state) {
  <h3 class="text-sm font-black uppercase tracking-[0.2em] text-slate-400 mb-4">Jump To</h3>
  <div class="space-y-1 max-h-96 overflow-y-auto">
                         ${sections.map(s => `
- <a href="#${s.id}" class="block px-3 py-2 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all">
+ <a href="#${s.id}" onclick="return window.jumpToConstitutionSection('${s.id}')" class="block px-3 py-2.5 rounded-lg text-sm font-bold text-slate-600 hover:bg-slate-50 transition-all">
                             ${s.label}
                         </a>
                         `).join('')}
@@ -284,9 +327,10 @@ export function renderConstitution(state) {
                     </div>
                 </div>
                 ` : ''}
+                </div>
             </aside>
 
- <div id="constitution-col" class="lg:col-span-3">
+ <div id="constitution-col" class="lg:col-span-3 min-w-0">
                 ${isDiffMode && state.constitutionDiffNotice ? renderDiffNotice(state.constitutionDiffNotice) : ''}
                 ${isDiffMode ? renderDiffView(baseVersion, compareVersion) : renderSingleView(currentVersion)}
             </div>

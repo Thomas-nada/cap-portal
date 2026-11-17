@@ -102,18 +102,18 @@ export function renderBugs(state) {
             </div>
         </div>
 
- <div class="grid grid-cols-3 gap-4">
- <div class="bg-red-50 rounded-[2rem] p-6 text-center">
+ <div class="grid grid-cols-3 gap-2 sm:gap-4">
+ <div class="bg-red-50 rounded-[2rem] px-2 py-5 sm:p-6 text-center min-w-0">
  <p class="text-3xl font-black text-red-600 ">${open}</p>
- <p class="text-sm font-black text-red-500 uppercase tracking-widest mt-1">Open</p>
+ <p class="text-sm font-black text-red-500 uppercase tracking-wide sm:tracking-widest mt-1">Open</p>
             </div>
- <div class="bg-amber-50 rounded-[2rem] p-6 text-center">
+ <div class="bg-amber-50 rounded-[2rem] px-2 py-5 sm:p-6 text-center min-w-0">
  <p class="text-3xl font-black text-amber-600 ">${inProgress}</p>
- <p class="text-sm font-black text-amber-500 uppercase tracking-widest mt-1">In Progress</p>
+ <p class="text-sm font-black text-amber-500 uppercase tracking-wide sm:tracking-widest mt-1">In Progress</p>
             </div>
- <div class="bg-green-50 rounded-[2rem] p-6 text-center">
+ <div class="bg-green-50 rounded-[2rem] px-2 py-5 sm:p-6 text-center min-w-0">
  <p class="text-3xl font-black text-green-600 ">${resolved}</p>
- <p class="text-sm font-black text-green-500 uppercase tracking-widest mt-1">Resolved</p>
+ <p class="text-sm font-black text-green-500 uppercase tracking-wide sm:tracking-widest mt-1">Resolved</p>
             </div>
         </div>
 

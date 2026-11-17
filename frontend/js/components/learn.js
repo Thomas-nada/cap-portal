@@ -90,7 +90,7 @@ export function renderLearnHub(state) {
                 </button>
                 ${canEdit ? `
                 <button onclick="window.deleteGuide('${g.slug}')" title="Delete guide"
- class="opacity-0 group-hover/guide:opacity-100 w-8 h-8 rounded-xl bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 flex items-center justify-center transition-all shrink-0">
+ class="lg:opacity-0 lg:group-hover/guide:opacity-100 w-8 h-8 rounded-xl bg-red-50 text-red-400 hover:text-red-600 hover:bg-red-100 flex items-center justify-center transition-all shrink-0">
  <i data-lucide="x" class="w-3 h-3"></i>
                 </button>` : ''}
             </div>`;
@@ -152,9 +152,9 @@ export function renderLearnHub(state) {
     return `
  <div class="max-w-6xl mx-auto pb-20 fade-in text-left">
  <header class="mb-16">
- <div class="flex items-center justify-between">
- <div class="flex items-center gap-4">
- <div class="w-12 h-12 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
+ <div class="flex flex-wrap items-center justify-between gap-4">
+ <div class="flex items-center gap-4 min-w-0">
+ <div class="w-12 h-12 flex-shrink-0 bg-gradient-to-br from-amber-500 to-orange-600 rounded-2xl flex items-center justify-center shadow-lg text-white">
  <i data-lucide="graduation-cap" class="w-6 h-6"></i>
                     </div>
                     <div>

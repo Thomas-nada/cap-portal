@@ -136,9 +136,11 @@ function renderWizardBar(step, wizard, state) {
     const open = isSelect && hasSel && state.wizardSelPanelOpen;
     const submitting = state.loading?.submitting;
 
+    // On phones Back/Discard live in the top header only, so the bar has room
+    // for Save draft + Next without clipping.
     const leftBtn = step > 1
-        ? `<button onclick="window.wizardPrevStep()" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white/85 hover:bg-white/10 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
-        : `<button onclick="window.wizardExit()" class="inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-red-300 hover:bg-white/10 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`;
+        ? `<button onclick="window.wizardPrevStep()" class="hidden sm:inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-white/85 hover:bg-white/10 transition-colors"><i data-lucide="arrow-left" class="w-4 h-4"></i> Back</button>`
+        : `<button onclick="window.wizardExit()" class="hidden sm:inline-flex items-center gap-2 px-4 py-3 rounded-xl text-sm font-bold text-red-300 hover:bg-white/10 transition-colors"><i data-lucide="x" class="w-4 h-4"></i> Discard</button>`;
 
     // Save draft is available only when creating (not editing/suggesting an
     // existing proposal). The status text is updated in place by autosave.
@@ -146,32 +148,32 @@ function renderWizardBar(step, wizard, state) {
     const draftControls = canDraft ? `
  <span id="draft-save-status" class="text-sm font-black uppercase tracking-widest text-emerald-300 hidden sm:inline"></span>
         <button onclick="window.saveDraft()" title="Save this draft so you can finish it later"
- class="inline-flex items-center gap-2 px-5 py-3 rounded-xl border-2 border-white/50 bg-white/10 text-white hover:bg-white/20 hover:border-white text-sm font-black uppercase tracking-widest transition-all flex-shrink-0 shadow-sm">
- <i data-lucide="save" class="w-4 h-4"></i> Save draft
+ class="inline-flex items-center gap-2 px-4 sm:px-5 py-3 rounded-xl border-2 border-white/50 bg-white/10 text-white hover:bg-white/20 hover:border-white text-sm font-black uppercase tracking-widest transition-all flex-shrink-0 shadow-sm">
+ <i data-lucide="save" class="w-4 h-4"></i> <span class="${isSelect || isLast ? 'hidden sm:inline' : ''}">Save draft</span>
         </button>` : '';
 
     let rightBtn;
     if (isLast) {
         rightBtn = `<button onclick="window.wizardSubmit()" ${submitting ? 'disabled' : ''}
- class="inline-flex items-center gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed">
+ class="inline-flex items-center justify-center flex-shrink-0 whitespace-nowrap gap-2 px-6 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all disabled:opacity-60 disabled:cursor-not-allowed">
             ${submitting
                 ? `<span class="w-4 h-4 border-2 border-white/40 border-t-white rounded-full animate-spin"></span> ${state.wizardEditNumber ? 'Saving…' : state.wizardSuggestNumber ? 'Submitting…' : 'Submitting…'}`
                 : `<i data-lucide="send" class="w-4 h-4"></i> ${state.wizardEditNumber ? 'Save changes' : state.wizardSuggestNumber ? 'Submit for author approval' : 'Submit Proposal'}`}
         </button>`;
     } else if (isSelect) {
         rightBtn = `<button onclick="window.wizardNextStep()" ${hasSel ? '' : 'disabled'}
- class="inline-flex items-center gap-2 px-5 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${hasSel ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white/10 text-white/40 cursor-not-allowed'}">
-            Next step <i data-lucide="arrow-right" class="w-4 h-4"></i>
+ class="inline-flex items-center justify-center flex-shrink-0 whitespace-nowrap gap-2 px-5 py-3 rounded-xl text-sm font-black uppercase tracking-widest transition-all ${hasSel ? 'bg-blue-600 hover:bg-blue-700 text-white' : 'bg-white/10 text-white/40 cursor-not-allowed'}">
+            Next<span class="hidden sm:inline">&nbsp;step</span> <i data-lucide="arrow-right" class="w-4 h-4"></i>
         </button>`;
     } else {
         rightBtn = `<button onclick="window.wizardNextStep()"
- class="inline-flex items-center gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all">
+ class="inline-flex items-center justify-center flex-shrink-0 whitespace-nowrap gap-2 px-5 py-3 rounded-xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-black uppercase tracking-widest transition-all">
             Next <i data-lucide="arrow-right" class="w-4 h-4"></i>
         </button>`;
     }
 
     const center = isSelect ? `
- <div class="flex items-center gap-2 min-w-0 flex-1 justify-center">
+ <div class="flex items-center gap-2 min-w-0 flex-1 justify-start sm:justify-center">
             ${hasSel
                 ? `<button onclick="window.toggleWizardSelPanel()" title="${open ? 'Hide' : 'Show'} selections"
  class="flex items-center gap-2 min-w-0 rounded-xl px-2 py-1 hover:bg-white/10 transition-colors">
@@ -181,7 +183,7 @@ function renderWizardBar(step, wizard, state) {
                    </button>
                    <button onclick="document.getElementById('constitution-col')?.scrollIntoView({behavior:'smooth',block:'start'})"
  class="hidden sm:inline-flex items-center gap-1 px-3 py-2 rounded-xl bg-white/10 hover:bg-white/20 text-white text-sm font-bold transition-colors">+ Add more</button>`
-                : `<span class="text-white/80 font-medium text-sm truncate text-center">Highlight text in the Constitution below, or upload an edited copy</span>`}
+                : `<span class="text-white/80 font-medium text-sm truncate text-center"><span class="sm:hidden">Highlight text</span><span class="hidden sm:inline">Highlight text in the Constitution below, or upload an edited copy</span></span>`}
         </div>` : `<div class="flex-1"></div>`;
 
     // One selection: `stacked` puts the badge above the text for the narrow drawer.
@@ -221,7 +223,7 @@ function renderWizardBar(step, wizard, state) {
     return `${drawer}
  <div class="fixed bottom-0 left-0 right-0 z-40 bg-slate-900/95 backdrop-blur border-t border-white/10 shadow-[0_-4px_20px_rgba(0,0,0,0.25)]">
         ${sheet}
- <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-3">
+ <div class="max-w-5xl mx-auto px-4 sm:px-6 py-3 flex items-center gap-2 sm:gap-3 safe-bottom">
             ${leftBtn}
             ${center}
             ${draftControls}
@@ -369,9 +371,9 @@ function renderStep2(wizard, state) {
  <label class="text-sm font-black text-slate-400 uppercase tracking-widest block">Selected (${selected.length})</label>
             ${selected.map((sel, idx) => `
  <div class="p-5 rounded-2xl bg-slate-50 border border-slate-200 ">
- <div class="flex items-start justify-between gap-4 mb-2">
- <div class="flex items-center gap-2">
- <span class="text-sm font-black px-3 py-1 bg-blue-100 text-blue-600 rounded-full uppercase tracking-wider">Selection ${idx+1}</span>
+ <div class="flex items-start justify-between gap-2 sm:gap-4 mb-2">
+ <div class="flex flex-wrap items-center gap-2 min-w-0">
+ <span class="text-sm font-black px-3 py-1 bg-blue-100 text-blue-600 rounded-full uppercase tracking-wider whitespace-nowrap">Selection ${idx+1}</span>
                         ${kindBadge(sel.kind)}
                     </div>
  <button onclick="window.removeWizardSelection(${idx})" class="text-red-500 hover:bg-red-50 p-2 rounded-lg transition-all">
@@ -398,7 +400,7 @@ function renderStep2(wizard, state) {
         </div>
         <!-- Reader flows with the page scroll; index floats alongside it -->
  <div class="lg:grid lg:grid-cols-[minmax(0,1fr)_180px] lg:gap-6 lg:items-start">
- <div id="constitution-col" class="rounded-[2rem] border border-slate-100 bg-white">
+ <div id="constitution-col" class="min-w-0 rounded-[2rem] border border-slate-100 bg-white overflow-hidden">
                 ${renderSingleView(cur, true)}
             </div>
  <aside class="hidden lg:block sticky top-40">

@@ -133,3 +133,5 @@ npm run build:css   # writes ../frontend/styles.tailwind.css
 ```
 
 Set `API_BASE` in `frontend/js/config.js` — it defaults to `http://localhost:8000` when served from localhost. The portal is then available at http://localhost:8765.
+
+**Testing on a phone:** with the phone on the same Wi-Fi, open the `http://<your-PC-IP>:8765` address the dev server prints at startup. The dev server forwards `/api/*` to the local backend, so nothing else needs configuring (allow Python through the firewall for private networks if prompted). Wallet sign-in is not available this way — a wallet app's browser needs a deployed HTTPS site.

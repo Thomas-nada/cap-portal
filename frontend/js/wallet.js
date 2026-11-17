@@ -217,17 +217,43 @@ export async function devLogin(displayName = 'Dev User') {
     return { stake_address: fakeStake, display_name: displayName, is_editor: false };
 }
 
+const isTouchDevice = () => !!window.matchMedia?.('(pointer: coarse)').matches;
+
+// Copies the current page address so it can be pasted into a wallet app's dApp
+// browser. Falls back to showing the address when the clipboard is unavailable.
+window._walletModalCopyLink = async (btn) => {
+    const label = btn?.querySelector('span');
+    try {
+        await navigator.clipboard.writeText(window.location.href);
+        if (label) label.textContent = 'Copied';
+    } catch {
+        if (label) label.textContent = window.location.href;
+    }
+};
+
 // ── Wallet selection modal ────────────────────────────────────────────────────
 
 export function renderWalletModal() {
     const available = getAvailableWallets();
 
     const walletList = available.length === 0
- ? `<div class="text-center py-8">
+ ? (isTouchDevice()
+            // Phones have no browser extensions: a wallet is only reachable from
+            // inside a wallet app's own dApp browser, so say that instead.
+ ? `<div class="text-center py-4">
+ <i data-lucide="smartphone" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
+ <p class="text-slate-700 font-bold mb-2">Open this page in your wallet app</p>
+ <p class="text-slate-500 text-sm mb-5">Phone browsers can't reach a Cardano wallet directly. Open your wallet app (Eternl, Vespr, Lace…), go to its built-in dApp browser, and paste this page's address there. Reading the portal works without connecting.</p>
+               <button onclick="window._walletModalCopyLink(this)"
+ class="w-full flex items-center justify-center gap-2 py-3 rounded-2xl bg-blue-600 hover:bg-blue-700 text-white text-sm font-bold transition-colors">
+ <i data-lucide="copy" class="w-4 h-4"></i> <span>Copy page address</span>
+               </button>
+           </div>`
+ : `<div class="text-center py-8">
  <i data-lucide="wallet" class="w-12 h-12 text-slate-300 mx-auto mb-4"></i>
  <p class="text-slate-500 font-bold mb-2">No wallet detected</p>
  <p class="text-slate-400 text-sm">Install a Cardano wallet extension (Eternl, Vespr, Lace…) and refresh.</p>
-           </div>`
+           </div>`)
  : `<div class="space-y-2 mb-2" id="wallet-list">
                ${available.map(w => `
                <button onclick="window._walletModalPickWallet('${w.id}')"
@@ -252,8 +278,8 @@ export function renderWalletModal() {
     return `
     <div id="wallet-modal-backdrop"
          onclick="if(event.target===this) document.getElementById('wallet-modal-backdrop').remove()"
- class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4">
- <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-sm p-6 sm:p-8">
+ class="fixed inset-0 bg-black/60 backdrop-blur-sm z-50 flex items-center justify-center p-4 overflow-y-auto">
+ <div class="bg-white rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-sm p-6 sm:p-8 my-auto">
  <div class="flex items-center justify-between mb-6">
  <h2 id="wallet-modal-title" class="text-xl font-black text-slate-900 ">Connect Wallet</h2>
                 <button onclick="document.getElementById('wallet-modal-backdrop').remove()"

@@ -1,0 +1,32 @@
+/* Phone-width adjustments (below Tailwind's `sm` breakpoint, 640px).
+   Loaded after styles.tailwind.css so these win over the utility classes they
+   tune. Desktop and tablet layouts are untouched. */
+
+/* Long unbroken strings (URLs, parameter names, stake addresses) must wrap
+   instead of widening the page. */
+.prose, .prose em, .prose code:not(pre code) { overflow-wrap: anywhere; }
+
+@media (max-width: 639px) {
+    /* iOS Safari zooms the page when a focused field has text under 16px. */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]), select, textarea { font-size: 16px; }
+
+    /* Cards were sized for desktop: 40–80px of padding and 64px corners leave
+       a ~270px text column on a phone. */
+    #app .p-8, #app .p-10, #app .p-12 { padding: 1.25rem; }
+    #app .p-16, #app .p-20 { padding: 2rem 1.25rem; }
+    #app .rounded-\[4rem\], #app .rounded-\[3rem\] { border-radius: 1.5rem; }
+    #app .rounded-\[2\.5rem\], #app .rounded-\[2rem\] { border-radius: 1.25rem; }
+
+    /* Reading text: tighter headings and body so more fits per screen. */
+    .prose h1 { font-size: 1.75rem; line-height: 1.2; margin-bottom: 1.25rem; }
+    .prose h2 { font-size: 1.35rem; line-height: 1.25; margin-top: 2rem; margin-bottom: 1rem; }
+    .prose h3 { font-size: 1.15rem; }
+    .prose p, .prose li { font-size: 1rem; line-height: 1.7; }
+    .prose p { margin-bottom: 1.1rem; }
+    /* Wide tables scroll inside themselves rather than stretching the page. */
+    .prose table { display: block; max-width: 100%; overflow-x: auto; -webkit-overflow-scrolling: touch; }
+    .prose pre { padding: 1rem; }
+}
+
+/* Keep fixed bars clear of the home indicator on notched phones. */
+.safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }

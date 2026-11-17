@@ -205,21 +205,21 @@ function renderCommentNode(c, ctx, depth) {
     // replies = lighter and smaller, in their own tinted bubble under a blue
     // connector line, so the nesting reads at a glance even in light mode.
     const nodeWrap = isRoot
-        ? 'rounded-[2rem] border border-slate-200 bg-slate-50 p-4 sm:p-6 space-y-5 shadow-sm'
+        ? 'rounded-[2rem] border border-slate-200 bg-slate-50 p-3 sm:p-6 space-y-5 shadow-sm'
         : 'space-y-5';
     const avatarWrap = isRoot
-        ? 'w-11 h-11 sm:w-14 sm:h-14 rounded-3xl bg-slate-200'
-        : 'w-9 h-9 sm:w-10 sm:h-10 rounded-2xl bg-blue-50 ring-1 ring-blue-200';
+        ? 'sm:w-14 sm:h-14 rounded-3xl bg-slate-200'
+        : 'sm:w-10 sm:h-10 rounded-2xl bg-blue-50 ring-1 ring-blue-200';
     const avatarIcon = isRoot ? 'w-5 h-5 sm:w-6 sm:h-6 text-slate-500' : 'w-4 h-4 sm:w-5 sm:h-5 text-blue-600';
     const cardBase = isRoot
-        ? 'bg-white p-5 sm:p-7 rounded-[1.75rem] shadow-sm'
+        ? 'bg-white p-4 sm:p-7 rounded-2xl sm:rounded-[1.75rem] shadow-sm'
         : 'bg-[#eef2f8] p-4 sm:p-5 rounded-[1.5rem]';
     const nameSize = isRoot ? 'text-base' : 'text-sm';
 
     return `
  <div id="comment-${c.id}" class="${nodeWrap} scroll-mt-40">
  <div class="flex gap-4 sm:gap-8 group ${mod !== 'visible' ? 'opacity-80' : ''}">
- <div class="${avatarWrap} flex items-center justify-center flex-shrink-0">
+ <div class="${avatarWrap} hidden sm:flex items-center justify-center flex-shrink-0">
  <i data-lucide="user" class="${avatarIcon}"></i>
                                     </div>
  <div class="flex-grow min-w-0 space-y-4">
@@ -233,10 +233,10 @@ function renderCommentNode(c, ctx, depth) {
                                             ${parentName ? `<span class="text-sm font-bold text-blue-600 flex items-center gap-1"><i data-lucide="corner-down-right" class="w-3 h-3"></i> Replying to ${escapeHtml(parentName)}</span>` : ''}
  <span class="text-sm font-bold text-slate-400 uppercase tracking-tighter">${new Date(c.created_at).toLocaleString()}</span>
                                             ${modBadge}
- <div class="ml-auto flex items-center gap-1">
+ <div class="w-full sm:w-auto sm:ml-auto flex flex-wrap items-center gap-1 min-w-0">
                                                 ${canSetTopic && !editing ? `
                                                 <select title="Set what this comment is about" onchange="window.applyCommentTopic(${c.id}, this.value)"
- class="text-sm font-bold rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-500 hover:border-blue-400 outline-none max-w-[13rem] truncate">
+ class="text-sm font-bold rounded-lg border border-slate-200 bg-white px-2 py-1 text-slate-500 hover:border-blue-400 outline-none max-w-full sm:max-w-[13rem] min-w-0 truncate">
                                                     ${aboutOptions(proposal?.structured, proposal?.type).map(o => `<option value="${o.value}" ${(c.about || '') === o.value ? 'selected' : ''}>${escapeHtml(o.value ? 'Topic: ' + o.label : 'Topic: general')}</option>`).join('')}
                                                 </select>
                                                 ` : ''}
@@ -254,7 +254,7 @@ function renderCommentNode(c, ctx, depth) {
                                                 ` : ''}
                                                 ${canFlag ? `
                                                 <button onclick="window.flagCommentForRemoval(${c.id})" title="Flag this comment for removal"
- class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide opacity-0 group-hover:opacity-100">
+ class="text-slate-300 hover:text-red-500 transition-all p-1.5 rounded-lg hover:bg-red-50 flex items-center gap-1 text-sm font-black uppercase tracking-wide lg:opacity-0 lg:group-hover:opacity-100">
  <i data-lucide="flag" class="w-3.5 h-3.5"></i> Flag
                                                 </button>
                                                 ` : ''}
@@ -728,7 +728,7 @@ export function renderDetail(state) {
                     </article>
 
                     ${(p.structured?.revisions?.length && p.structured.revisions.some(revisionHasEffect)) ? `
- <div class="bg-blue-50/60 border border-blue-100 rounded-[3rem] p-8 flex items-center justify-between gap-6">
+ <div class="bg-blue-50/60 border border-blue-100 rounded-[3rem] p-8 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-4 sm:gap-6">
  <div class="flex items-center gap-4">
  <div class="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center flex-shrink-0">
  <i data-lucide="git-diff" class="w-5 h-5 text-white"></i>
