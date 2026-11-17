@@ -51,8 +51,31 @@ class Handler(http.server.SimpleHTTPRequestHandler):
     def _is_api(self):
         return self.path == "/api" or self.path.startswith("/api/")
 
+    # Opened through anything other than localhost (a LAN address, or an HTTPS
+    # tunnel such as cloudflared whose hostname the frontend can't recognise),
+    # the frontend must use the /api proxy above. config.js only detects IP
+    # addresses by itself, so serve it with that switch forced on.
+    def _serve_config(self):
+        with open("js/config.js", encoding="utf-8") as f:
+            src = f.read()
+        src = re.sub(r"^const _isLan = .*$", "const _isLan = true;", src, count=1, flags=re.M)
+        data = src.encode("utf-8")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/javascript; charset=utf-8")
+        self.send_header("Content-Length", str(len(data)))
+        self.end_headers()
+        self.wfile.write(data)
+
+    def _is_remote(self):
+        host = (self.headers.get("Host") or "").rsplit(":", 1)[0]
+        return host not in ("localhost", "127.0.0.1")
+
     def do_GET(self):
-        return self._proxy() if self._is_api() else super().do_GET()
+        if self._is_api():
+            return self._proxy()
+        if self.path.split("?")[0] == "/js/config.js" and self._is_remote():
+            return self._serve_config()
+        return super().do_GET()
 
     def do_HEAD(self):
         return self._proxy() if self._is_api() else super().do_HEAD()
