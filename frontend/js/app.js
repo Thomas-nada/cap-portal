@@ -1478,7 +1478,7 @@ window.openVersionModal = async (number, version) => {
         div.innerHTML = `
         <div id="version-modal-backdrop"
              onclick="if(event.target===this) document.getElementById('version-modal-backdrop').remove()"
- class="fixed inset-0 bg-black/70 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+ class="fixed inset-0 bg-black/70 backdrop-blur-sm z-[70] flex items-center justify-center p-4">
  <div class="bg-white/80 rounded-[2.5rem] border border-slate-100 shadow-2xl w-full max-w-3xl max-h-[90vh] flex flex-col">
 
                 <!-- Header -->
