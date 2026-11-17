@@ -351,6 +351,71 @@ def test_submitting_requires_the_user_agreement(client, db, alpha_gate):
     assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 201
 
 
+# ── Daily caps on new proposals (a proposal number is permanent) ──────────────
+
+def _wallet(i):
+    return f"stake1wallet{i:045d}"
+
+
+def test_wallet_daily_cap_on_new_proposals(client, db):
+    h = auth(AUTHOR_ADDR, "Alice")
+    for _ in range(main.MAX_PROPOSALS_PER_WALLET_PER_DAY):
+        assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 201
+    r = client.post("/proposals", json=proposal_body(), headers=h)
+    assert r.status_code == 429
+    assert "24 hours" in r.json()["detail"]
+    # Refused before a number was allocated, and other wallets are unaffected.
+    assert len(client.get("/proposals").json()) == main.MAX_PROPOSALS_PER_WALLET_PER_DAY
+    r = client.post("/proposals", json=proposal_body(), headers=auth(_wallet(1), "Bob"))
+    assert r.status_code == 201
+    assert r.json()["number"] == main.MAX_PROPOSALS_PER_WALLET_PER_DAY + 1
+
+
+def test_withdrawn_proposals_still_count_towards_the_cap(client, db):
+    h = auth(AUTHOR_ADDR, "Alice")
+    for n in range(1, main.MAX_PROPOSALS_PER_WALLET_PER_DAY + 1):
+        assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 201
+        assert client.post(f"/proposals/{n}/withdraw", headers=h).status_code == 200
+    assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 429
+
+
+def test_portal_wide_daily_cap_holds_across_fresh_wallets(client, db, monkeypatch):
+    """A new wallet per submission must not get past the portal-wide cap."""
+    monkeypatch.setattr(main, "MAX_PROPOSALS_PER_DAY", 4)
+    for i in range(4):
+        assert client.post("/proposals", json=proposal_body(), headers=auth(_wallet(i), f"W{i}")).status_code == 201
+    r = client.post("/proposals", json=proposal_body(), headers=auth(_wallet(99), "W99"))
+    assert r.status_code == 429
+    assert "limit for new proposals" in r.json()["detail"]
+    assert len(client.get("/proposals").json()) == 4
+
+
+def test_editors_and_admins_are_exempt_from_the_caps(client, db, monkeypatch):
+    monkeypatch.setattr(main, "MAX_PROPOSALS_PER_DAY", 2)
+    seed_editor(db)
+    seed_admin(db)
+    for i in range(2):
+        assert client.post("/proposals", json=proposal_body(), headers=auth(_wallet(i), f"W{i}")).status_code == 201
+    assert client.post("/proposals", json=proposal_body(), headers=auth(_wallet(9), "W9")).status_code == 429
+    for _ in range(main.MAX_PROPOSALS_PER_WALLET_PER_DAY + 1):
+        assert client.post("/proposals", json=proposal_body(), headers=auth(EDITOR_ADDR, "Editor")).status_code == 201
+    assert client.post("/proposals", json=proposal_body(), headers=auth(ADMIN_ADDR, "Admin")).status_code == 201
+
+
+def test_caps_only_count_the_last_24_hours(client, db):
+    from datetime import datetime, timezone, timedelta
+    from models import Proposal
+    h = auth(AUTHOR_ADDR, "Alice")
+    for _ in range(main.MAX_PROPOSALS_PER_WALLET_PER_DAY):
+        assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 201
+    assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 429
+    # Age them past the window: the wallet may submit again.
+    for p in db.query(Proposal).all():
+        p.created_at = datetime.now(timezone.utc) - timedelta(hours=25)
+    db.commit()
+    assert client.post("/proposals", json=proposal_body(), headers=h).status_code == 201
+
+
 def test_get_proposal(client, db):
     seed_user(db, AUTHOR_ADDR, "Alice")
     client.post("/proposals", json=proposal_body("My CAP"), headers=auth(AUTHOR_ADDR, "Alice"))
