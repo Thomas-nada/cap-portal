@@ -295,6 +295,12 @@ MAX_SCREENSHOTS = 5           # per bug report
 MAX_NAME = 100
 MAX_CO_AUTHORS = 20           # co-authors per proposal
 MAX_DRAFTS_PER_AUTHOR = 25    # saved wizard drafts per wallet
+# New proposals per rolling 24 hours. A proposal number is permanent, so these
+# bound how many a single party can use up. The portal-wide cap exists because a
+# script can mint a fresh wallet (and switch address) for every submission, which
+# no per-wallet or per-address limit can stop. Editors and admins are exempt.
+MAX_PROPOSALS_PER_WALLET_PER_DAY = 2
+MAX_PROPOSALS_PER_DAY = 5
 MAX_DRAFT_TOTAL = 2_000_000   # whole draft blob (wizard state is larger than the
                               # final structured body: it also holds selections, etc.)
 MAX_CONSTITUTION_UPLOAD = 1_000_000  # an edited copy of the constitution uploaded to
@@ -359,6 +365,54 @@ def _validate_structured(v):
             if not isinstance(a, str) or not _STAKE_ADDR_RE.match(a):
                 raise ValueError("Each co-author must be a valid Cardano mainnet stake address (stake1...)")
     return v
+
+
+_PROPOSAL_TYPES = ("CAP", "CIS")
+
+
+def _is_blank(v) -> bool:
+    return not (isinstance(v, str) and v.strip())
+
+
+def _require_complete_proposal(doc_type: str, title: str, structured: dict):
+    """Server-side mirror of the submission wizard's required fields.
+
+    The wizard refuses to continue without a title, a category, a summary, a
+    motivation and (for a CAP) an analysis plus at least one proposed change to
+    the constitution. Those checks used to live only in the browser, so a direct
+    API call could publish an empty proposal and use up a proposal number. This
+    enforces the same rules on the server, on create and on every edit, so a
+    proposal can neither be born empty nor be emptied afterwards."""
+    def bad(msg):
+        raise HTTPException(status_code=400, detail=msg)
+
+    if doc_type not in _PROPOSAL_TYPES:
+        bad("Proposal type must be CAP or CIS")
+    inner_type = structured.get("type")
+    if inner_type is not None and inner_type != doc_type:
+        bad("Proposal type cannot be changed")
+    if _is_blank(title):
+        bad("Title is required")
+    if structured.get("category") not in CATEGORY_LABELS:
+        bad("Choose a category")
+    if _is_blank(structured.get("abstract")):
+        bad("A summary is required")
+    if _is_blank(structured.get("motivation")):
+        bad("Describe the problem" if doc_type == "CIS" else "Explain why this change is needed")
+    if doc_type == "CAP":
+        if _is_blank(structured.get("analysis")):
+            bad("The Analysis & Test section is required")
+        revisions = structured.get("revisions")
+        if not isinstance(revisions, list) or not revisions:
+            bad("A CAP must propose at least one change to the constitution")
+        for i, rev in enumerate(revisions):
+            if not isinstance(rev, dict):
+                bad(f"Revision #{i + 1} is not valid")
+            if _is_blank(rev.get("original")) and _is_blank(rev.get("insert_after")):
+                bad(f"Revision #{i + 1} must reference a passage of the constitution")
+            # A deletion removes a passage and so has no proposed text.
+            if rev.get("type") != "deletion" and _is_blank(rev.get("proposed")):
+                bad(f"Revision #{i + 1} needs proposed text")
 
 
 @app.exception_handler(Exception)
@@ -507,6 +561,37 @@ def has_accepted_alpha(stake_address: str, db: Session) -> bool:
         AlphaAgreement.stake_address == stake_address,
         AlphaAgreement.version == ALPHA_AGREEMENT_VERSION,
     ).first() is not None
+
+
+def _require_alpha_agreement(user: dict, db: Session):
+    """Refuse to publish for a wallet with no recorded acceptance of the current
+    User Agreement. The frontend collects it on first connect; this stops a
+    direct API call from publishing without it."""
+    if not has_accepted_alpha(user["sub"], db):
+        raise HTTPException(status_code=403,
+                            detail="Accept the User Agreement before submitting a proposal")
+
+
+def _require_submission_quota(user: dict, db: Session):
+    """Refuse a new proposal once the rolling 24-hour caps are reached.
+
+    Counted from the proposals table, not from memory, so the caps hold across
+    restarts and deploys and cannot be dodged by changing address. Withdrawn and
+    moderator-removed proposals still count: they used a number too."""
+    if is_editor(user["sub"], db) or is_admin(user["sub"], db):
+        return
+    since = datetime.now(timezone.utc) - timedelta(days=1)
+    recent = db.query(Proposal).filter(Proposal.created_at >= since)
+    if recent.filter(Proposal.author_stake_address == user["sub"]).count() >= MAX_PROPOSALS_PER_WALLET_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail=f"You have submitted {MAX_PROPOSALS_PER_WALLET_PER_DAY} proposals in the last 24 hours. "
+                   "Please try again tomorrow, or contact an editor.")
+    if recent.count() >= MAX_PROPOSALS_PER_DAY:
+        raise HTTPException(
+            status_code=429,
+            detail="The portal has reached its limit for new proposals today. "
+                   "Please try again tomorrow, or contact an editor.")
 
 
 # ── Serialisers ───────────────────────────────────────────────────────────────
@@ -992,6 +1077,11 @@ class ProposalCreate(BaseModel):
 @limiter.limit("10/minute")
 def create_proposal(request: Request, req: ProposalCreate, user: dict = Depends(require_user),
                     db: Session = Depends(get_db)):
+    # Checked before a number is allocated: a refused submission must not use one up.
+    _require_alpha_agreement(user, db)
+    _require_complete_proposal(req.type, req.title, req.structured)
+    _require_submission_quota(user, db)
+
     # The proposal number is max+1 computed here, so two concurrent submissions
     # can pick the same number and collide on the unique constraint. Retry on
     # that specific failure instead of returning a 500.
@@ -1057,6 +1147,13 @@ def update_proposal(number: int, req: ProposalUpdate, user: dict = Depends(requi
     current_labels = {l.name for l in p.labels}
     if current_labels & locked_stages:
         raise HTTPException(status_code=403, detail="Proposal is locked for editing once it reaches the ready stage")
+
+    # An edit must leave the proposal as complete as a new submission has to be,
+    # otherwise a valid proposal could be emptied after it is published.
+    if req.title is not None and _is_blank(req.title):
+        raise HTTPException(status_code=400, detail="Title is required")
+    if req.structured is not None:
+        _require_complete_proposal(p.type, req.title if req.title is not None else p.title, req.structured)
 
     # Only record a field as changed when its value actually differs. The edit
     # wizard always resubmits both the title and the full structured body, so a
@@ -3237,6 +3334,8 @@ def create_suggested_edit(request: Request, number: int, req: SuggestedEditCreat
         raise HTTPException(status_code=404, detail="Proposal not found")
     if p.author_stake_address == user["sub"]:
         raise HTTPException(status_code=400, detail="Authors edit their own proposal directly")
+    # Approval writes this content straight onto the proposal, so it has to be complete.
+    _require_complete_proposal(p.type, req.title, req.structured)
 
     se = SuggestedEdit(
         proposal_number=number,
