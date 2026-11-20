@@ -359,6 +359,7 @@ function renderStep2(wizard, state) {
  <i data-lucide="mouse-pointer-2" class="w-5 h-5 text-blue-600 mt-1 flex-shrink-0"></i>
                 <div>
  <p class="font-bold text-slate-900 mb-2">Highlight the exact text you want to change in the Constitution below.</p>
+ <p class="lg:hidden text-sm font-bold text-blue-700 mb-2">On a phone: tap the first word of the passage, then tap the last word.</p>
  <p class="text-sm text-slate-600">When you release, choose <span class="font-black">Replace</span> to swap the wording, <span class="font-black">Add After</span> to insert new text after it, or <span class="font-black">Delete</span> to remove it. Repeat to add more selections.</p>
                 </div>
             </div>

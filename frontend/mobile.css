@@ -28,5 +28,8 @@
     .prose pre { padding: 1rem; }
 }
 
+/* Tap-to-select highlight on the constitution (see constitution.js). */
+::highlight(cap-tap) { background-color: #2563eb; color: #fff; }
+
 /* Keep fixed bars clear of the home indicator on notched phones. */
 .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
