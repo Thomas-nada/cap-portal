@@ -63,12 +63,30 @@ export function initConstitutionSelection() {
         // own Copy/Share bubble right at the selection, and the full row of
         // actions is wider than a phone, so it wraps here instead.
         if (isTouch()) {
-            popup.style.flexDirection = inWizard() ? 'column' : 'row';
+            popup.style.flexDirection = 'row'; popup.style.alignItems = 'center';
             popup.style.flexWrap = 'wrap'; popup.style.justifyContent = 'center';
             popup.style.top = 'auto'; popup.style.left = '8px'; popup.style.right = '8px';
             popup.style.bottom = `calc(${inWizard() ? 84 : 12}px + env(safe-area-inset-bottom, 0px))`;
             popup.style.padding = '10px'; popup.style.display = 'flex';
             popup.querySelectorAll('button').forEach(b => { b.style.padding = '10px 14px'; });
+            if (tap.range) {
+                // Tap selection: show what is selected and how to adjust it.
+                const txt = window.currentSelection?.text || '';
+                const preview = txt.length > 90 ? txt.slice(0, 44).trimEnd() + ' … ' + txt.slice(-40).trimStart() : txt;
+                const tool = 'background:rgba(255,255,255,.12);color:#fff;border:none;border-radius:10px;padding:8px 12px;font-size:14px;font-weight:700;white-space:nowrap';
+                const head = document.createElement('div');
+                head.style.cssText = 'flex:1 0 100%;min-width:0;display:flex;flex-direction:column;gap:8px;padding:2px 2px 4px;';
+                const quote = document.createElement('div');
+                quote.style.cssText = 'color:#e2e8f0;font-size:14px;font-style:italic;line-height:1.35;overflow-wrap:anywhere;';
+                quote.textContent = `“${preview}”`;
+                const tools = document.createElement('div');
+                tools.style.cssText = 'display:flex;flex-wrap:wrap;align-items:center;gap:6px;';
+                tools.innerHTML = `${tap.anchor ? '<span style="color:#94a3b8;font-size:14px;font-weight:600;flex:1 1 140px">Tap the last word to extend</span>' : '<span style="flex:1"></span>'}
+                    <button onclick="window.selectTapParagraph()" style="${tool}">Whole paragraph</button>
+                    <button onclick="window.clearConstitutionSelection()" aria-label="Clear selection" style="${tool}">✕</button>`;
+                head.append(quote, tools);
+                popup.prepend(head);
+            }
             return;
         }
         popup.style.flexWrap = 'nowrap'; popup.style.right = 'auto'; popup.style.bottom = 'auto';
@@ -85,6 +103,7 @@ export function initConstitutionSelection() {
     function hidePopup() {
         const p = document.getElementById('selection-popup');
         if (p) p.style.display = 'none';
+        clearTap();
     }
 
     window.commitSelection = (type, kind = 'replace') => {
@@ -128,12 +147,94 @@ export function initConstitutionSelection() {
         window.getSelection()?.removeAllRanges(); hidePopup(); renderSelectionBar();
     };
 
-    function handleSelection() {
+    // ── Tap-to-select (touch) ────────────────────────────────────────────────
+    // Some in-app browsers — Vespr's dApp browser among them — disable
+    // long-press text selection entirely, so on touch devices a passage can also
+    // be picked with taps: tap its first word, then its last. The range is
+    // painted with the CSS Custom Highlight API, which needs neither a native
+    // selection nor any change to the DOM.
+    const tap = { range: null, anchor: null };
+
+    function paintTap() {
+        if (!window.CSS?.highlights || !window.Highlight) return;
+        if (tap.range) CSS.highlights.set('cap-tap', new Highlight(tap.range));
+        else CSS.highlights.delete('cap-tap');
+    }
+    function clearTap() { tap.range = null; tap.anchor = null; paintTap(); }
+
+    // The whole word under a screen point, as a Range (null if not on text).
+    function wordRangeAt(x, y) {
+        let node, offset;
+        if (document.caretPositionFromPoint) {
+            const pos = document.caretPositionFromPoint(x, y);
+            if (!pos) return null;
+            node = pos.offsetNode; offset = pos.offset;
+        } else if (document.caretRangeFromPoint) {
+            const r = document.caretRangeFromPoint(x, y);
+            if (!r) return null;
+            node = r.startContainer; offset = r.startOffset;
+        }
+        if (!node || node.nodeType !== 3) return null;
+        const t = node.textContent;
+        let start = offset, end = offset;
+        while (start > 0 && !/\s/.test(t[start - 1])) start--;
+        while (end < t.length && !/\s/.test(t[end])) end++;
+        if (start === end) return null;
+        const r = document.createRange();
+        r.setStart(node, start); r.setEnd(node, end);
+        return r;
+    }
+
+    // Smallest range covering both a and b, whichever comes first in the text.
+    function spanRanges(a, b) {
+        const r = document.createRange();
+        const first = a.compareBoundaryPoints(Range.START_TO_START, b) <= 0 ? a : b;
+        const last = a.compareBoundaryPoints(Range.END_TO_END, b) >= 0 ? a : b;
+        r.setStart(first.startContainer, first.startOffset);
+        r.setEnd(last.endContainer, last.endOffset);
+        return r;
+    }
+
+    function setTapRange(range, anchor) {
+        tap.range = range; tap.anchor = anchor;
+        window.getSelection()?.removeAllRanges();
+        paintTap();
+        handleSelection(range);
+    }
+
+    document.addEventListener('click', (e) => {
+        if (!isTouch() || window.state?.constitutionCompareVersion) return;
+        const content = document.getElementById('constitution-content');
+        if (!content || !content.contains(e.target) || e.target.closest('a')) return;
+        if (window.getSelection()?.toString().trim().length > 3) return;   // a real selection is in progress
+        const word = wordRangeAt(e.clientX, e.clientY);
+        if (!word) return;
+        // First tap (or a tap after a finished passage) starts over on that word;
+        // the second tap stretches the selection to it.
+        if (tap.anchor) setTapRange(spanRanges(tap.anchor, word), null);
+        else setTapRange(word, word);
+    });
+
+    // "Whole paragraph" in the action bar: widen to the enclosing block.
+    window.selectTapParagraph = () => {
+        if (!tap.range) return;
+        const start = tap.range.startContainer;
+        const block = (start.nodeType === 1 ? start : start.parentElement)?.closest('p, li, h1, h2, h3, h4, h5, h6, td, th, blockquote');
+        if (!block) return;
+        const r = document.createRange();
+        r.selectNodeContents(block);
+        setTapRange(r, null);
+    };
+
+    // `range` is a tap-built selection (see above); without it, read the
+    // browser's own text selection.
+    function handleSelection(range = null) {
         try {
             const selection = window.getSelection();
-            const text = selection.toString().trim();
-            if (text.length > 3 && !window.state?.constitutionCompareVersion) {
-                let node = selection.anchorNode, inside = false;
+            const text = (range ? range.toString() : selection.toString()).trim();
+            const anchorNode = range ? range.startContainer : selection.anchorNode;
+            if (text.length > (range ? 0 : 3) && !window.state?.constitutionCompareVersion) {
+                let node = anchorNode, inside = false;
                 while (node && node !== document.body) {
                     const el = node.nodeType === 1 ? node : node.parentElement;
                     if (!el) break;
@@ -141,7 +242,7 @@ export function initConstitutionSelection() {
                     node = el.parentElement;
                 }
                 if (!inside) return;
-                node = selection.anchorNode;
+                node = anchorNode;
                 let contextId = 'General';
                 while (node && node !== document.body) {
                     const target = node.nodeType === 1 ? node : node.parentElement;
@@ -155,7 +256,7 @@ export function initConstitutionSelection() {
                 // The chain of headings above the selection (top-down), so a
                 // passage that occurs several times can be pinned to this one.
                 const article = document.getElementById('constitution-content');
-                let block = selection.anchorNode;
+                let block = anchorNode;
                 while (block && block.parentElement && block.parentElement !== article) block = block.parentElement;
                 const chain = []; let level = 99;
                 for (let el = block?.previousElementSibling; el; el = el.previousElementSibling) {
@@ -163,8 +264,8 @@ export function initConstitutionSelection() {
                     if (m && Number(m[1]) < level) { level = Number(m[1]); chain.unshift(el.textContent.trim()); if (level <= 2) break; }
                 }
                 window.currentSelection = { text, sectionId, context: chain.join(' › ') };
-                showSelectionPopup(selection.getRangeAt(0).getBoundingClientRect());
-            } else { hidePopup(); }
+                showSelectionPopup((range || selection.getRangeAt(0)).getBoundingClientRect());
+            } else if (!tap.range) { hidePopup(); }   // an empty native selection must not cancel a tap selection
         } catch (err) { console.warn('Selection handler error:', err); }
     }
 
@@ -246,7 +347,7 @@ export function renderConstitution(state) {
  <i data-lucide="mouse-pointer-2" class="w-4 h-4 text-blue-500 flex-shrink-0 mt-0.5"></i>
  <p class="text-sm text-blue-700 font-medium leading-relaxed min-w-0">
  <span class="font-black">Proposing a change?</span>
- Highlight any section of the text<span class="lg:hidden"> (on a phone, press and hold a word, then drag the handles)</span>. Choose <span class="font-black">Replace</span>, <span class="font-black">Add After</span> or <span class="font-black">Delete</span> to flag as a Constitutional Amendment Proposal, or <span class="font-black">+ CIS</span> as a Constitutional Issue Statement.
+ Highlight any section of the text<span class="lg:hidden"> (on a phone, tap the first word of the passage, then the last)</span>. Choose <span class="font-black">Replace</span>, <span class="font-black">Add After</span> or <span class="font-black">Delete</span> to flag as a Constitutional Amendment Proposal, or <span class="font-black">+ CIS</span> as a Constitutional Issue Statement.
                 </p>
             </div>
             ` : ''}
